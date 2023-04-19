@@ -1,0 +1,52 @@
+### model
+model: MLP # currently supported: MLP # TODO: implement transformer, etc
+
+### dataset
+meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression
+dataset: dna # adult(income), cmc, mfeat-karhunen, optdigits, diabetes, semeion, mfeat-pixel, dna
+normalizer: StandardScaler
+
+corruption_type: Gaussian # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+corruption_severity: 0.3
+imputation_method: zero # zero, mean, emd(sample from empirical marginal distribution)
+
+### hyperparameters for training
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 1e-3
+
+### hyperparameters for test-time adaptation
+episodic: false # reset model to the pretrained one for every batch if true
+num_steps: 1 # optimization steps for every batch
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 1e-4
+# train_params: [all] TODO: implement train_params
+# TODO: implement learning rate scheduler
+
+##################################################################
+### methods & other hyperparameters
+# method: [SAR] TODO: implement various methods # em, sar
+##################################################################
+
+### device
+device: cuda
+
+### seed for reproductiblity
+seed: 42
+
+##################################################################
+### output dir for saving model
+out_dir: exps/sar_syn
+
+### logging
+log_dir: log
+
+### wandb
+wandb_user: drumpt
+
+### slack_notification
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+##################################################################

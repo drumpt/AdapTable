@@ -1,5 +1,37 @@
-numpy
-pandas
-scikit-learn
+# git+https://github.com/jpgard/rtdl.git
+# numpy
+# pandas
+# scikit-learn
+# torch
+# torchmetrics
+openml
+wandb
+
+numpy==1.23.5
+ray==2.2
+ray[air]
+ray[tune]
 torch
-torchmetrics
+torchvision
+scikit-learn
+pandas
+lightgbm
+xgboost
+fairlearn 
+folktables
+frozendict
+xport
+tqdm
+hyperopt
+xgboost_ray
+lightgbm_ray
+h5py
+tables
+category_encoders
+catboost
+einops
+tab-transformer-pytorch
+datasets
+openpyxl
+tune_sklearn
+optuna

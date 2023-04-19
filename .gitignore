@@ -1,2 +1,7 @@
-exps/*
-ContrastiveMixup/
+data/UCI
+data/tableshift/tmp
+log
+exps
+outputs
+
+**/__pycache__
