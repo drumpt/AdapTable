@@ -1,12 +1,14 @@
 import logging
 from typing import List, Union
+
 import pandas as pd
 
 from tableshift.core.features import Feature, FeatureList, cat_dtype
 from tableshift.core.utils import sub_illegal_chars
-from tableshift.datasets.utils import convert_numeric_dtypes, complete_cases
 from tableshift.datasets.mimic_extract_feature_lists import \
-    MIMIC_EXTRACT_SHARED_FEATURES
+    MIMIC_EXTRACT_SHARED_FEATURES, _MIMIC_EXTRACT_LOS_3_SELECTED_FEATURES, \
+    _MIMIC_EXTRACT_MORT_HOSP_SELECTED_FEATURES
+from tableshift.datasets.utils import convert_numeric_dtypes, complete_cases
 
 ID_COLS = ['subject_id', 'hadm_id', 'icustay_id']
 
@@ -27,6 +29,15 @@ MIMIC_EXTRACT_LOS_3_FEATURES = FeatureList(features=[
 MIMIC_EXTRACT_MORT_HOSP_FEATURES = FeatureList(features=[
     *MIMIC_EXTRACT_STATIC_FEATURES,
     *MIMIC_EXTRACT_SHARED_FEATURES,
+    Feature('mort_hosp', int, is_target=True)
+])
+
+MIMIC_EXTRACT_LOS_3_SELECTED_FEATURES = FeatureList(features=[
+    *_MIMIC_EXTRACT_LOS_3_SELECTED_FEATURES,
+    Feature('los_3', int, is_target=True)
+])
+MIMIC_EXTRACT_MORT_HOSP_SELECTED_FEATURES = FeatureList(features=[
+    *_MIMIC_EXTRACT_MORT_HOSP_SELECTED_FEATURES,
     Feature('mort_hosp', int, is_target=True)
 ])
 

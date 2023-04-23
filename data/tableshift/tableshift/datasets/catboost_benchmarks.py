@@ -6,6 +6,7 @@ import re
 
 import pandas as pd
 from pandas import DataFrame
+
 from tableshift.core.features import Feature, FeatureList, cat_dtype
 
 AMAZON_FEATURES = FeatureList(features=[
@@ -42,129 +43,388 @@ AMAZON_FEATURES = FeatureList(features=[
 ], documentation="https://www.kaggle.com/c/amazon-employee-access-challenge")
 
 APPETENCY_FEATURES = FeatureList(features=[
-    Feature('Var6', float),
-    Feature('Var7', float),
-    Feature('Var13', float),
-    Feature('Var21', float),
-    Feature('Var22', float),
-    Feature('Var24', float),
-    Feature('Var25', float),
-    Feature('Var28', float),
-    Feature('Var35', float),
-    Feature('Var38', float),
-    Feature('Var44', float),
-    Feature('Var51', float),
-    Feature('Var57', float),
-    Feature('Var65', float),
-    Feature('Var72', float),
-    Feature('Var73', float),
-    Feature('Var74', float),
-    Feature('Var76', float),
-    Feature('Var78', float),
-    Feature('Var81', float),
-    Feature('Var83', float),
-    Feature('Var85', float),
-    Feature('Var94', float),
-    Feature('Var109', float),
-    Feature('Var112', float),
-    Feature('Var113', float),
-    Feature('Var119', float),
-    Feature('Var123', float),
-    Feature('Var125', float),
-    Feature('Var126', float),
-    Feature('Var132', float),
-    Feature('Var133', float),
-    Feature('Var134', float),
-    Feature('Var140', float),
-    Feature('Var143', float),
-    Feature('Var144', float),
-    Feature('Var149', float),
-    Feature('Var153', float),
-    Feature('Var160', float),
-    Feature('Var163', float),
-    Feature('Var173', float),
-    Feature('Var181', float),
-    Feature('Var189', float),
-    Feature('Var191', cat_dtype),
-    Feature('Var192', cat_dtype),
-    Feature('Var193', cat_dtype),
-    Feature('Var194', cat_dtype),
-    Feature('Var195', cat_dtype),
-    Feature('Var196', cat_dtype),
-    Feature('Var197', cat_dtype),
-    Feature('Var198', cat_dtype),
-    Feature('Var199', cat_dtype),
-    Feature('Var200', cat_dtype),
-    Feature('Var201', cat_dtype),
-    Feature('Var202', cat_dtype),
-    Feature('Var203', cat_dtype),
-    Feature('Var204', cat_dtype),
-    Feature('Var205', cat_dtype),
-    Feature('Var206', cat_dtype),
-    Feature('Var207', cat_dtype),
-    Feature('Var208', cat_dtype),
-    Feature('Var210', cat_dtype),
-    Feature('Var211', cat_dtype),
-    Feature('Var212', cat_dtype),
-    Feature('Var213', cat_dtype),
-    Feature('Var214', cat_dtype),
-    Feature('Var215', cat_dtype),
-    Feature('Var216', cat_dtype),
-    Feature('Var217', cat_dtype),
-    Feature('Var218', cat_dtype),
-    Feature('Var219', cat_dtype),
-    Feature('Var220', cat_dtype),
-    Feature('Var221', cat_dtype),
-    Feature('Var222', cat_dtype),
-    Feature('Var223', cat_dtype),
-    Feature('Var224', cat_dtype),
-    Feature('Var225', cat_dtype),
-    Feature('Var226', cat_dtype),
-    Feature('Var227', cat_dtype),
-    Feature('Var228', cat_dtype),
-    Feature('Var229', cat_dtype),
-    Feature('Var149_imputed', float),
-    Feature('Var83_imputed', float),
-    Feature('Var7_imputed', float),
-    Feature('Var181_imputed', float),
-    Feature('Var119_imputed', float),
-    Feature('Var76_imputed', float),
-    Feature('Var173_imputed', float),
-    Feature('Var21_imputed', float),
-    Feature('Var143_imputed', float),
-    Feature('Var125_imputed', float),
-    Feature('Var13_imputed', float),
-    Feature('Var189_imputed', float),
-    Feature('Var28_imputed', float),
-    Feature('Var35_imputed', float),
-    Feature('Var133_imputed', float),
-    Feature('Var22_imputed', float),
-    Feature('Var126_imputed', float),
-    Feature('Var6_imputed', float),
-    Feature('Var78_imputed', float),
-    Feature('Var163_imputed', float),
-    Feature('Var140_imputed', float),
-    Feature('Var134_imputed', float),
-    Feature('Var153_imputed', float),
-    Feature('Var81_imputed', float),
-    Feature('Var38_imputed', float),
-    Feature('Var94_imputed', float),
-    Feature('Var85_imputed', float),
-    Feature('Var51_imputed', float),
-    Feature('Var132_imputed', float),
-    Feature('Var160_imputed', float),
-    Feature('Var112_imputed', float),
-    Feature('Var74_imputed', float),
-    Feature('Var123_imputed', float),
-    Feature('Var44_imputed', float),
-    Feature('Var109_imputed', float),
-    Feature('Var72_imputed', float),
-    Feature('Var24_imputed', float),
-    Feature('Var144_imputed', float),
-    Feature('Var25_imputed', float),
-    Feature('Var65_imputed', float),
     Feature('label', float, name_extended='class label', is_target=True),
-], documentation='https://www.kdd.org/kdd-cup/view/kdd-cup-2009/Data')
+    Feature('Var202', cat_dtype),  # importance: 0.0881
+    Feature('Var220', cat_dtype),  # importance: 0.0622
+    Feature('Var218', cat_dtype),  # importance: 0.0532
+    Feature('Var198', cat_dtype),  # importance: 0.0449
+    Feature('Var214', cat_dtype),  # importance: 0.04
+    Feature('Var192', cat_dtype),  # importance: 0.0365
+    Feature('Var199', cat_dtype),  # importance: 0.0359
+    Feature('Var217', cat_dtype),  # importance: 0.0319
+    Feature('Var126', float),  # importance: 0.027
+    Feature('Var222', cat_dtype),  # importance: 0.0234
+    Feature('Var216', cat_dtype),  # importance: 0.0174
+    Feature('Var78', float),  # importance: 0.0168
+    Feature('Var126_imputed', float),  # importance: 0.014
+    Feature('Var212', cat_dtype),  # importance: 0.0138
+    Feature('Var197', cat_dtype),  # importance: 0.0137
+    Feature('Var204', cat_dtype),  # importance: 0.0128
+    Feature('Var7', float),  # importance: 0.0121
+    Feature('Var191', cat_dtype),  # importance: 0.0119
+    Feature('Var211', cat_dtype),  # importance: 0.0118
+    Feature('Var144_imputed', float),  # importance: 0.0111
+    Feature('Var189', float),  # importance: 0.0109
+    Feature('Var194', cat_dtype),  # importance: 0.0108
+    Feature('Var83', float),  # importance: 0.0105
+    Feature('Var228', cat_dtype),  # importance: 0.01
+    Feature('Var229', cat_dtype),  # importance: 0.0098
+    Feature('Var205', cat_dtype),  # importance: 0.0097
+    Feature('Var206', cat_dtype),  # importance: 0.0097
+    Feature('Var38', float),  # importance: 0.0096
+    Feature('Var207', cat_dtype),  # importance: 0.0092
+    Feature('Var223', cat_dtype),  # importance: 0.009
+    Feature('Var24', float),  # importance: 0.009
+    Feature('Var225', cat_dtype),  # importance: 0.0089
+    Feature('Var125', float),  # importance: 0.0088
+    ##################################################
+    ##################################################
+    # Feature('Var173', float),  # importance: 0.0088
+    # Feature('Var132', float),  # importance: 0.0087
+    # Feature('Var144', float),  # importance: 0.0085
+    # Feature('Var72', float),  # importance: 0.0084
+    # Feature('Var65', float),  # importance: 0.0084
+    # Feature('Var109', float),  # importance: 0.0083
+    # Feature('Var149', float),  # importance: 0.0082
+    # Feature('Var134', float),  # importance: 0.0081
+    # Feature('Var81', float),  # importance: 0.0081
+    # Feature('Var133', float),  # importance: 0.0078
+    # Feature('Var227', cat_dtype),  # importance: 0.0077
+    # Feature('Var123', float),  # importance: 0.0076
+    # Feature('Var153', float),  # importance: 0.0076
+    # Feature('Var73', float),  # importance: 0.0075
+    # Feature('Var112', float),  # importance: 0.0074
+    # Feature('Var160', float),  # importance: 0.0074
+    # Feature('Var21', float),  # importance: 0.0073
+    # Feature('Var57', float),  # importance: 0.0072
+    # Feature('Var6', float),  # importance: 0.0072
+    # Feature('Var35', float),  # importance: 0.0071
+    # Feature('Var94', float),  # importance: 0.0071
+    # Feature('Var226', cat_dtype),  # importance: 0.007
+    # Feature('Var113', float),  # importance: 0.0068
+    # Feature('Var140', float),  # importance: 0.0068
+    # Feature('Var28', float),  # importance: 0.0066
+    # Feature('Var13', float),  # importance: 0.0066
+    # Feature('Var76', float),  # importance: 0.0066
+    # Feature('Var219', cat_dtype),  # importance: 0.0063
+    # Feature('Var200', cat_dtype),  # importance: 0.0061
+    # Feature('Var85', float),  # importance: 0.006
+    # Feature('Var196', cat_dtype),  # importance: 0.006
+    # Feature('Var74', float),  # importance: 0.0057
+    # Feature('Var25', float),  # importance: 0.0056
+    # Feature('Var163', float),  # importance: 0.0055
+    # Feature('Var221', cat_dtype),  # importance: 0.0054
+    # Feature('Var193', cat_dtype),  # importance: 0.0052
+    # Feature('Var119', float),  # importance: 0.0051
+    # Feature('Var203', cat_dtype),  # importance: 0.0039
+    # Feature('Var22', float),  # importance: 0.0039
+    # Feature('Var51', float),  # importance: 0.0037
+    # Feature('Var163_imputed', float),  # importance: 0.0036
+    # Feature('Var224', cat_dtype),  # importance: 0.0036
+    # Feature('Var213', cat_dtype),  # importance: 0.0036
+    # Feature('Var189_imputed', float),  # importance: 0.0035
+    # Feature('Var208', cat_dtype),  # importance: 0.0034
+    # Feature('Var143', float),  # importance: 0.0019
+    # Feature('Var210', cat_dtype),  # importance: 0.0017
+    # Feature('Var201', cat_dtype),  # importance: 0.0009
+    # Feature('Var181', float),  # importance: 0.0
+    # Feature('Var143_imputed', float),  # importance: 0.0
+    # Feature('Var119_imputed', float),  # importance: 0.0
+    # Feature('Var76_imputed', float),  # importance: 0.0
+    # Feature('Var149_imputed', float),  # importance: 0.0
+    # Feature('Var85_imputed', float),  # importance: 0.0
+    # Feature('Var7_imputed', float),  # importance: 0.0
+    # Feature('Var160_imputed', float),  # importance: 0.0
+    # Feature('Var72_imputed', float),  # importance: 0.0
+    # Feature('Var78_imputed', float),  # importance: 0.0
+    # Feature('Var153_imputed', float),  # importance: 0.0
+    # Feature('Var173_imputed', float),  # importance: 0.0
+    # Feature('Var112_imputed', float),  # importance: 0.0
+    # Feature('Var44', float),  # importance: 0.0
+    # Feature('Var25_imputed', float),  # importance: 0.0
+    # Feature('Var133_imputed', float),  # importance: 0.0
+    # Feature('Var132_imputed', float),  # importance: 0.0
+    # Feature('Var215', cat_dtype),  # importance: 0.0
+    # Feature('Var35_imputed', float),  # importance: 0.0
+    # Feature('Var6_imputed', float),  # importance: 0.0
+    # Feature('Var140_imputed', float),  # importance: 0.0
+    # Feature('Var51_imputed', float),  # importance: 0.0
+    # Feature('Var13_imputed', float),  # importance: 0.0
+    # Feature('Var94_imputed', float),  # importance: 0.0
+    # Feature('Var125_imputed', float),  # importance: 0.0
+    # Feature('Var181_imputed', float),  # importance: 0.0
+    # Feature('Var28_imputed', float),  # importance: 0.0
+    # Feature('Var22_imputed', float),  # importance: 0.0
+    # Feature('Var83_imputed', float),  # importance: 0.0
+    # Feature('Var195', cat_dtype),  # importance: 0.0
+    # Feature('Var134_imputed', float),  # importance: 0.0
+    # Feature('Var65_imputed', float),  # importance: 0.0
+    # Feature('Var24_imputed', float),  # importance: 0.0
+    # Feature('Var21_imputed', float),  # importance: 0.0
+    # Feature('Var38_imputed', float),  # importance: 0.0
+    # Feature('Var74_imputed', float),  # importance: 0.0
+    # Feature('Var44_imputed', float),  # importance: 0.0
+    # Feature('Var109_imputed', float),  # importance: 0.0
+    # Feature('Var81_imputed', float),  # importance: 0.0
+    # Feature('Var123_imputed', float),  # importance: 0.0
+], documentation='https://www.kdd.org/kdd-cup/view/kdd-cup-2009/Data ,'
+                 'https://medium.com/@kushaldps1996/customer-relationship-prediction-kdd-cup-2009-6b57d08ffb0')
+
+CHURN_FEATURES = FeatureList(features=[
+    Feature('label', float, name_extended='class label', is_target=True),
+    Feature('Var202', cat_dtype),  # importance: 0.1061
+    Feature('Var222', cat_dtype),  # importance: 0.0707
+    Feature('Var220', cat_dtype),  # importance: 0.0699
+    Feature('Var217', cat_dtype),  # importance: 0.0606
+    Feature('Var199', cat_dtype),  # importance: 0.0393
+    Feature('Var126', float),  # importance: 0.0371
+    Feature('Var192', cat_dtype),  # importance: 0.0319
+    Feature('Var51_imputed', float),  # importance: 0.0208
+    Feature('Var216', cat_dtype),  # importance: 0.0207
+    Feature('Var126_imputed', float),  # importance: 0.0194
+    Feature('Var198', cat_dtype),  # importance: 0.0181
+    Feature('Var197', cat_dtype),  # importance: 0.0166
+    Feature('Var204', cat_dtype),  # importance: 0.0163
+    Feature('Var74', float),  # importance: 0.0132
+    Feature('Var78', float),  # importance: 0.012
+    Feature('Var7_imputed', float),  # importance: 0.0115
+    Feature('Var207', cat_dtype),  # importance: 0.0107
+    Feature('Var206', cat_dtype),  # importance: 0.0107
+    Feature('Var210', cat_dtype),  # importance: 0.0107
+    Feature('Var194', cat_dtype),  # importance: 0.0105
+    Feature('Var228', cat_dtype),  # importance: 0.0096
+    Feature('Var226', cat_dtype),  # importance: 0.0095
+    Feature('Var218', cat_dtype),  # importance: 0.0093
+    Feature('Var181', float),  # importance: 0.009
+    Feature('Var212', cat_dtype),  # importance: 0.0089
+    Feature('Var73', float),  # importance: 0.0089
+    Feature('Var44', float),  # importance: 0.0088
+    Feature('Var109', float),  # importance: 0.0084
+    Feature('Var13', float),  # importance: 0.0083
+    Feature('Var113', float),  # importance: 0.008
+    Feature('Var229', cat_dtype),  # importance: 0.0079
+    Feature('Var227', cat_dtype),  # importance: 0.0079
+    Feature('Var140', float),  # importance: 0.0078
+    ##################################################
+    ##################################################
+    # Feature('Var225', cat_dtype),  # importance: 0.0078
+    # Feature('Var28', float),  # importance: 0.0076
+    # Feature('Var189', float),  # importance: 0.0076
+    # Feature('Var195', cat_dtype),  # importance: 0.0076
+    # Feature('Var72', float),  # importance: 0.0075
+    # Feature('Var38', float),  # importance: 0.0073
+    # Feature('Var65', float),  # importance: 0.0073
+    # Feature('Var81', float),  # importance: 0.0073
+    # Feature('Var25', float),  # importance: 0.0072
+    # Feature('Var153', float),  # importance: 0.0072
+    # Feature('Var125', float),  # importance: 0.0071
+    # Feature('Var221', cat_dtype),  # importance: 0.0071
+    # Feature('Var21', float),  # importance: 0.007
+    # Feature('Var219', cat_dtype),  # importance: 0.007
+    # Feature('Var134', float),  # importance: 0.0069
+    # Feature('Var6', float),  # importance: 0.0069
+    # Feature('Var205', cat_dtype),  # importance: 0.0068
+    # Feature('Var57', float),  # importance: 0.0068
+    # Feature('Var160', float),  # importance: 0.0067
+    # Feature('Var123', float),  # importance: 0.0066
+    # Feature('Var83', float),  # importance: 0.0066
+    # Feature('Var76', float),  # importance: 0.0065
+    # Feature('Var149', float),  # importance: 0.0065
+    # Feature('Var133', float),  # importance: 0.0064
+    # Feature('Var144', float),  # importance: 0.0064
+    # Feature('Var112', float),  # importance: 0.0061
+    # Feature('Var94', float),  # importance: 0.006
+    # Feature('Var208', cat_dtype),  # importance: 0.006
+    # Feature('Var132', float),  # importance: 0.0058
+    # Feature('Var193', cat_dtype),  # importance: 0.0058
+    # Feature('Var163', float),  # importance: 0.0058
+    # Feature('Var223', cat_dtype),  # importance: 0.0057
+    # Feature('Var24', float),  # importance: 0.0057
+    # Feature('Var203', cat_dtype),  # importance: 0.0055
+    # Feature('Var119', float),  # importance: 0.0055
+    # Feature('Var7', float),  # importance: 0.0053
+    # Feature('Var215', cat_dtype),  # importance: 0.0052
+    # Feature('Var189_imputed', float),  # importance: 0.0049
+    # Feature('Var85', float),  # importance: 0.0049
+    # Feature('Var22', float),  # importance: 0.0039
+    # Feature('Var224', cat_dtype),  # importance: 0.0036
+    # Feature('Var211', cat_dtype),  # importance: 0.0032
+    # Feature('Var51', float),  # importance: 0.0031
+    # Feature('Var35', float),  # importance: 0.0028
+    # Feature('Var213', cat_dtype),  # importance: 0.0027
+    # Feature('Var200', cat_dtype),  # importance: 0.0024
+    # Feature('Var163_imputed', float),  # importance: 0.0023
+    # Feature('Var196', cat_dtype),  # importance: 0.002
+    # Feature('Var191', cat_dtype),  # importance: 0.0009
+    # Feature('Var78_imputed', float),  # importance: 0.0
+    # Feature('Var35_imputed', float),  # importance: 0.0
+    # Feature('Var149_imputed', float),  # importance: 0.0
+    # Feature('Var173', float),  # importance: 0.0
+    # Feature('Var153_imputed', float),  # importance: 0.0
+    # Feature('Var160_imputed', float),  # importance: 0.0
+    # Feature('Var201', cat_dtype),  # importance: 0.0
+    # Feature('Var173_imputed', float),  # importance: 0.0
+    # Feature('Var25_imputed', float),  # importance: 0.0
+    # Feature('Var112_imputed', float),  # importance: 0.0
+    # Feature('Var214', cat_dtype),  # importance: 0.0
+    # Feature('Var38_imputed', float),  # importance: 0.0
+    # Feature('Var83_imputed', float),  # importance: 0.0
+    # Feature('Var144_imputed', float),  # importance: 0.0
+    # Feature('Var143_imputed', float),  # importance: 0.0
+    # Feature('Var72_imputed', float),  # importance: 0.0
+    # Feature('Var119_imputed', float),  # importance: 0.0
+    # Feature('Var125_imputed', float),  # importance: 0.0
+    # Feature('Var133_imputed', float),  # importance: 0.0
+    # Feature('Var22_imputed', float),  # importance: 0.0
+    # Feature('Var123_imputed', float),  # importance: 0.0
+    # Feature('Var109_imputed', float),  # importance: 0.0
+    # Feature('Var140_imputed', float),  # importance: 0.0
+    # Feature('Var13_imputed', float),  # importance: 0.0
+    # Feature('Var94_imputed', float),  # importance: 0.0
+    # Feature('Var21_imputed', float),  # importance: 0.0
+    # Feature('Var181_imputed', float),  # importance: 0.0
+    # Feature('Var28_imputed', float),  # importance: 0.0
+    # Feature('Var81_imputed', float),  # importance: 0.0
+    # Feature('Var132_imputed', float),  # importance: 0.0
+    # Feature('Var6_imputed', float),  # importance: 0.0
+    # Feature('Var65_imputed', float),  # importance: 0.0
+    # Feature('Var24_imputed', float),  # importance: 0.0
+    # Feature('Var143', float),  # importance: 0.0
+    # Feature('Var74_imputed', float),  # importance: 0.0
+    # Feature('Var44_imputed', float),  # importance: 0.0
+    # Feature('Var85_imputed', float),  # importance: 0.0
+    # Feature('Var134_imputed', float),  # importance: 0.0
+    # Feature('Var76_imputed', float),  # importance: 0.0
+], documentation='https://www.kdd.org/kdd-cup/view/kdd-cup-2009/Data ,'
+                 'https://medium.com/@kushaldps1996/customer-relationship-prediction-kdd-cup-2009-6b57d08ffb0')
+
+UPSELLING_FEATURES = FeatureList(features=[
+    Feature('label', float, name_extended='class label', is_target=True),
+    Feature('Var126', float),  # importance: 0.1205
+    Feature('Var202', cat_dtype),  # importance: 0.0812
+    Feature('Var198', cat_dtype),  # importance: 0.0687
+    Feature('Var211', cat_dtype),  # importance: 0.0635
+    Feature('Var222', cat_dtype),  # importance: 0.0623
+    Feature('Var28', float),  # importance: 0.0424
+    Feature('Var217', cat_dtype),  # importance: 0.0402
+    Feature('Var192', cat_dtype),  # importance: 0.0293
+    Feature('Var199', cat_dtype),  # importance: 0.0273
+    Feature('Var216', cat_dtype),  # importance: 0.0176
+    Feature('Var204', cat_dtype),  # importance: 0.0169
+    Feature('Var197', cat_dtype),  # importance: 0.0157
+    Feature('Var126_imputed', float),  # importance: 0.0141
+    Feature('Var220', cat_dtype),  # importance: 0.0119
+    Feature('Var22', float),  # importance: 0.0116
+    Feature('Var227', cat_dtype),  # importance: 0.0102
+    Feature('Var225', cat_dtype),  # importance: 0.0102
+    Feature('Var65', float),  # importance: 0.0102
+    Feature('Var206', cat_dtype),  # importance: 0.0095
+    Feature('Var153', float),  # importance: 0.009
+    Feature('Var212', cat_dtype),  # importance: 0.0084
+    Feature('Var228', cat_dtype),  # importance: 0.0082
+    Feature('Var207', cat_dtype),  # importance: 0.0079
+    Feature('Var81', float),  # importance: 0.0078
+    Feature('Var223', cat_dtype),  # importance: 0.0076
+    Feature('Var160', float),  # importance: 0.0075
+    Feature('Var218', cat_dtype),  # importance: 0.0074
+    Feature('Var213', cat_dtype),  # importance: 0.0073
+    Feature('Var226', cat_dtype),  # importance: 0.0071
+    Feature('Var140', float),  # importance: 0.0071
+    Feature('Var193', cat_dtype),  # importance: 0.0071
+    Feature('Var78', float),  # importance: 0.007
+    Feature('Var133', float),  # importance: 0.0068
+    ##################################################
+    ##################################################
+    # Feature('Var85', float),  # importance: 0.0066
+    # Feature('Var194', cat_dtype),  # importance: 0.0066
+    # Feature('Var221', cat_dtype),  # importance: 0.0065
+    # Feature('Var113', float),  # importance: 0.0065
+    # Feature('Var119', float),  # importance: 0.0065
+    # Feature('Var219', cat_dtype),  # importance: 0.0062
+    # Feature('Var200', cat_dtype),  # importance: 0.0062
+    # Feature('Var13', float),  # importance: 0.0061
+    # Feature('Var6', float),  # importance: 0.0061
+    # Feature('Var21', float),  # importance: 0.0061
+    # Feature('Var163', float),  # importance: 0.0061
+    # Feature('Var57', float),  # importance: 0.006
+    # Feature('Var125', float),  # importance: 0.0059
+    # Feature('Var205', cat_dtype),  # importance: 0.0058
+    # Feature('Var38', float),  # importance: 0.0058
+    # Feature('Var94', float),  # importance: 0.0058
+    # Feature('Var24', float),  # importance: 0.0057
+    # Feature('Var210', cat_dtype),  # importance: 0.0056
+    # Feature('Var144', float),  # importance: 0.0056
+    # Feature('Var134', float),  # importance: 0.0055
+    # Feature('Var149', float),  # importance: 0.0054
+    # Feature('Var83', float),  # importance: 0.0054
+    # Feature('Var229', cat_dtype),  # importance: 0.0054
+    # Feature('Var25', float),  # importance: 0.0053
+    # Feature('Var123', float),  # importance: 0.0053
+    # Feature('Var76', float),  # importance: 0.005
+    # Feature('Var74', float),  # importance: 0.0049
+    # Feature('Var109', float),  # importance: 0.0048
+    # Feature('Var112', float),  # importance: 0.0048
+    # Feature('Var189', float),  # importance: 0.0047
+    # Feature('Var203', cat_dtype),  # importance: 0.0047
+    # Feature('Var7', float),  # importance: 0.0046
+    # Feature('Var208', cat_dtype),  # importance: 0.0045
+    # Feature('Var191', cat_dtype),  # importance: 0.0045
+    # Feature('Var73', float),  # importance: 0.0045
+    # Feature('Var72', float),  # importance: 0.0045
+    # Feature('Var132', float),  # importance: 0.0043
+    # Feature('Var7_imputed', float),  # importance: 0.004
+    # Feature('Var196', cat_dtype),  # importance: 0.0037
+    # Feature('Var35', float),  # importance: 0.0034
+    # Feature('Var195', cat_dtype),  # importance: 0.0027
+    # Feature('Var173', float),  # importance: 0.0026
+    # Feature('Var51', float),  # importance: 0.0026
+    # Feature('Var189_imputed', float),  # importance: 0.0025
+    # Feature('Var224', cat_dtype),  # importance: 0.002
+    # Feature('Var163_imputed', float),  # importance: 0.0018
+    # Feature('Var181', float),  # importance: 0.0014
+    # Feature('Var83_imputed', float),  # importance: 0.0
+    # Feature('Var119_imputed', float),  # importance: 0.0
+    # Feature('Var215', cat_dtype),  # importance: 0.0
+    # Feature('Var76_imputed', float),  # importance: 0.0
+    # Feature('Var85_imputed', float),  # importance: 0.0
+    # Feature('Var173_imputed', float),  # importance: 0.0
+    # Feature('Var160_imputed', float),  # importance: 0.0
+    # Feature('Var78_imputed', float),  # importance: 0.0
+    # Feature('Var134_imputed', float),  # importance: 0.0
+    # Feature('Var25_imputed', float),  # importance: 0.0
+    # Feature('Var201', cat_dtype),  # importance: 0.0
+    # Feature('Var214', cat_dtype),  # importance: 0.0
+    # Feature('Var144_imputed', float),  # importance: 0.0
+    # Feature('Var143_imputed', float),  # importance: 0.0
+    # Feature('Var44', float),  # importance: 0.0
+    # Feature('Var72_imputed', float),  # importance: 0.0
+    # Feature('Var6_imputed', float),  # importance: 0.0
+    # Feature('Var74_imputed', float),  # importance: 0.0
+    # Feature('Var81_imputed', float),  # importance: 0.0
+    # Feature('Var28_imputed', float),  # importance: 0.0
+    # Feature('Var125_imputed', float),  # importance: 0.0
+    # Feature('Var123_imputed', float),  # importance: 0.0
+    # Feature('Var109_imputed', float),  # importance: 0.0
+    # Feature('Var13_imputed', float),  # importance: 0.0
+    # Feature('Var94_imputed', float),  # importance: 0.0
+    # Feature('Var140_imputed', float),  # importance: 0.0
+    # Feature('Var133_imputed', float),  # importance: 0.0
+    # Feature('Var149_imputed', float),  # importance: 0.0
+    # Feature('Var181_imputed', float),  # importance: 0.0
+    # Feature('Var22_imputed', float),  # importance: 0.0
+    # Feature('Var44_imputed', float),  # importance: 0.0
+    # Feature('Var35_imputed', float),  # importance: 0.0
+    # Feature('Var153_imputed', float),  # importance: 0.0
+    # Feature('Var65_imputed', float),  # importance: 0.0
+    # Feature('Var38_imputed', float),  # importance: 0.0
+    # Feature('Var24_imputed', float),  # importance: 0.0
+    # Feature('Var143', float),  # importance: 0.0
+    # Feature('Var21_imputed', float),  # importance: 0.0
+    # Feature('Var112_imputed', float),  # importance: 0.0
+    # Feature('Var51_imputed', float),  # importance: 0.0
+    # Feature('Var132_imputed', float),  # importance: 0.0
+], documentation='https://www.kdd.org/kdd-cup/view/kdd-cup-2009/Data ,'
+                 'https://medium.com/@kushaldps1996/customer-relationship-prediction-kdd-cup-2009-6b57d08ffb0')
 
 CLICK_FEATURES = FeatureList(features=[
     Feature('click', float, is_target=True,

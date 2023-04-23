@@ -1,9 +1,11 @@
 import argparse
 import logging
-from tableshift.core import get_dataset
 
-from tableshift.models.utils import get_estimator
+from sklearn.metrics import accuracy_score
+
+from tableshift.core import get_dataset
 from tableshift.models.training import train
+from tableshift.models.utils import get_estimator
 
 LOG_LEVEL = logging.DEBUG
 
@@ -20,10 +22,16 @@ def main(experiment, cache_dir, model, debug: bool):
         experiment = "_debug"
 
     dset = get_dataset(experiment, cache_dir)
-    X,y,_,_ = dset.get_pandas("train")
+    X, y, _, _ = dset.get_pandas("train")
     estimator = get_estimator(model)
     estimator = train(estimator, dset)
-    print("training completed!")
+    if dset.is_domain_split:
+        X_te, y_te, _, _ = dset.get_pandas("ood_test")
+    else:
+        X_te, y_te, _, _ = dset.get_pandas("test")
+    yhat_te = estimator.predict(X_te)
+    acc = accuracy_score(y_true=y_te, y_pred=yhat_te)
+    print(f"training completed! test accuracy: {acc:.4f}")
     return
 
 

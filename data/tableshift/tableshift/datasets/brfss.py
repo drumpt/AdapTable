@@ -7,9 +7,9 @@ Raw Data: https://www.cdc.gov/brfss/annual_data/annual_data.htm
 Data Dictionary: https://www.cdc.gov/brfss/annual_data/2015/pdf/codebook15_llcp.pdf
 """
 
-import numpy as np
 import re
 
+import numpy as np
 import pandas as pd
 
 from tableshift.core.features import Feature, FeatureList, cat_dtype
@@ -184,12 +184,15 @@ BRFSS_DIABETES_FEATURES = FeatureList([
             name_extended='(Ever told) you have diabetes',
             is_target=True,
             na_values=(7, 9),
-            value_mapping={
-                1: 'Yes',
-                2: 'Yes but female told only during pregnancy',
-                3: 'No', 4: 'No, prediabetes or borderline diabetes',
-                7: 'Don’t know / Not Sure', 9: 'Refused'
-            }),
+            # value_mapping={
+            #     1: 'Yes',
+            #     2: 'Yes but female told only during pregnancy',
+            #     3: 'No',
+            #     4: 'No, prediabetes or borderline diabetes',
+            #     7: 'Don’t know / Not Sure',
+            #     9: 'Refused'
+            # }
+            ),
 
     # Below are a set of indicators for known risk factors for diabetes.
     ################ General health ################
@@ -611,6 +614,10 @@ def preprocess_brfss_diabetes(df: pd.DataFrame):
     df = brfss_shared_preprocessing(df)
 
     df["DIABETES"].replace({2: 0, 3: 0, 4: 0}, inplace=True)
+    # na_values have not been mapped yet; need to access and use these
+    df = df[~df["DIABETES"].isin(
+        BRFSS_DIABETES_FEATURES.target_feature.na_values)]
+    df.dropna(subset=["DIABETES"], inplace=True)
 
     # Reset the index after preprocessing to ensure splitting happens
     # correctly (splitting assumes sequential indexing).

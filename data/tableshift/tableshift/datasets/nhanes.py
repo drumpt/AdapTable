@@ -2,15 +2,22 @@
 NHANES-related tools. See also the documentation at the link below:
 https://www.cdc.gov/Nchs/Nhanes/about_nhanes.htm
 """
-from collections import defaultdict
 import json
 import logging
 import os
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
 
 from tableshift.core.features import Feature, FeatureList, cat_dtype
+
+DEFAULT_NHANES_CODING = {
+    "1.0": "Yes",
+    "2.0": "No",
+    "7.0": "Refused",
+    "9.0": "Don't know",
+}
 
 NHANES_YEARS = [1999, 2001, 2003, 2005, 2007, 2009, 2011, 2013, 2015, 2017]
 
@@ -116,29 +123,49 @@ NHANES_CHOLESTEROL_FEATURES = FeatureList(features=[
 
     Feature('BPQ020', cat_dtype, """{Have you/Has SP} ever been told by a 
     doctor or other health professional # that {you/s/he} had hypertension, 
-    also called high blood pressure?"""),
+    also called high blood pressure?""",
+            name_extended='ever been told by a doctor or other health professional that you had hypertension',
+            value_mapping=DEFAULT_NHANES_CODING),
 
     Feature('DIQ160', cat_dtype, """{Have you/Has SP} ever been told by a 
     doctor or other health professional that {you have/SP has} any of the 
     following: prediabetes, impaired fasting glucose, impaired glucose 
     tolerance, borderline diabetes or that {your/her/his} blood sugar is 
     higher than normal but not high enough to be called diabetes or sugar 
-    diabetes?"""),
+    diabetes?""",
+            name_extended="ever been told by a "
+                          "doctor or other health professional that {you have/SP has} any of the "
+                          "following: prediabetes, impaired fasting glucose, impaired glucose "
+                          "tolerance, borderline diabetes or that {your/her/his} blood sugar is "
+                          "higher than normal but not high enough to be called diabetes or sugar "
+                          "diabetes?,",
+            value_mapping=DEFAULT_NHANES_CODING),
 
     Feature('DIQ010', cat_dtype, """{Other than during pregnancy, {have 
     you/has SP}/{Have you/Has SP}} ever been told by a doctor or health 
     professional that {you have/{he/she/SP} has} diabetes or sugar 
-    diabetes?"""),
+    diabetes?""",
+            name_extended="{Other than during pregnancy, have you"
+                          " ever been told by a doctor or health "
+                          "professional that you have diabetes or sugar diabetes?",
+            value_mapping={**DEFAULT_NHANES_CODING,
+                           "3.0": "Borderline"}),
 
     ####### Risk Factor: Chronic kidney disease
 
     Feature('KIQ025', cat_dtype, """In the past 12 months, {have you/has SP} 
-    received dialysis (either hemodialysis or peritoneal dialysis)?"""),
+    received dialysis (either hemodialysis or peritoneal dialysis)?""",
+            name_extended="received dialysis (either hemodialysis or "
+                          "peritoneal dialysis) in the past 12 months",
+            value_mapping=DEFAULT_NHANES_CODING),
 
     Feature('KIQ022', cat_dtype, """{Have you/Has SP} ever been told by a 
     doctor or other health professional that {you/s/he} had weak or failing 
     kidneys? Do not include kidney stones, bladder infections, 
-    or incontinence."""),
+    or incontinence.""",
+            name_extended="ever been told by a doctor or other health "
+                          "professional that you had weak or failing kidneys",
+            value_mapping=DEFAULT_NHANES_CODING),
 
     ####### Risk Factor: Chronic inflammatory conditions such as
     # psoriasis, RA, or HIV/AIDS
@@ -147,11 +174,17 @@ NHANES_CHOLESTEROL_FEATURES = FeatureList(features=[
             description="{Have you/Has SP} ever been told by a doctor or "
                         "other health care professional that {you/s/he} had "
                         "psoriasis ( sore-eye-asis)? (note: not present after "
-                        "2013)"),
+                        "2013)",
+            name_extended="ever been told by a doctor or other health care "
+                          "professional that you had psoriasis",
+            value_mapping=DEFAULT_NHANES_CODING),
 
-    Feature('MCQ160B', cat_dtype, """Has a doctor or other health 
+    Feature('MCQ160A', cat_dtype, """Has a doctor or other health 
     professional ever told {you/SP} that {you/s/he} . . .had arthritis (
-    ar-thry-tis)?"""),
+    ar-thry-tis)?""",
+            name_extended="ever been told by a doctor or other health care "
+                          "professional that you had arthritis",
+            value_mapping=DEFAULT_NHANES_CODING),
 
     # Note: no questions about HIV/AIDS.
 
@@ -172,7 +205,10 @@ NHANES_LEAD_FEATURES = FeatureList(features=[
             'Binary indicator for whether family PIR (poverty-income ratio)'
             'is <= 1.3. The threshold of 1.3 is selected based on the '
             'categorization in NHANES, where PIR <= 1.3 is the lowest level ('
-            'see INDFMMPC feature).'),
+            'see INDFMMPC feature).',
+            name_extended='Binary indicator for whether family PIR ('
+                          'poverty-income ratio) is <= 1.3.',
+            value_mapping={1.: 'yes', 0.: 'no'}),
 
     Feature("LBXBPB", float, "Blood lead (ug/dL)", is_target=True,
             na_values=(".",)),
@@ -180,22 +216,31 @@ NHANES_LEAD_FEATURES = FeatureList(features=[
 
 NHANES_SHARED_FEATURES = FeatureList(features=[
     # Derived feature for survey year
-    Feature("nhanes_year", int, "Derived feature for year."),
+    Feature("nhanes_year", int, "Derived feature for year.",
+            name_extended='year'),
 
     Feature('DMDBORN4', cat_dtype, """In what country {were you/was SP} born? 
     1	Born in 50 US states or Washington, DC 2 Others""",
-            na_values=(77, 99, ".")),
+            na_values=(77, 99, "."),
+            name_extended="country of birth",
+            value_mapping={"1.0": "born in 50 US states or Washington, DC",
+                           "2.0": "not born in 50 US states or Washington, DC"}),
 
     Feature('DMDEDUC2', cat_dtype, """What is the highest grade or level of 
     school {you have/SP has} completed or the highest degree {you have/s/he 
-    has} received?"""),
+    has} received?""",
+            name_extended="highest grade or level of school completed or "
+                          "highest degree received"),
 
     Feature('RIDAGEYR', float, """Age in years of the participant at the time 
-    of screening. Individuals 80 and over are topcoded at 80 years of age."""),
+    of screening. Individuals 80 and over are topcoded at 80 years of age.""",
+            name_extended="age in years"),
 
-    Feature('RIAGENDR', cat_dtype, "Gender of the participant."),
+    Feature('RIAGENDR', cat_dtype, "Gender of the participant.",
+            name_extended="gender"),
 
-    Feature('DMDMARTL', cat_dtype, "Marital status"),
+    Feature('DMDMARTL', cat_dtype, "Marital status",
+            name_extended="marital status"),
 
     Feature('RIDRETH_merged', int, """Derived feature. This feature uses 
     'RIDRETH3' (Recode of reported race and Hispanic origin information, 
@@ -205,7 +250,17 @@ NHANES_SHARED_FEATURES = FeatureList(features=[
     but the shared values are coded identically; 'RIDRETH3' was only added to 
     NHANES in 2011-2012 data year. See _merge_ridreth_features( ) below, 
     and the NHANES documentation, e.g. 
-    https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/DEMO_J.htm#RIDRETH1 ."""),
+    https://wwwn.cdc.gov/Nchs/Nhanes/2017-2018/DEMO_J.htm#RIDRETH1 .""",
+            name_extended="race and hispanic origin",
+            value_mapping={
+                1.: "Mexican American",
+                2.: "Other Hispanic",
+                3.: "Non-Hispanic White",
+                4.: "Non-Hispanic Black",
+                5.: "Other Race - Including Multi-Racial",
+                6.: "Non-Hispanic Asian",
+                7.: "Other Race - Including Multi-Racial"
+            }),
 
 ], documentation="https://wwwn.cdc.gov/Nchs/Nhanes/")
 

@@ -1,6 +1,9 @@
 #!/bin/bash
 
 # Example script to run a ray training experiment.
+# You may wish to tune the resources provided to each Ray worker
+# using the --gpu_per_worker and --cpu_per_worker flags, or increase
+# workers with the --num_workers flag.
 
 echo 'activating virtual environment'
 source ~/.bashrc

@@ -244,9 +244,10 @@ class TabularDataset(Dataset):
 
     def _check_data(self):
         """Helper function to check data after all preprocessing/splitting."""
-        if not pd.api.types.is_numeric_dtype(self._df[self.target]):
+        target = self._post_transform_target_name()
+        if not pd.api.types.is_numeric_dtype(self._df[target]):
             logging.warning(
-                f"y is of type {self._df[self.target].dtype}; "
+                f"y is of type {self._df[target].dtype}; "
                 f"non-numeric types are not accepted by all estimators ("
                 f"e.g. xgb.XGBClassifier")
         if self.domain_label_colname:
@@ -289,9 +290,25 @@ class TabularDataset(Dataset):
         else:
             return data
 
+    def _post_transform_target_name(self) -> str:
+        """Return the 'true', possibly mapped, name of the target feature.
+
+        This is the name that should be used once the features have been
+        transformed."""
+        target = self.task_config.feature_list.target
+        if self.preprocessor_config.map_targets and (
+                self.task_config.feature_list[
+                    target].name_extended is not None):
+            target = self.task_config.feature_list[target].name_extended
+        return target
+
+    def _pre_transform_target_name(self) -> str:
+        return self.task_config.feature_list.target
+
     def _init_feature_names(self, data):
         """Set the (data, labels, groups, domain_labels) feature names."""
-        target = self.task_config.feature_list.target
+        target = self._post_transform_target_name()
+
         data_features = set([x for x in data.columns
                              if x not in self.grouper_features
                              and x != target])
@@ -320,11 +337,10 @@ class TabularDataset(Dataset):
     def _generate_splits(self, data):
         """Call the splitter to generate splits for the dataset."""
         assert self.splits is None, "attempted to overwrite existing splits."
-
         self._init_feature_names(data)
         self.splits = self.splitter(
             data=data[self.feature_names],
-            labels=data[self.target],
+            labels=data[self._pre_transform_target_name()],
             groups=data[self.group_feature_names],
             domain_labels=data[self.domain_label_colname] \
                 if self.domain_label_colname else None)
@@ -332,23 +348,25 @@ class TabularDataset(Dataset):
             data.drop(columns=["Split"], inplace=True)
         return data
 
-    def _process_post_split(self, data,
-                            default_targets_dtype=int) -> pd.DataFrame:
+    def _process_post_split(self, data) -> pd.DataFrame:
         """Dataset-specific postprocessing function.
 
         Conducts any processing required **after** splitting (e.g.
         normalization, drop features needed only for splitting)."""
-        passthrough_columns = self.grouper_features + [self.target]
+        passthrough_columns = self.grouper_features
 
         data = self.preprocessor.fit_transform(
             data,
             self.splits["train"],
             domain_label_colname=self.domain_label_colname,
+            target_colname=self.target,
             passthrough_columns=passthrough_columns)
-        if data[self.task_config.feature_list.target].dtype == "O":
-            data[self.task_config.feature_list.target] = data[
-                self.task_config.feature_list.target].astype(
-                default_targets_dtype)
+
+        # If necessary, cast targets to the default type.
+        target_name = self._post_transform_target_name()
+        if self.preprocessor_config.cast_targets_to_default_type:
+            data[target_name] = data[target_name].astype(
+                self.preprocessor_config.default_targets_dtype)
         return data
 
     def _is_valid_split(self, split) -> bool:

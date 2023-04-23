@@ -1,22 +1,23 @@
 """Data sources for TableBench."""
-from abc import ABC, abstractmethod
-from collections import defaultdict
-from functools import partial
 import glob
 import gzip
-from io import StringIO
 import logging
 import os
 import re
-from typing import Sequence, Optional, Callable
 import zipfile
+from abc import ABC, abstractmethod
+from collections import defaultdict
+from functools import partial
+from io import StringIO
+from typing import Sequence, Optional, Callable
 
 import datasets
 import folktables
-import requests
 import numpy as np
 import pandas as pd
+import requests
 
+import tableshift.datasets
 from tableshift.core import utils
 from tableshift.datasets.acs import ACS_STATE_LIST, preprocess_acs, \
     get_acs_data_source, ACS_TASK_CONFIGS, acs_data_to_df
@@ -37,7 +38,6 @@ from tableshift.datasets.german import GERMAN_RESOURCES, preprocess_german
 from tableshift.datasets.grinsztajn import preprocess_grinsztain_datataset
 from tableshift.datasets.heloc import preprocess_heloc
 from tableshift.datasets.kaggle import preprocess_otto, preprocess_walmart
-from tableshift.datasets.utils import apply_column_missingness_threshold
 from tableshift.datasets.mimic_extract import preprocess_mimic_extract, \
     MIMIC_EXTRACT_STATIC_FEATURES
 from tableshift.datasets.mooc import preprocess_mooc
@@ -46,6 +46,7 @@ from tableshift.datasets.nhanes import preprocess_nhanes_cholesterol, \
 from tableshift.datasets.physionet import preprocess_physionet
 from tableshift.datasets.uci import WINE_FEATURES, ABALONE_FEATURES, \
     preprocess_abalone
+from tableshift.datasets.utils import apply_column_missingness_threshold
 
 
 class DataSource(ABC):
@@ -521,6 +522,9 @@ class PhysioNetDataSource(DataSource):
             cmd = "wget -r -N -c -np https://physionet.org/files/challenge" \
                   f"-2019/1.0.0/training/ -P={self.cache_dir}"
             utils.run_in_subprocess(cmd)
+        else:
+            logging.info(f"detected valid physionet training data at {root}; "
+                         f"skipping download")
         return
 
     def _load_data(self) -> pd.DataFrame:
@@ -1150,8 +1154,7 @@ class SchizophreniaDataSource(KaggleCompetitionDataSource):
 
     def _load_data(self) -> pd.DataFrame:
         train_data_dir = os.path.join(self.cache_dir,
-                                      self.kaggle_dataset_name,
-                                      "Train")
+                                      self.kaggle_dataset_name)
         train_fnc_fp = os.path.join(train_data_dir, "train_FNC.csv")
         train_labels_fp = os.path.join(train_data_dir, "train_labels.csv")
         train_sbm_fp = os.path.join(train_data_dir, "train_SBM.csv")
@@ -1348,3 +1351,41 @@ class AdFraudDataSource(KaggleCompetitionDataSource):
         # Drop this column since it perfectly predicts the label.
         df.drop(columns=['attributed_time'], inplace=True)
         return df
+
+
+class AssistmentsDataSource(KaggleDataSource):
+    def __init__(self, **kwargs):
+        super().__init__(
+            kaggle_dataset_name="nicolaswattiez/skillbuilder-data-2009-2010",
+            preprocess_fn=tableshift.datasets.preprocess_assistments, **kwargs)
+
+    def _load_data(self) -> pd.DataFrame:
+        logging.info(
+            "reading assistments data (can be slow due to large file size)")
+        # TODO(jpgard): uncomment below to use full-width dataset after testing.
+        # df = pd.read_csv(os.path.join(
+        #     self.cache_dir,
+        #     self.kaggle_dataset_name,
+        #     "2012-2013-data-with-predictions-4-final.csv"))
+        # # # write out a tiny version of assistments datasets
+        # import ipdb;
+        # ipdb.set_trace()
+        # df[tableshift.datasets.ASSISTMENTS_FEATURES.names].to_feather(
+        #     os.path.join(self.cache_dir, "assistments-subset.feather"))
+        df = pd.read_feather(os.path.join(self.cache_dir,
+                                          "assistments-subset.feather"))
+        logging.info("finished reading data")
+        return df
+
+
+class CollegeScorecardDataSource(KaggleDataSource):
+    def __init__(self, **kwargs):
+        super().__init__(
+            kaggle_dataset_name="kaggle/college-scorecard",
+            preprocess_fn=tableshift.datasets.preprocess_college_scorecard,
+            **kwargs)
+
+    def _load_data(self) -> pd.DataFrame:
+        return pd.read_csv(os.path.join(self.cache_dir,
+                                        self.kaggle_dataset_name,
+                                        "Scorecard.csv"))

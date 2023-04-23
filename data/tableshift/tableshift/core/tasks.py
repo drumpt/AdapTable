@@ -45,6 +45,8 @@ _TASK_REGISTRY = {
         TaskConfig(AdultDataSource, ADULT_FEATURES),
     "anes":
         TaskConfig(ANESDataSource, ANES_FEATURES),
+    "assistments":
+        TaskConfig(AssistmentsDataSource, ASSISTMENTS_FEATURES),
     "brfss_diabetes":
         TaskConfig(BRFSSDataSource, BRFSS_DIABETES_FEATURES),
     "brfss_blood_pressure":
@@ -86,8 +88,12 @@ _TASK_REGISTRY = {
         TaskConfig(MetaMIMICDataSource, METAMIMIC_RESPIRATORY_FEATURES),
     "mimic_extract_los_3":
         TaskConfig(MIMICExtractDataSource, MIMIC_EXTRACT_LOS_3_FEATURES),
+    "mimic_extract_los_3_selected":
+        TaskConfig(MIMICExtractDataSource, MIMIC_EXTRACT_LOS_3_SELECTED_FEATURES),
     "mimic_extract_mort_hosp":
         TaskConfig(MIMICExtractDataSource, MIMIC_EXTRACT_MORT_HOSP_FEATURES),
+    "mimic_extract_mort_hosp_selected":
+        TaskConfig(MIMICExtractDataSource, MIMIC_EXTRACT_MORT_HOSP_SELECTED_FEATURES),
     "mooc":
         TaskConfig(MOOCDataSource, MOOC_FEATURES),
     "nhanes_cholesterol":
@@ -133,9 +139,9 @@ _TASK_REGISTRY = {
     'appetency':
         TaskConfig(KddCup2009DataSource, APPETENCY_FEATURES),
     'churn':
-        TaskConfig(KddCup2009DataSource, APPETENCY_FEATURES),
+        TaskConfig(KddCup2009DataSource, CHURN_FEATURES),
     'upselling':
-        TaskConfig(KddCup2009DataSource, APPETENCY_FEATURES),
+        TaskConfig(KddCup2009DataSource, UPSELLING_FEATURES),
     'click':
         TaskConfig(ClickDataSource, CLICK_FEATURES),
     'kick':
@@ -209,6 +215,8 @@ _TASK_REGISTRY = {
         TaskConfig(AmexDefaultDataSource, AMEX_DEFAULT_FEATURES),
     'ad-fraud':
         TaskConfig(AdFraudDataSource, AD_FRAUD_FEATURES),
+    'college_scorecard':
+        TaskConfig(CollegeScorecardDataSource, COLLEGE_SCORECARD_FEATURES),
 }
 
 

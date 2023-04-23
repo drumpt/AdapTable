@@ -1,40 +1,44 @@
 import os
 from os import path
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data/tableshift"))
+from collections import Counter
+
+from tableshift import get_dataset, get_iid_dataset
 
 import openml
 from openml import tasks, runs
+
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 import torch
 
 
 
-class Datasets():
+class Dataset():
     def __init__(self, args):
         if args.meta_dataset == "openml-cc18":
-            dataset = OpenMLDatasets()
+            dataset = OpenMLCC18Dataset(args)
         elif args.meta_dataset == "tableshift":
-            pass
+            dataset = TableShiftDataset(args)
         elif args.meta_dataset == "openml-regression":
-            pass
+            dataset = OpenMLRegressionDataset(args)
 
-        self.train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_x), torch.from_numpy(dataset.train_y))
-        self.valid_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.valid_x), torch.from_numpy(dataset.valid_y))
-        # if args.meta_dataset != "tableshift": # tableshift requires natural shift from model uncertainty only
-        #     dataset.test_x = self.get_corrupted_data(dataset.test_x, args.corruption_type, args.corruption_severity, args.imputation_method)
-        self.test_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.test_x), torch.from_numpy(dataset.test_y))
+        train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_x), torch.from_numpy(dataset.train_y))
+        valid_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.valid_x), torch.from_numpy(dataset.valid_y))
+        test_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.test_x), torch.from_numpy(dataset.test_y))
 
         self.in_dim, self.out_dim = dataset.train_x.shape[-1], dataset.train_y.shape[-1]
-        self.train_loader = torch.utils.data.DataLoader(self.train_data, batch_size=args.train_batch_size, shuffle=True)
-        self.valid_loader = torch.utils.data.DataLoader(self.valid_data, batch_size=args.train_batch_size, shuffle=True)
-        self.test_loader =  torch.utils.data.DataLoader(self.test_data, batch_size=args.test_batch_size, shuffle=True)
+        self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True)
+        self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=True)
+        self.test_loader =  torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True)
 
 
 
-class OpenMLDatasets():
+class OpenMLCC18Dataset():
     def __init__(self, args):
         benchmark_list_path = "data/OpenML-CC18/benchmark_list.csv"
         if not os.path.exists(benchmark_list_path):
@@ -43,9 +47,9 @@ class OpenMLDatasets():
             benchmark_df.to_csv(benchmark_list_path)
         else:
             benchmark_df = pd.read_csv(benchmark_list_path)
-        target_feature = benchmark_df[benchmark_df["name"] == args.name].iloc[0]["target_feature"]
+        target_feature = benchmark_df[benchmark_df["name"] == args.dataset].iloc[0]["target_feature"]
         
-        dataset = openml.datasets.get_dataset(args.name)
+        dataset = openml.datasets.get_dataset(args.dataset)
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
         y = np.array(y).reshape(-1, 1)
 
@@ -61,7 +65,9 @@ class OpenMLDatasets():
             self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            test_cont_x = self.input_scaler.transform(get_corrupted_data((test_x.iloc[:, cont_indices], )))
+            test_cont_x = self.input_scaler.transform(
+                get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
+            )
         else:
             train_cont_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([])
         if len(cat_indices):
@@ -69,7 +75,9 @@ class OpenMLDatasets():
             self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            test_cat_x = self.input_one_hot_encoder.transform(test_x.iloc[:, cat_indices])
+            test_cat_x = self.input_one_hot_encoder.transform(
+                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
+            )
         else:
             train_cat_x, valid_cat_x, test_cat_x = np.array([]), np.array([]), np.array([])
         self.train_x = np.concatenate([
@@ -97,7 +105,38 @@ class OpenMLDatasets():
 
 
 
-# class UCIDatasets():
+class TableShiftDataset():
+    def __init__(self, args):
+        dataset = get_dataset(args.dataset)
+        train_x, train_y, _, _ = dataset.get_pandas("train")
+        valid_x, valid_y, _, _ = dataset.get_pandas("validation")
+        if not args.shift_type:
+            test_x, test_y, _, _ = dataset.get_pandas("id_test")
+        elif args.shift_type == "natural":
+            # TODO: fix this
+            test_x, test_y, _, _ = dataset.get_pandas("ood_test")
+            # test_x, test_y, _, _ = dataset.get_pandas("test")
+        train_y = np.array(train_y).reshape(-1, 1)
+        valid_y = np.array(valid_y).reshape(-1, 1)
+        test_y = np.array(test_y).reshape(-1, 1)
+
+        self.train_x = np.array(train_x)
+        self.valid_x = np.array(valid_x)
+        self.test_x = np.array(test_x)
+
+        self.train_y = train_y
+        self.valid_y = valid_y
+        self.test_y = test_y
+
+
+
+class OpenMLRegressionDataset():
+    def __init__(self, args):
+        pass
+
+
+
+# class UCIDataset():
 #     def __init__(self, args, name, data_path):
 #         self.datasets = {
 #             "wine": "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv", # classification
@@ -202,37 +241,79 @@ class OpenMLDatasets():
 
 
 
-def get_corrupted_data(test_data, train_data, corruption_type, corruption_severity, imputation_method):
-    if corruption_type == "Gaussian":
-        test_data += corruption_severity * torch.randn_like(test_data, device=test_data.device)
+def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
+    assert shift_type in ["Gaussian", "random_drop", "column_drop", "column_block_drop", "mean_shift", "std_shift", "mean_std_shift"]
 
-    elif corruption_type in ["random_crop", "column_drop", "column_block_drop"]:
-        assert 0 <= corruption_severity <= 1
+    if shift_type == "Gaussian" and data_type == "numerical":
+        scaler = StandardScaler()
+        scaler.fit(train_data)
+        test_data += shift_severity * np.random.randn(*test_data.shape) * np.sqrt(scaler.var_)
 
-        if corruption_type == "random_drop":
-            mask = (torch.zeros_like(test_data).to(test_data.device).uniform_() > corruption_severity).int()
-        elif corruption_type == "column_drop":
-            mask = (torch.zeros_like(test_data[0]).to(test_data.device).uniform_() > corruption_severity).int().unsqueeze(0)
-        elif corruption_type == "column_block_drop":
-            start_idx = np.random.randint(0, int(data[0].shape[-1] * (1 - corruption_severity)) + 1)
-            end_idx = start_idx + int(data[0].shape[-1] * corruption_severity)
-            mask = torch.tensor([1 if start_idx <= idx <= end_idx else 0 for idx in range(len(test_data[0]))]).unsqueeze(0)
-        imputed_data = get_imputed_data(test_data, train_data, imputation_method)
-        test_data = mask * test_data + (1 - mask) * imputed_data
+    elif shift_type in ["random_drop", "column_drop", "column_block_drop"]:
+        assert 0 <= shift_severity <= 1
 
-    elif corruption_type in ["mean_shift", "std_shift", "mean_std_shift"]:
-        if corruption_type == "mean_shift":
-            mean = 2 * torch.rand(1).to(data.device) - 1
-            data += mean
-        elif corruption_type == "std_shift":
-            std = 1.5 * torch.rand(1).to(data.device) + 0.5
-            data *= std
-        elif corruption_type == "mean_std_shift":
-            mean = 2 * torch.rand(1).to(data.device) - 1        
-            std = 1.5 * torch.rand(1).to(data.device) + 0.5
-            data = std * data + mean
+        if shift_type == "random_drop":
+            mask = (np.random.rand(*test_data.shape) >= shift_severity).astype(np.int64)
+        elif shift_type == "column_drop":
+            mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :], test_data.shape[0], axis=0)
+        elif shift_type == "column_block_drop":
+            start_idx = np.random.randint(0, int(test_data.shape[-1] * (1 - shift_severity)) + 1)
+            end_idx = start_idx + int(test_data.shape[-1] * shift_severity)
+            mask = np.repeat(np.array([0 if start_idx <= idx <= end_idx else 1 for idx in range(len(test_data[0]))])[None, :], test_data.shape[0], axis=0)
+        imputed_data = get_imputed_data(test_data, train_data, data_type, imputation_method)
+
+        if data_type == "numerical":
+            test_data = mask * test_data + (1 - mask) * imputed_data
+        elif data_type == "categorical":
+            for row_idx in range(test_data.shape[0]):
+                for col_idx in range(test_data.shape[-1]):
+                    if mask[row_idx][col_idx] == 0:
+                        test_data[row_idx][col_idx] = imputed_data[row_idx][col_idx]
+
+    elif shift_type in ["mean_shift", "std_shift", "mean_std_shift"] and data_type == "numerical":
+        scaler = StandardScaler()
+        scaler.fit(train_data)
+        if shift_type == "mean_shift":
+            mean_noise = shift_severity * np.random.randn(*scaler.var_.shape)
+            test_data = test_data + mean_noise * np.random.randn(*scaler.var_.shape)
+            print(f"test_data.shape: {test_data.shape}")
+        elif shift_type == "std_shift":
+            std_noise = shift_severity * np.exp(np.random.randn(*scaler.var_.shape))
+            test_data = std_noise * test_data + scaler.mean_ * (1 - std_noise)
+        elif shift_type == "mean_std_shift":
+            mean_noise = shift_severity * np.random.randn(*scaler.mean_.shape)
+            std_noise = shift_severity * np.exp(np.random.randn(*scaler.var_.shape))
+            test_data = std_noise * test_data + mean_noise * np.sqrt(scaler.var_) + (1 - std_noise) * scaler.mean_
     return test_data
 
 
-def get_imputed_data(test_data, train_data, imputation_method):
-    return test_data
+def get_imputed_data(test_data, train_data, data_type, imputation_method):
+    if data_type == "numerical":
+        if imputation_method == "zero":
+            imputed_data = np.zeros_like(test_data)
+        elif imputation_method == "mean":
+            imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], test_data.shape[0], axis=0)
+        elif imputation_method == "emd":
+            imputed_data = []
+            for train_col in train_data.T:
+                imputed_data.append(np.random.choice(train_col, len(test_data)))
+            imputed_data = np.stack(imputed_data, axis=-1)
+    elif data_type == "categorical":
+        if imputation_method == "zero":
+            imputed_data = []
+            for train_col in train_data.T:
+                train_col = set([str(train_col_elem) for train_col_elem in train_col])
+                imputed_data.append(np.array([max(train_col) + "." for _ in range(len(test_data))]))
+            imputed_data = np.stack(imputed_data, axis=-1)
+        elif imputation_method == "mean": # mode (most frequent value)
+            imputed_data = []
+            for train_col in train_data.T:
+                unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
+                imputed_data.append(np.array([unique[np.argmax(counts)] for _ in range(len(test_data))]))
+            imputed_data = np.stack(imputed_data, axis=-1)
+        elif imputation_method == "emd":
+            imputed_data = []
+            for train_col in train_data.T:
+                imputed_data.append(np.random.choice(train_col, len(test_data)))
+            imputed_data = np.stack(imputed_data, axis=-1)
+    return imputed_data

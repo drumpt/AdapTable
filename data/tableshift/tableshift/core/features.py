@@ -1,14 +1,15 @@
+import logging
 from dataclasses import dataclass, field
 from functools import partial
-import logging
 from typing import List, Any, Sequence, Optional, Mapping, Tuple, Union, Dict
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype as cat_dtype
 from sklearn.compose import ColumnTransformer, make_column_selector
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler, \
-    LabelEncoder, FunctionTransformer, OrdinalEncoder
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, LabelEncoder, \
+    FunctionTransformer, OrdinalEncoder
+
 from tableshift.core.discretization import KBinsDiscretizer
 from tableshift.core.utils import sub_illegal_chars
 
@@ -37,7 +38,7 @@ def safe_cast(x: pd.Series, dtype):
                 return x.astype(float)
 
 
-def _is_categorical(x: pd.Series):
+def is_categorical(x: pd.Series):
     return isinstance(x.dtype, cat_dtype) or isinstance(x, pd.Categorical)
 
 
@@ -46,7 +47,7 @@ def column_is_of_type(x: pd.Series, dtype) -> bool:
     if hasattr(dtype, "name"):
         # Case: target dtype is of categorical dtype.
         return (hasattr(x.dtype, "name")) and (x.dtype.name == dtype.name)
-    elif _is_categorical(x):
+    elif is_categorical(x):
         # Case: input data is of categorical dtype.
         return dtype == cat_dtype
     else:
@@ -118,12 +119,23 @@ class FeatureList:
         return [f.name for f in self.features]
 
     @property
-    def target(self):
+    def target_feature(self) -> Feature:
+        """Return the target feature (if it exists)."""
+        for f in self.features:
+            if f.is_target:
+                return f
+        raise ValueError(f"no target in features {self.names}")
+
+    @property
+    def target(self) -> Union[str, None]:
         """Return the name of the target feature (if it exists)."""
         for f in self.features:
             if f.is_target:
                 return f.name
         return None
+
+    def __len__(self):
+        return len(self.features)
 
     def __getitem__(self, item: str) -> Feature:
         """Get a feature by name."""
@@ -231,8 +243,17 @@ class PreprocessorConfig:
     # is specified.
     use_extended_names: bool = False
 
+    # By defaults, target names/values are not mapped even when map_values is
+    # used. However, if this is set to true, targets will be mapped when
+    # map_values is specified.
+    map_targets: bool = False
+
+    default_targets_dtype = int
+    cast_targets_to_default_type: bool = False
+
     min_frequency: float = None  # see OneHotEncoder.min_frequency
     max_categories: int = None  # see OneHotEncoder.max_categories
+    n_bins: int = 5  # see KBinsDiscretizer.num_bins
 
 
 def map_values(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
@@ -293,7 +314,8 @@ class Preprocessor:
     def _get_categorical_transforms(self, data: pd.DataFrame,
                                     passthrough_columns: List[str]) -> List:
 
-        cols = [c for c in get_categorical_columns(data) if c not in passthrough_columns]
+        cols = [c for c in get_categorical_columns(data) if
+                c not in passthrough_columns]
 
         if self.config.categorical_features == "passthrough":
             transforms = []
@@ -368,7 +390,9 @@ class Preprocessor:
             transforms = [(f'scale_{c}', StandardScaler(), [c]) for c in cols]
 
         elif self.config.numeric_features == "kbins":
-            transforms = [("kbin", KBinsDiscretizer(encode="ordinal"), cols)]
+            transforms = [("kbin", KBinsDiscretizer(encode="ordinal",
+                                                    n_bins=self.config.n_bins),
+                           cols)]
 
         else:
             raise ValueError(f"{self.config.numeric_features} is not "
@@ -489,7 +513,8 @@ class Preprocessor:
 
     def get_passthrough_columns(self, data: pd.DataFrame,
                                 passthrough_columns: List[str] = None,
-                                domain_label_colname: Optional[str] = None):
+                                domain_label_colname: Optional[str] = None,
+                                target_colname: Optional[str] = None):
         if passthrough_columns is None:
             passthrough_columns = []
 
@@ -507,17 +532,19 @@ class Preprocessor:
             logging.debug(f"adding domain label column {domain_label_colname} "
                           f"to passthrough columns")
             passthrough_columns.append(domain_label_colname)
+        if not self.config.map_targets:
+            passthrough_columns.append(target_colname)
         return passthrough_columns
 
-    def map_names_extended(self, colnames: List[str], map_targets=False
-                           ) -> List[str]:
+    def map_names_extended(self, colnames: List[str]) -> List[str]:
         """Map the original feature names to any extended feature names."""
         assert self.feature_list is not None, \
             "Feature list is required to map extended feature names."
         names_out = []
         for c in colnames:
             if (self.feature_list[c].name_extended is not None) and \
-                    (map_targets or not self.feature_list[c].is_target):
+                    (self.config.map_targets
+                     or not self.feature_list[c].is_target):
                 names_out.append(self.feature_list[c].name_extended)
             else:
                 names_out.append(c)
@@ -525,9 +552,9 @@ class Preprocessor:
 
     def fit_transform(self, data: pd.DataFrame, train_idxs: List[int],
                       domain_label_colname: Optional[str] = None,
+                      target_colname: Optional[str] = None,
                       passthrough_columns: List[str] = None) -> pd.DataFrame:
         """Fit a feature_transformer and apply it to the input features."""
-
         logging.info(f"transforming columns")
         if self.config.passthrough_columns == "all":
             logging.info("passthrough is 'all'; data will not be preprocessed "
@@ -541,8 +568,10 @@ class Preprocessor:
                     "categorical_columns='passthrough' instead.")
             return data
 
-        passthrough_columns = self.get_passthrough_columns(data,
-                                                           passthrough_columns)
+        passthrough_columns = self.get_passthrough_columns(
+            data,
+            passthrough_columns,
+            target_colname=target_colname)
 
         # All non-domain label passthrough columns will be cast to their
         # original type post-transformation (ColumnTransformer actually casts
@@ -568,7 +597,6 @@ class Preprocessor:
             transformed.loc[:, domain_label_colname] = \
                 self.fit_transform_domain_labels(
                     transformed.loc[:, domain_label_colname])
-
         self._post_transform_summary(transformed)
         logging.info("transforming columns complete.")
         return transformed

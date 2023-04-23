@@ -8,10 +8,10 @@ conda activate tableshift
 for EXPT in brfss_diabetes brfss_blood_pressure
 do
   python scripts/ray_train.py \
-    --experiment $EXPT \
+    --experiment compas \
     --num_samples 25 \
     --num_workers 1 \
     --cpu_per_worker 2 \
-    --
-    --cpu_models_only
+    --models xgb lightgbm \
+    --use_cached
 done

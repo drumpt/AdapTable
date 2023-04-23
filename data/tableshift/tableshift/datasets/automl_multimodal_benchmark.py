@@ -277,8 +277,9 @@ JIGSAW_FEATURES = FeatureList([
     documentation='https://www.kaggle.com/c/jigsaw-unintended-bias-in-toxicity-classification')
 
 FAKE_JOBS_FEATURES = FeatureList([
-    Feature('title', cat_dtype),
-    Feature('salary_range', cat_dtype),
+    Feature('title', cat_dtype, name_extended='title of the job ad entry'),
+    # Feature('location', cat_dtype, name_extended='geographical location of the job ad'),
+    Feature('salary_range', cat_dtype, name_extended='salary range'),
     Feature('description', cat_dtype),
     Feature('required_experience', cat_dtype,
             name_extended='required experience'),
@@ -341,14 +342,14 @@ SALARY_FEATURES = FeatureList([
     Feature('experience', cat_dtype),
     Feature('job_description', cat_dtype, name_extended='job description'),
     Feature('job_desig', cat_dtype, name_extended='job designation'),
-    Feature('job_type', cat_dtype),
-    Feature('key_skills', cat_dtype),
+    Feature('job_type', cat_dtype, name_extended="job type"),
+    Feature('key_skills', cat_dtype, name_extended='key skills'),
     Feature('location', cat_dtype),
     Feature('salary', cat_dtype, is_target=True,
             name_extended='Salary in Rupees Lakhs',
             value_mapping={
-                '25to50': '25 to 50', '3to6': '3 to 6', '15to25': '15 to 25',
-                '10to15': '10 to 15', '6to10': '6 to 10', '0to3': '0 to 3', }),
+                '25to50': '[25,50)', '3to6': '[3,6)', '15to25': '[15,25)',
+                '10to15': '[10,15)', '6to10': '[6,10)', '0to3': '[0,3)', }),
 ],
     documentation='https://machinehack.com/hackathons/predict_the_data_scientists_salary_in_india_hackathon/overview')
 

@@ -3,12 +3,14 @@ model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
 meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression
-dataset: dna # adult(income), cmc, mfeat-karhunen, optdigits, diabetes, semeion, mfeat-pixel, dna
+# currently available dataset list
+# openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
+# tableshift (for classification): acsincome, acsfoodstamps, acspubcov, acsunemployment, brfss_diabetes, brfss_blood_pressure, communities_and_crime, compas, diabetes_readmission, german, nhanes_cholesterol, nhanes_lead, physionet, anes, heloc, mimic_extract_los_3, mimic_extract_mort_hosp, mooc
+dataset: cmc
+shift_type: column_drop # null, natural, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_severity: 0.3
 normalizer: StandardScaler
-
-corruption_type: Gaussian # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
-corruption_severity: 0.3
-imputation_method: zero # zero, mean, emd(sample from empirical marginal distribution)
+imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for training
 epochs: 50
@@ -27,7 +29,9 @@ test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-# method: [SAR] TODO: implement various methods # em, sar
+method: [sar] # TODO: implement various methods # em, sar
+
+temp: 1 # temperature scaling
 ##################################################################
 
 ### device
@@ -38,7 +42,7 @@ seed: 42
 
 ##################################################################
 ### output dir for saving model
-out_dir: exps/sar_syn
+out_dir: exps/cmc_new
 
 ### logging
 log_dir: log

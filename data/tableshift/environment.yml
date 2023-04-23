@@ -35,3 +35,5 @@ dependencies:
     - openpyxl
     - tune_sklearn
     - optuna
+    - kaggle
+

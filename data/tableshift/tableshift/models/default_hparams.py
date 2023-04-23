@@ -28,23 +28,23 @@ _DEFAULT_CONFIGS = frozendict({
         'grad_penalty': 0.01,
         'loss_lambda': 0.01,
     },
-    "deepcoral": {
-        "num_layers": 4,
-        "d_hidden": 512,
-        "mmd_gamma": 0.01,
-        "dropouts": 0.
-    },
-    "dro": {
-        "num_layers": 2,
-        "d_hidden": 512,
-        "dropouts": 0.,
-        "geometry": "cvar",
-        "size": 0.5,
+    "deepcoral":
+        {"num_layers": 4,
+         "d_hidden": 512,
+         "mmd_gamma": 0.01,
+         "dropouts": 0.},
+    "dro":
+        {"num_layers": 2,
+         "d_hidden": 512,
+         "dropouts": 0.,
+         "geometry": "cvar",
+         "size": 0.5,
+
          # Note: reg == 0 is equivalent to using chi-square constraint
          # (i.e. not using chi-square penalty).
-        "reg": 0.,
-        "max_iter": 10000
-    },
+         "reg": 0.,
+
+         "max_iter": 10000},
     "expgrad":
         {"constraints": ErrorRateParity()},
     "ft_transformer":
@@ -105,6 +105,7 @@ _DEFAULT_CONFIGS = frozendict({
             "batch_size": 256,
         },
     "tabtransformer":
+
         {"dim": 32,
          "depth": 6,
          "heads": 1,

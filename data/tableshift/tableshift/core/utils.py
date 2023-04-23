@@ -1,14 +1,14 @@
 import collections
 import datetime
 import logging
-import re
-from itertools import islice
 import os
-import requests
+import re
 import subprocess
 import urllib.parse
+from itertools import islice
 
 import pandas as pd
+import requests
 import xport.v56
 
 from .splitter import Splitter, DomainSplitter
@@ -99,7 +99,8 @@ def make_uid(name: str, splitter: Splitter, replace_chars="*/:'$!") -> str:
     # if any slashes exist, replace with periods.
     for char in replace_chars:
         uid = uid.replace(char, '.')
-    return uid
+    # Max path length on some OSs is 255.
+    return uid[:240]
 
 
 def timestamp_as_int() -> int:

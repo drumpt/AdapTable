@@ -2,7 +2,10 @@
 Main worker script to conduct an experiment.
 
 Basic usage:
-    python scripts/ray_train.py --models mlp --experiment adult
+    python scripts/ray_train.py \
+    --models mlp \
+    --experiment adult \
+    --use_cached
 """
 import argparse
 import json
@@ -13,17 +16,16 @@ from typing import Optional, List
 import pandas as pd
 import torch
 
-from tableshift.core import CachedDataset
+from tableshift.configs.ray_configs import get_default_ray_tmp_dir, \
+    get_default_ray_local_dir
+from tableshift.core import get_dataset, get_iid_dataset
+from tableshift.core.utils import timestamp_as_int
+from tableshift.models.compat import PYTORCH_MODEL_NAMES, \
+    DOMAIN_GENERALIZATION_MODEL_NAMES
 from tableshift.models.ray_utils import RayExperimentConfig, \
     run_ray_tune_experiment, \
     accuracy_metric_name_and_mode_for_model, \
     fetch_postprocessed_results_df
-from tableshift.core import get_dataset, get_iid_dataset
-from tableshift.core.utils import timestamp_as_int
-from tableshift.configs.ray_configs import get_default_ray_tmp_dir, \
-    get_default_ray_local_dir
-from tableshift.models.compat import PYTORCH_MODEL_NAMES, \
-    DOMAIN_GENERALIZATION_MODEL_NAMES
 
 LOG_LEVEL = logging.DEBUG
 
@@ -134,8 +136,8 @@ def main(experiment: str, cache_dir: str,
             if not debug:
                 iter_fp = os.path.join(
                     expt_results_dir,
-                    f"tune_results_{experiment}_{start_time}_{dset.uid}_"
-                    f"{model_name}.csv")
+                    f"tune_results_{experiment}_{start_time}_"
+                    f"{dset.uid.replace(' ', '')[:50]}_{model_name}.csv")
                 logging.info(f"writing results for {model_name} to {iter_fp}")
                 df.to_csv(iter_fp, index=False)
             iterates.append(df)

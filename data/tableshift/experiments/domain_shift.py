@@ -1,3 +1,13 @@
+"""
+Run a domain sweep to explore a possible set of OOD values.
+
+Usage:
+python experiments/domain_shift.py \
+    --experiment assistments \
+    --no_tune \
+    --model xgb
+    
+"""
 import argparse
 import os
 from typing import Union, Optional
@@ -52,25 +62,14 @@ def main(experiment: str, cache_dir: str,
          ray_tmp_dir: str,
          ray_local_dir: str,
          search_alg: str,
+         model: str,
          max_concurrent_trials=2,
          num_workers=1,
          use_cached: bool = False,
          scheduler=None,
          gpu_per_worker: float = 1.0,
          cpu_per_worker: int = 1,
-         gpu_models_only: bool = False,
-         cpu_models_only: bool = False,
          time_budget_hrs: float = None):
-    _gpu_models = ["mlp", "resnet", "ft_transformer"]
-    _cpu_models = ["xgb", "lightgbm"]
-
-    assert not (gpu_models_only and cpu_models_only)
-    if gpu_models_only:
-        models = _gpu_models
-    elif cpu_models_only:
-        models = _cpu_models
-    else:
-        models = _gpu_models + _cpu_models
 
     start_time = timestamp_as_int()
 
@@ -78,7 +77,6 @@ def main(experiment: str, cache_dir: str,
         print("[INFO] running in debug mode.")
         experiment = "_debug"
         num_samples = 1
-        models = ("mlp", "xgb")
 
     if not ray_tmp_dir:
         ray_tmp_dir = get_default_ray_tmp_dir()
@@ -145,54 +143,54 @@ def main(experiment: str, cache_dir: str,
                 f"i.e. a domain split with only one target label).")
             continue
 
-        for model_name in models:
-            print('#' * 100)
-            print(f'training model {model_name} for experiment uid {uid}')
-            print('#' * 100)
 
-            metric_name, mode = accuracy_metric_name_and_mode_for_model(
-                model_name)
-            tune_config = RayExperimentConfig(
-                max_concurrent_trials=max_concurrent_trials,
-                ray_tmp_dir=ray_tmp_dir,
-                ray_local_dir=ray_local_dir,
-                num_workers=num_workers,
-                num_samples=num_samples,
-                tune_metric_name=metric_name,
-                mode=mode,
-                time_budget_hrs=time_budget_hrs,
-                search_alg=search_alg,
-                scheduler=scheduler,
-                cpu_per_worker=cpu_per_worker,
-                gpu_per_worker=gpu_per_worker,
-            ) if not no_tune else None
+        print('#' * 100)
+        print(f'training model {model} for experiment uid {uid}')
+        print('#' * 100)
 
-            results = run_ray_tune_experiment(dset=dset, model_name=model_name,
-                                              tune_config=tune_config,
-                                              debug=debug)
+        metric_name, mode = accuracy_metric_name_and_mode_for_model(
+            model)
+        tune_config = RayExperimentConfig(
+            max_concurrent_trials=max_concurrent_trials,
+            ray_tmp_dir=ray_tmp_dir,
+            ray_local_dir=ray_local_dir,
+            num_workers=num_workers,
+            num_samples=num_samples,
+            tune_metric_name=metric_name,
+            mode=mode,
+            time_budget_hrs=time_budget_hrs,
+            search_alg=search_alg,
+            scheduler=scheduler,
+            cpu_per_worker=cpu_per_worker,
+            gpu_per_worker=gpu_per_worker,
+        ) if not no_tune else None
 
-            df = fetch_postprocessed_results_df(results)
-            df["estimator"] = model_name
-            df["domain_split_varname"] = \
-                expt_config.splitter.domain_split_varname
-            df["domain_split_ood_values"] = str(tgt)
-            if src is not None:
-                df["domain_split_id_values"] = str(src)
+        results = run_ray_tune_experiment(dset=dset, model_name=model,
+                                          tune_config=tune_config,
+                                          debug=debug)
 
-            print(df)
-            try:
-                # Case: We don't want the script to fail just if
-                # .get_best_result() fails.
-                best_result = results.get_best_result()
-                print("Best trial config: {}".format(best_result.config))
-                print("Best trial result: {}".format(best_result))
-            except:
-                pass
+        df = fetch_postprocessed_results_df(results)
+        df["estimator"] = model
+        df["domain_split_varname"] = \
+            expt_config.splitter.domain_split_varname
+        df["domain_split_ood_values"] = str(tgt)
+        if src is not None:
+            df["domain_split_id_values"] = str(src)
 
-            df.to_csv(os.path.join(expt_results_dir,
-                                   f"tune_results_{uid}_{model_name}.csv"),
-                      index=False)
-            iterates.append(df)
+        print(df)
+        try:
+            # Case: We don't want the script to fail just if
+            # .get_best_result() fails.
+            best_result = results.get_best_result()
+            print("Best trial config: {}".format(best_result.config))
+            print("Best trial result: {}".format(best_result))
+        except:
+            pass
+
+        df.to_csv(os.path.join(expt_results_dir,
+                               f"tune_results_{uid}_{model}.csv"),
+                  index=False)
+        iterates.append(df)
 
     fp = os.path.join(expt_results_dir,
                       f"tune_results_{experiment}_{start_time}_full.csv")
@@ -206,10 +204,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--cache_dir", default="tmp",
                         help="Directory to cache raw data files to.")
-    parser.add_argument("--cpu_models_only", default=False,
-                        action="store_true",
-                        help="whether to only use models that use CPU."
-                             "Mutually exclusive of --gpu_models_only.")
+
     parser.add_argument("--cpu_per_worker", default=0, type=int,
                         help="Number of CPUs to provide per worker."
                              "If not set, Ray defaults to 1.")
@@ -219,14 +214,12 @@ if __name__ == "__main__":
                              "speed up experiment.")
     parser.add_argument("--experiment", default="adult",
                         help="Experiment to run. Overridden when debug=True.")
-    parser.add_argument("--gpu_models_only", default=False,
-                        action="store_true",
-                        help="whether to only train models that use GPU."
-                             "Mutually exclusive of cpu_models_only.")
+
     parser.add_argument("--gpu_per_worker", default=1.0, type=float,
                         help="GPUs per worker. Use fractional values < 1. "
                              "(e.g. --gpu_per_worker=0.5) in order"
                              "to allow multiple workers to share GPU.")
+    parser.add_argument("--model", default="xgb")
     parser.add_argument("--num_samples", type=int, default=100,
                         help="Number of hparam samples to take in tuning "
                              "sweep. Set to -1 and set time_budget_hrs to allow for"

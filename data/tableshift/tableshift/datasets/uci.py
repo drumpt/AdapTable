@@ -76,7 +76,14 @@ HEART_DISEASE_FEATURES = FeatureList(features=[
             value_mapping={
                 3.: 'normal', 6.: 'fixed defect', 7.: 'reversible defect'}),
     Feature('num', float, is_target=True,
-            name_extended='diagnosis of heart disease (angiographic disease status)'),
+            name_extended='diagnosis of heart disease (angiographic disease status)',
+            value_mapping={
+                0.: 'none',
+                1.: 'minimal',
+                2.: 'mild',
+                3.: 'moderate',
+                4.: 'severe'
+            }),
 ], documentation="https://archive.ics.uci.edu/ml/datasets/Heart+Disease")
 
 WINE_FEATURES = FeatureList(features=[
@@ -190,12 +197,18 @@ CAR_FEATURES = FeatureList(features=[
     Feature('buying', cat_dtype, name_extended='buying price'),
     Feature('maint', cat_dtype, name_extended='maintenance price'),
     Feature('doors', cat_dtype, name_extended='number of doors'),
-    Feature('persons', cat_dtype, name_extended='', value_mapping={}),
+    Feature('persons', cat_dtype),
     Feature('lug_boot', cat_dtype,
             name_extended='capacity in terms of persons'),
     Feature('safety', cat_dtype, name_extended='safety level'),
     Feature('class', cat_dtype, is_target=True,
-            name_extended='car acceptability'),
+            name_extended='car acceptability',
+            value_mapping={
+                'unacc': 'unacceptable',
+                'acc': 'acceptable',
+                'good': 'good',
+                'vgood': 'very good',
+            }),
 ], documentation='https://archive.ics.uci.edu/ml/datasets/Car+Evaluation')
 
 RAISIN_FEATURES = FeatureList(features=[
@@ -234,5 +247,5 @@ ABALONE_FEATURES = FeatureList(features=[
 
 
 def preprocess_abalone(df: pd.DataFrame) -> pd.DataFrame:
-   df['Rings'] = df['Rings'].astype(int)
-   return df
+    df['Rings'] = df['Rings'].astype(int)
+    return df

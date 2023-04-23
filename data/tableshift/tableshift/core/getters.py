@@ -132,7 +132,9 @@ def get_iid_dataset(name: str, cache_dir: str = "tmp",
     else:
 
         logging.info(f"loading cached data from {cache_dir}")
-        dset = CachedDataset(cache_dir=cache_dir, name=name,
+        dset = CachedDataset(config=dataset_config,
+                             name=name,
+                             initialize_data=initialize_data,
                              preprocessor_config=preprocessor_config)
 
     return dset

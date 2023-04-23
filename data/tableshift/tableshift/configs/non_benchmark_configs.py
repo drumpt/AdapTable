@@ -2,13 +2,13 @@
 Experiment configs for the non-TableShift benchmark tasks.
 """
 
+from tableshift.configs.benchmark_configs import \
+    _MIMIC_EXTRACT_PASSTHROUGH_COLUMNS
 from tableshift.configs.experiment_config import ExperimentConfig
-
-from tableshift.core import RandomSplitter, Grouper, PreprocessorConfig, \
-    DomainSplitter, FixedSplitter
-
 from tableshift.configs.experiment_defaults import DEFAULT_ID_TEST_SIZE, \
     DEFAULT_OOD_VAL_SIZE, DEFAULT_ID_VAL_SIZE, DEFAULT_RANDOM_STATE
+from tableshift.core import RandomSplitter, Grouper, PreprocessorConfig, \
+    DomainSplitter, FixedSplitter
 
 GRINSTAJN_TEST_SIZE = 0.21
 
@@ -304,4 +304,26 @@ NON_BENCHMARK_CONFIGS = {
                 'ieee-fraud-detection', 'safe-driver-prediction',
                 'santander-customer-satisfaction', 'amex-default',
                 'ad-fraud')},
+
+    ############################################################################
+
+    "mimic_extract_los_3_selected": ExperimentConfig(
+        splitter=RandomSplitter(val_size=DEFAULT_ID_VAL_SIZE,
+                                test_size=DEFAULT_ID_TEST_SIZE,
+                                random_state=DEFAULT_RANDOM_STATE),
+        grouper=None,
+        preprocessor_config=PreprocessorConfig(
+            passthrough_columns=_MIMIC_EXTRACT_PASSTHROUGH_COLUMNS),
+        tabular_dataset_kwargs={"task": "los_3",
+                                "name": "mimic_extract_los_3_selected"}),
+
+    "mimic_extract_mort_hosp_selected": ExperimentConfig(
+        splitter=RandomSplitter(val_size=DEFAULT_ID_VAL_SIZE,
+                                test_size=DEFAULT_ID_TEST_SIZE,
+                                random_state=DEFAULT_RANDOM_STATE),
+        grouper=None,
+        preprocessor_config=PreprocessorConfig(
+            passthrough_columns=_MIMIC_EXTRACT_PASSTHROUGH_COLUMNS),
+        tabular_dataset_kwargs={"task": "mort_hosp",
+                                "name": "mimic_extract_mort_hosp_selected"}),
 }

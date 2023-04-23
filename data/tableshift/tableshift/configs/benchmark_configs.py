@@ -5,14 +5,14 @@ All other configs are in non_benchmark_configs.py.
 """
 
 from tableshift.configs.experiment_config import ExperimentConfig
+from tableshift.configs.experiment_defaults import DEFAULT_ID_TEST_SIZE, \
+    DEFAULT_OOD_VAL_SIZE, DEFAULT_ID_VAL_SIZE, DEFAULT_RANDOM_STATE
 from tableshift.core import RandomSplitter, Grouper, PreprocessorConfig, \
     DomainSplitter
 from tableshift.datasets import BRFSS_YEARS, ACS_YEARS, NHANES_YEARS
+from tableshift.datasets.mimic_extract import MIMIC_EXTRACT_STATIC_FEATURES
 from tableshift.datasets.mimic_extract_feature_lists import \
     MIMIC_EXTRACT_SHARED_FEATURES
-from tableshift.datasets.mimic_extract import MIMIC_EXTRACT_STATIC_FEATURES
-from tableshift.configs.experiment_defaults import DEFAULT_ID_TEST_SIZE, \
-    DEFAULT_OOD_VAL_SIZE, DEFAULT_ID_VAL_SIZE, DEFAULT_RANDOM_STATE
 
 # We passthrough all non-static columns because we use
 # MIMIC-extract's default preprocessing/imputation and do not
@@ -205,6 +205,58 @@ BENCHMARK_CONFIGS = {
             numeric_features="kbins"),
         tabular_dataset_kwargs={"nhanes_task": "cholesterol",
                                 "years": NHANES_YEARS}),
+
+    "assistments": ExperimentConfig(
+        splitter=DomainSplitter(val_size=DEFAULT_ID_VAL_SIZE,
+                                random_state=DEFAULT_RANDOM_STATE,
+                                id_test_size=DEFAULT_ID_TEST_SIZE,
+                                domain_split_varname='school_id',
+                                domain_split_ood_values=[5040.0,
+                                                         11502.0,
+                                                         11318.0,
+                                                         11976.0,
+                                                         12421.0,
+                                                         12379.0,
+                                                         11791.0,
+                                                         8359.0,
+                                                         12406.0,
+                                                         7594.0]),
+        grouper=None,
+        preprocessor_config=PreprocessorConfig(
+            passthrough_columns=["skill_id", "bottom_hint", "first_action"],
+        ),
+        tabular_dataset_kwargs={},
+    ),
+
+    "college_scorecard": ExperimentConfig(
+        splitter=DomainSplitter(val_size=DEFAULT_ID_VAL_SIZE,
+                                random_state=DEFAULT_RANDOM_STATE,
+                                id_test_size=DEFAULT_ID_TEST_SIZE,
+                                domain_split_varname='CCBASIC',
+                                domain_split_ood_values=[
+                                    'Special Focus Institutions--Other special-focus institutions',
+                                    'Special Focus Institutions--Theological seminaries, Bible colleges, and other faith-related institutions',
+                                    "Associate's--Private For-profit 4-year Primarily Associate's",
+                                    'Baccalaureate Colleges--Diverse Fields',
+                                    'Special Focus Institutions--Schools of art, music, and design',
+                                    "Associate's--Private Not-for-profit",
+                                    "Baccalaureate/Associate's Colleges",
+                                    "Master's Colleges and Universities (larger programs)"]
+                                ),
+        grouper=None,
+        preprocessor_config=PreprocessorConfig(
+            # Several categorical features in college scorecard have > 10k
+            # unique values; so we label-encode instead of one-hot encoding.
+            categorical_features="label_encode",
+            # Some important numeric features are not reported by universities
+            # in a way that could be systematic (and we would like these included
+            # in the sample, not excluded), so we use kbins
+            numeric_features="kbins",
+            n_bins=100,
+            dropna=None,
+        ),
+        tabular_dataset_kwargs={},
+    ),
 
     "nhanes_lead": ExperimentConfig(
         splitter=DomainSplitter(val_size=DEFAULT_ID_VAL_SIZE,
