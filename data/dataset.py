@@ -1,13 +1,12 @@
 import os
 from os import path
 import sys
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data/tableshift"))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 from collections import Counter
-
-from tableshift import get_dataset, get_iid_dataset
 
 import openml
 from openml import tasks, runs
+from tableshift import get_dataset, get_iid_dataset
 
 import numpy as np
 import pandas as pd
@@ -24,6 +23,8 @@ class Dataset():
             dataset = OpenMLCC18Dataset(args)
         elif args.meta_dataset == "tableshift":
             dataset = TableShiftDataset(args)
+        # elif args.meta_dataset == "shifts":
+        #     dataset = ShiftsDataset(args)
         elif args.meta_dataset == "openml-regression":
             dataset = OpenMLRegressionDataset(args)
 
@@ -96,7 +97,6 @@ class OpenMLCC18Dataset():
             ], axis=-1
         )
 
-        # TODO: implement normalization for regression dataset
         self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
         self.train_y = self.output_one_hot_encoder.transform(train_y)
@@ -107,33 +107,44 @@ class OpenMLCC18Dataset():
 
 class TableShiftDataset():
     def __init__(self, args):
-        dataset = get_dataset(args.dataset)
+        dataset = get_dataset(
+            args.dataset,
+            cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift/tmp"),
+        )
         train_x, train_y, _, _ = dataset.get_pandas("train")
         valid_x, valid_y, _, _ = dataset.get_pandas("validation")
-        if not args.shift_type:
-            test_x, test_y, _, _ = dataset.get_pandas("id_test")
-        elif args.shift_type == "natural":
-            # TODO: fix this
+        if dataset.is_domain_split:
             test_x, test_y, _, _ = dataset.get_pandas("ood_test")
-            # test_x, test_y, _, _ = dataset.get_pandas("test")
+        else:
+            test_x, test_y, _, _ = dataset.get_pandas("test")
+
+        self.train_x = np.array(train_x[sorted(train_x.columns)])
+        self.valid_x = np.array(valid_x[sorted(valid_x.columns)])
+        self.test_x = np.array(test_x[sorted(test_x.columns)])
+
         train_y = np.array(train_y).reshape(-1, 1)
         valid_y = np.array(valid_y).reshape(-1, 1)
         test_y = np.array(test_y).reshape(-1, 1)
 
-        self.train_x = np.array(train_x)
-        self.valid_x = np.array(valid_x)
-        self.test_x = np.array(test_x)
-
-        self.train_y = train_y
-        self.valid_y = valid_y
-        self.test_y = test_y
+        self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
+        self.train_y = self.output_one_hot_encoder.transform(train_y)
+        self.valid_y = self.output_one_hot_encoder.transform(valid_y)
+        self.test_y = self.output_one_hot_encoder.transform(test_y)
 
 
 
-class OpenMLRegressionDataset():
-    def __init__(self, args):
-        pass
+# class OpenMLRegressionDataset():
+#     def __init__(self, args):
+#         pass
 
+
+
+# class ShiftsDataset():
+#     def __init__(self, args):
+#         train_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "shifts/canonical-paritioned-dataset/shifts_canonical_train.csv"))
+#         valid_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "shifts/canonical-paritioned-dataset/shifts_canonical_dev_in.csv"))
+#         train_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), "shifts/canonical-paritioned-dataset/shifts_canonical_eval_out.csv"))
 
 
 # class UCIDataset():
@@ -242,12 +253,12 @@ class OpenMLRegressionDataset():
 
 
 def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
-    assert shift_type in ["Gaussian", "random_drop", "column_drop", "column_block_drop", "mean_shift", "std_shift", "mean_std_shift"]
+    # assert shift_type in ["Gaussian", "random_drop", "column_drop", "column_block_drop", "mean_shift", "std_shift", "mean_std_shift"]
 
     if shift_type == "Gaussian" and data_type == "numerical":
         scaler = StandardScaler()
         scaler.fit(train_data)
-        test_data += shift_severity * np.random.randn(*test_data.shape) * np.sqrt(scaler.var_)
+        test_data = test_data.astype(np.float64) + shift_severity * np.random.randn(*test_data.shape) * np.sqrt(scaler.var_)
 
     elif shift_type in ["random_drop", "column_drop", "column_block_drop"]:
         assert 0 <= shift_severity <= 1
@@ -276,7 +287,6 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
         if shift_type == "mean_shift":
             mean_noise = shift_severity * np.random.randn(*scaler.var_.shape)
             test_data = test_data + mean_noise * np.random.randn(*scaler.var_.shape)
-            print(f"test_data.shape: {test_data.shape}")
         elif shift_type == "std_shift":
             std_noise = shift_severity * np.exp(np.random.randn(*scaler.var_.shape))
             test_data = std_noise * test_data + scaler.mean_ * (1 - std_noise)

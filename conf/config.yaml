@@ -2,25 +2,26 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
-meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression
-# currently available dataset list
+## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
-# tableshift (for classification): acsincome, acsfoodstamps, acspubcov, acsunemployment, brfss_diabetes, brfss_blood_pressure, communities_and_crime, compas, diabetes_readmission, german, nhanes_cholesterol, nhanes_lead, physionet, anes, heloc, mimic_extract_los_3, mimic_extract_mort_hosp, mooc
-dataset: cmc
-shift_type: column_drop # null, natural, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+# tableshift: acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), diabetes_readmission(O), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), heloc(O), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
+meta_dataset: tableshift # openml-cc18, tableshift, openml-regression
+dataset: diabetes_readmission
+shift_type: null # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
 shift_severity: 0.3
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for training
+retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-3
+train_lr: 1e-4
 
 ### hyperparameters for test-time adaptation
-episodic: false # reset model to the pretrained one for every batch if true
-num_steps: 1 # optimization steps for every batch
+episodic: false # reset model to the pretrained one for each batch if true
+num_steps: 1 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 test_lr: 1e-4
@@ -30,7 +31,6 @@ test_lr: 1e-4
 ##################################################################
 ### methods & other hyperparameters
 method: [sar] # TODO: implement various methods # em, sar
-
 temp: 1 # temperature scaling
 ##################################################################
 
@@ -38,14 +38,14 @@ temp: 1 # temperature scaling
 device: cuda
 
 ### seed for reproductiblity
-seed: 42
+seed: 2
 
 ##################################################################
-### output dir for saving model
-out_dir: exps/cmc_new
-
-### logging
+### log dir for logging
 log_dir: log
+
+### output dir for saving model
+out_dir: exps/dset_diabetes_readmission_manual
 
 ### wandb
 wandb_user: drumpt

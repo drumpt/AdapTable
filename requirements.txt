@@ -6,6 +6,7 @@
 # torchmetrics
 openml
 wandb
+omegaconf
 
 numpy==1.23.5
 ray==2.2

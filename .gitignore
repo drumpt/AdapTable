@@ -1,5 +1,8 @@
 **/__pycache__
 
+ContrastiveMixup
+cutoff.py
+
 data/UCI
 data/tableshift/tmp
 

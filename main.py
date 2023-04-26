@@ -1,6 +1,7 @@
 import os
-import copy
+from copy import deepcopy
 import hydra
+from omegaconf import OmegaConf
 # from tqdm import tqdm
 # import wandb
 
@@ -48,7 +49,7 @@ def train(args, model, optimizer, dataset, loss_fn, logger):
 
         if valid_loss < best_loss:
             best_loss = valid_loss
-            best_model = copy.deepcopy(model)
+            best_model = deepcopy(model)
             torch.save(best_model.state_dict(), os.path.join(args.out_dir, "best_model.pth"))
 
         logger.info(f"epoch {epoch}, train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
@@ -77,12 +78,31 @@ def forward_and_adapt(args, x, model, optimizer):
         optimizer.second_step(zero_grad=True)
 
         EMA = 0.9 * EMA + (1 - 0.9) * loss_second.item() if EMA != None else loss_second.item()
-
     if "em" in args.method:
         estimated_y = model(x)
         loss = softmax_entropy(estimated_y / args.temp).mean()
         loss.backward()
         optimizer.step()
+
+
+def copy_model_and_optimizer(model, optimizer, scheduler):
+    model_state = deepcopy(model.state_dict())
+    optimizer_state = deepcopy(optimizer.state_dict())
+    if scheduler is not None:
+        scheduler_state = deepcopy(scheduler.state_dict())
+        return model_state, optimizer_state, scheduler_state
+    else:
+        return model_state, optimizer_state, None
+
+
+def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer_state, scheduler_state):
+    model.load_state_dict(model_state, strict=True)
+    optimizer.load_state_dict(optimizer_state)
+    if scheduler is not None:
+        scheduler.load_state_dict(scheduler_state)
+        return model, optimizer, scheduler
+    else: 
+        return model, optimizer, None
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
@@ -92,7 +112,7 @@ def main(args):
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
     logger = utils.get_logger(args)
-
+    logger.info(OmegaConf.to_yaml(args))
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
 
@@ -103,52 +123,55 @@ def main(args):
     optimizer = getattr(torch.optim, args.train_optimizer)(filter(lambda p: p.requires_grad, model.parameters()), lr=args.train_lr)
     loss_fn = nn.CrossEntropyLoss()
 
-    if os.path.exists(os.path.join(args.out_dir, "best_model.pth")):
+    if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
         best_model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
         best_model.load_state_dict(best_state_dict)
+        print(f"load pretrained model!")
     else:
         best_model = train(args, model, optimizer, dataset, loss_fn, logger)
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
-    original_best_model = copy.deepcopy(best_model)
-    original_best_model.eval().requires_grad_(True).to(device)
+    original_best_model = deepcopy(best_model)
     best_model.eval().requires_grad_(True).to(device)
+    original_best_model.eval().requires_grad_(False).to(device)
 
+    global EMA
+    EMA = None
     if "sar" in args.method:
-        global EMA
-        EMA = None
-        optimizer = SAM(filter(lambda p: p.requires_grad, best_model.parameters()), base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
+        test_optimizer = SAM(filter(lambda p: p.requires_grad, best_model.parameters()), base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
     else:
-        optimizer = getattr(torch.optim, args.optimizer)(filter(lambda p: p.requires_grad, best_model.parameters()), lr=args.tta_lr)
+        test_optimizer = getattr(torch.optim, args.test_optimizer)(filter(lambda p: p.requires_grad, best_model.parameters()), lr=args.test_lr)
+    original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
     for test_x, test_y in dataset.test_loader:
         if args.episodic or (EMA != None and EMA < 0.2):
-            best_model = copy.deepcopy(original_best_model)
-            optimizer = getattr(torch.optim, args.optimizer)(filter(lambda p: p.requires_grad, best_model.parameters()), lr=args.tta_lr)
+            best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
 
         test_x, test_y = test_x.float().to(device), test_y.float().to(device)
+        test_len += test_x.shape[0]
 
         estimated_y = original_best_model(test_x)
         loss = loss_fn(estimated_y, test_y)
-
+        # print(f"estimated_y before: {torch.softmax(estimated_y, dim=-1)}")
+        # print(f"torch.argmax(estimated_y, dim=-1 before: {torch.argmax(estimated_y, dim=-1)}")
+        # print(f"num corrected before: {(torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()}")
+        # print(f"loss before: {loss}")
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
-        if "sar" in args.method:
-            optimizer = SAM(filter(lambda p: p.requires_grad, best_model.parameters()), base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
-        else:
-            optimizer = getattr(torch.optim, args.optimizer)(filter(lambda p: p.requires_grad, best_model.parameters()), lr=args.tta_lr)
-
+        
         for _ in range(1, args.num_steps + 1):
-            forward_and_adapt(args, test_x, best_model, optimizer)
+            forward_and_adapt(args, test_x, best_model, test_optimizer)
 
         estimated_y = best_model(test_x)
         loss = loss_fn(estimated_y, test_y)
-
+        # print(f"estimated_y after: {torch.softmax(estimated_y, dim=-1)}")
+        # print(f"torch.argmax(estimated_y, dim=-1) before: {torch.argmax(estimated_y, dim=-1)}")
+        # print(f"num corrected after: {(torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()}")
+        # print(f"loss after: {loss}")
+        # print(f"\n\n\n\n\n\n")
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        test_len += test_x.shape[0]
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")

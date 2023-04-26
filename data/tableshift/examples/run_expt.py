@@ -3,6 +3,10 @@ import logging
 
 from sklearn.metrics import accuracy_score
 
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+
 from tableshift.core import get_dataset
 from tableshift.models.training import train
 from tableshift.models.utils import get_estimator
@@ -24,6 +28,7 @@ def main(experiment, cache_dir, model, debug: bool):
     dset = get_dataset(experiment, cache_dir)
     X, y, _, _ = dset.get_pandas("train")
     estimator = get_estimator(model)
+    print(f"estimator:  {estimator}")
     estimator = train(estimator, dset)
     if dset.is_domain_split:
         X_te, y_te, _, _ = dset.get_pandas("ood_test")
@@ -43,7 +48,7 @@ if __name__ == "__main__":
                         help="Whether to run in debug mode. If True, various "
                              "truncations/simplifications are performed to "
                              "speed up experiment.")
-    parser.add_argument("--experiment", default="adult",
+    parser.add_argument("--experiment", default="diabetes_readmission",
                         help="Experiment to run. Overridden when debug=True.")
     parser.add_argument("--model", default="histgbm",
                         help="model to use.")
