@@ -5,10 +5,10 @@ model: MLP # currently supported: MLP # TODO: implement transformer, etc
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), diabetes_readmission(O), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), heloc(O), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
-meta_dataset: tableshift # openml-cc18, tableshift, openml-regression
-dataset: diabetes_readmission
-shift_type: null # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
-shift_severity: 0.3
+meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression
+dataset: optdigits
+shift_type: column_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_severity: 0.1
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
@@ -38,14 +38,14 @@ temp: 1 # temperature scaling
 device: cuda
 
 ### seed for reproductiblity
-seed: 2
+seed: 1
 
 ##################################################################
 ### log dir for logging
 log_dir: log
 
 ### output dir for saving model
-out_dir: exps/dset_diabetes_readmission_manual
+out_dir: exps/test
 
 ### wandb
 wandb_user: drumpt
