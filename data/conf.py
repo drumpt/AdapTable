@@ -4,3 +4,15 @@ AbaloneOpt = {
         'Sex'
     ]
 }
+
+CholestrolOpt = {
+    'nominal_columns':[
+        'sex',
+        'cp',
+        'fbs',
+        'restecg',
+        'exang',
+        'slope',
+        'thal'
+    ]
+}

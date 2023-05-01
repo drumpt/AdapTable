@@ -1,6 +1,9 @@
 import os
 from os import path
 import sys
+
+import pandas
+
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 from collections import Counter
 
@@ -142,27 +145,61 @@ class OpenMLRegressionDataset():
         # conda install -c huggingface -c conda-forge datasets
         # TODO: give arguments as data_split(type of dataset) and dataset_specification(dataset name)
         data_split = "reg_cat"
-        dataset_specification = "abalone"
+        dataset_specification = "cholestrol"
 
-        dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"{data_split}/{dataset_specification}.csv")
-
-        config = None
-        if dataset_specification == 'abalone':
+        from scipy.io import arff
+        if dataset_specification == "cholestrol":
             config = load_opt(dataset_specification)
 
-        # dataset = load_dataset("inria_soda/tabular-benchmark", data_files=f"{data_split}/{args.dataset}.csv")
-        # last column is target
-        column_names = dataset['train'].column_names
-        wo_target = dataset['train'].column_names[:-1]
-        target = [dataset['train'].column_names[-1]]
+            data = arff.loadarff('./data/OpenML_arff/dataset_2190_cholesterol.arff')
+            df = pd.DataFrame(data[0])
 
-        pandas_dataset = dataset['train'].to_pandas()
-        x = pandas_dataset[wo_target]
-        y = pandas_dataset[target]
+            # load as dataframe and convert datatypes to float
+            str_df = df.select_dtypes([object])
+            str_df = str_df.stack().str.decode('utf-8').unstack()
+            str_df.replace(to_replace='?', value=np.nan, inplace=True)
+            df[str_df.columns] = str_df.astype(np.float64)
 
-        # train/valid/test split
-        train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
-        valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+            dataset_df = df
+            wo_target = list(dataset_df.columns[:-1])
+            target = list([dataset_df.columns[-1]])
+
+            x = dataset_df[wo_target]
+            y = dataset_df[target]
+
+            # train/valid/test split
+            train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
+            valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+
+            # remove nan in training
+            tot_train = pd.concat([train_x, train_y], axis=1, join="inner")
+            tot_train = tot_train.dropna()
+            train_x = tot_train[wo_target]
+            train_y = tot_train[target]
+
+            tot_valid = pd.concat([valid_x, valid_y], axis=1, join="inner")
+            tot_valid = tot_valid.dropna()
+            valid_x = tot_valid[wo_target]
+            valid_y = tot_valid[target]
+
+        if dataset_specification == "abalone":
+            dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"{data_split}/{dataset_specification}.csv")
+
+            config = load_opt(dataset_specification)
+
+            # dataset = load_dataset("inria_soda/tabular-benchmark", data_files=f"{data_split}/{args.dataset}.csv")
+            # last column is target
+            column_names = dataset['train'].column_names
+            wo_target = dataset['train'].column_names[:-1]
+            target = [dataset['train'].column_names[-1]]
+
+            pandas_dataset = dataset['train'].to_pandas()
+            x = pandas_dataset[wo_target]
+            y = pandas_dataset[target]
+
+            # train/valid/test split
+            train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
+            valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
 
         # data preprocessing (normalization and one-hot encoding)
         cat_indicator = [True if column_name in config['nominal_columns'] else False for column_name in x.columns]
