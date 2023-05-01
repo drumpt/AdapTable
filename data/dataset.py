@@ -144,8 +144,7 @@ class OpenMLRegressionDataset():
     def __init__(self, args):
         # conda install -c huggingface -c conda-forge datasets
         # TODO: give arguments as data_split(type of dataset) and dataset_specification(dataset name)
-        data_split = "reg_cat"
-        dataset_specification = "cholestrol"
+        dataset_specification = args.dataset
 
         from scipy.io import arff
         if dataset_specification == "cholestrol":
@@ -182,8 +181,8 @@ class OpenMLRegressionDataset():
             valid_x = tot_valid[wo_target]
             valid_y = tot_valid[target]
 
-        if dataset_specification == "abalone":
-            dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"{data_split}/{dataset_specification}.csv")
+        elif dataset_specification == "abalone":
+            dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"reg_cat/{dataset_specification}.csv")
 
             config = load_opt(dataset_specification)
 
@@ -200,6 +199,8 @@ class OpenMLRegressionDataset():
             # train/valid/test split
             train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
             valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+        else:
+            raise NotImplementedError
 
         # data preprocessing (normalization and one-hot encoding)
         cat_indicator = [True if column_name in config['nominal_columns'] else False for column_name in x.columns]
