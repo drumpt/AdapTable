@@ -2,43 +2,51 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
+meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), diabetes_readmission(O), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), heloc(O), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
-meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression
-dataset: optdigits
-shift_type: column_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
-shift_severity: 0.1
+dataset: semeion
+shift_type: mean_shift # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_severity: 0.6
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for training
-retrain: true
+retrain: false
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
 
 ### hyperparameters for test-time adaptation
-episodic: false # reset model to the pretrained one for each batch if true
-num_steps: 1 # optimization steps for each batch
-test_batch_size: 64
+episodic: true # reset model to the pretrained one for each batch if true
+num_steps: 10 # optimization steps for each batch
+test_batch_size: 1
 test_optimizer: AdamW
-test_lr: 1e-4
-# train_params: [all] TODO: implement train_params
+test_lr: 1e-5
+train_params: [LN] # currently supported: all, LN, BN, GN
 # TODO: implement learning rate scheduler
+
+### hyperparameters for MAE
+# retrain: false
+pretrain_epochs: 10
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 1e-4
+mask_ratio: 0.75
 
 ##################################################################
 ### methods & other hyperparameters
-method: [sar] # TODO: implement various methods # em, sar
+method: [sar]
 temp: 1 # temperature scaling
 ##################################################################
 
 ### device
 device: cuda
 
-### seed for reproductiblity
-seed: 1
+### seed for reproduciblity
+seed: 3
 
 ##################################################################
 ### log dir for logging
