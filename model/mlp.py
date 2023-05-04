@@ -41,20 +41,15 @@ class MLP_MAE(nn.Module):
             self.encoder.append(nn.Dropout(dropout))
             in_dim = hidden_dim
         self.encoder.append(nn.Linear(in_dim, hidden_dim))
-        in_dim = hidden_dim
 
-        for _ in range(1):
-            self.recon_head.append(nn.Linear(in_dim, hidden_dim))
-            self.recon_head.append(nn.ReLU(inplace=True))
-            self.recon_head.append(nn.Dropout(dropout))
-            in_dim = hidden_dim
+        # self.recon_head.append(nn.Linear(in_dim, hidden_dim))
+        # self.recon_head.append(nn.ReLU(inplace=True))
+        # self.recon_head.append(nn.Dropout(dropout))
         self.recon_head.append(nn.Linear(in_dim, input_dim))
 
-        for _ in range(1):
-            self.main_head.append(nn.Linear(in_dim, hidden_dim))
-            self.main_head.append(nn.ReLU(inplace=True))
-            self.main_head.append(nn.Dropout(dropout))
-            in_dim = hidden_dim
+        self.main_head.append(nn.Linear(in_dim, hidden_dim))
+        self.main_head.append(nn.ReLU(inplace=True))
+        self.main_head.append(nn.Dropout(dropout))
         self.main_head.append(nn.Linear(in_dim, output_dim))
 
 

@@ -36,6 +36,17 @@ def softmax_entropy(x, dim=-1):
     return -(x.softmax(dim) * x.log_softmax(dim)).sum(dim)
 
 
+def renyi_entropy(x, alpha, dim=-1):
+    if alpha == 1:
+        return torch.mean(softmax_entropy(x, dim))
+    if alpha == 'inf' or alpha == float('inf'):
+        entropy, _ = torch.max(x, dim)
+        return -torch.mean(torch.log(entropy))
+    entropy = torch.log(torch.pow(x.softmax(dim), alpha).sum(dim))
+    entropy = entropy / (1 - alpha)
+    return torch.mean(entropy)
+
+
 def send_message(message, token, channel):
     client = WebClient(token=token)
     response = client.chat_postMessage(channel="#"+channel, text=message)

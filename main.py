@@ -2,37 +2,34 @@ import os
 from copy import deepcopy
 import hydra
 from omegaconf import OmegaConf
-from tqdm import tqdm
-import wandb
+# from tqdm import tqdm
+# import wandb
 
 import torch
 import torch.nn as nn
-from matplotlib import pyplot as plt
+import torch.nn.functional as F
+# from matplotlib import pyplot as plt
 
 from data.dataset import *
 from model.mlp import MLP, MLP_MAE
 from sam import SAM
 from utils import utils
-from utils.utils import softmax_entropy
+from utils.utils import softmax_entropy, renyi_entropy
 
 
 def forward_and_adapt(args, x, model, optimizer):
+    global original_best_model
     global EMA, ENTROPY_LIST, GRADIENT_NORM_LIST, ENTROPY_LIST_NEW, GRADIENT_NORM_LIST_NEW
     optimizer.zero_grad()
 
-    if "em" in args.method:
-        estimated_y = model(x)
-        loss = softmax_entropy(estimated_y / args.temp).mean()
-        loss.backward()
-        optimizer.step()
+    outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
 
     if "sar" in args.method:
-        estimated_y = model(x)
-        entropy_first = softmax_entropy(estimated_y)
-        filter_id = torch.where(entropy_first < 0.4 * np.log(estimated_y.shape[-1]))
-        entropy_first = softmax_entropy(estimated_y)
+        entropy_first = softmax_entropy(outputs)
+        filter_id = torch.where(entropy_first < 0.4 * np.log(outputs.shape[-1]))
+        entropy_first = softmax_entropy(outputs)
         loss = entropy_first.mean()
-        loss.backward()
+        loss.backward(retain_graph=True)
 
         # for visualization
         # ENTROPY_LIST.append(loss.item())
@@ -41,16 +38,16 @@ def forward_and_adapt(args, x, model, optimizer):
         #     param_norm = p.grad.detach().data.norm(2)
         #     total_norm += param_norm.item() ** 2
         # total_norm = total_norm ** 0.5
-        # GRADIENT_NORM_LIST.append(total_norm) 
+        # GRADIENT_NORM_LIST.append(total_norm)
 
-        optimizer.first_step(zero_grad=True)
+        optimizer.first_step()
 
-        new_estimated_y = model(x)
-        entropy_second = softmax_entropy(new_estimated_y)
+        new_outputs = model(x)
+        entropy_second = softmax_entropy(new_outputs)
         entropy_second = entropy_second[filter_id]
-        filter_id = torch.where(entropy_second < 0.4 * np.log(estimated_y.shape[-1]))
+        filter_id = torch.where(entropy_second < 0.4 * np.log(outputs.shape[-1]))
         loss_second = entropy_second[filter_id].mean()
-        loss_second.backward()
+        loss_second.backward(retain_graph=True)
 
         EMA = 0.9 * EMA + (1 - 0.9) * loss_second.item() if EMA != None else loss_second.item()
 
@@ -62,8 +59,31 @@ def forward_and_adapt(args, x, model, optimizer):
         #     total_norm += param_norm.item() ** 2
         # total_norm = total_norm ** 0.5
         # GRADIENT_NORM_LIST_NEW.append(total_norm)
+    if "em" in args.method:
+        loss = softmax_entropy(outputs / args.temp).mean()
+        loss.backward(retain_graph=True)
+    if 'gem' in args.method:
+        e_loss = renyi_entropy(outputs / args.temp, alpha=args.renyi_entropy_alpha)
+        e_loss.backward(retain_graph=True)
+    if 'ns' in args.method:
+        negative_outputs = outputs.clone()
+        negative_loss = 0
+        negative_mask = torch.where(torch.softmax(negative_outputs, dim=-1) < args.ns_threshold * (10 / negative_outputs.shape[-1]), 1, 0)
+        negative_loss += torch.mean(-torch.log(1 - torch.sum(negative_mask * torch.softmax(negative_outputs / args.temp, dim=-1), dim=-1)))
+        if torch.is_tensor(negative_loss):
+            negative_loss.backward(retain_graph=True)
+    if 'kld' in args.method:
+        original_outputs = original_best_model(x)
+        probs = torch.softmax(outputs, dim=-1)
+        original_probs = torch.softmax(original_outputs, dim=-1)
+        kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
+        print(f"kl_div_loss: {kl_div_loss}")
+        (args.kld_weight * kl_div_loss).backward(retain_graph=True)
 
-        optimizer.second_step(zero_grad=True)
+    if 'sar' in args.method:
+        optimizer.second_step()
+    else:
+        optimizer.step()
 
 
 def collect_params(model, train_params):
@@ -161,7 +181,8 @@ def train(args, model, optimizer, dataset, loss_fn, logger):
         model.train().to(device)
         for train_x, train_y in dataset.train_loader:
             train_x, train_y = train_x.float().to(device), train_y.float().to(device)
-            _, estimated_y = model(train_x)
+
+            estimated_y = model(train_x) if isinstance(model, MLP) else model(train_x)[-1]
             loss = loss_fn(estimated_y, train_y)
 
             optimizer.zero_grad()
@@ -177,7 +198,7 @@ def train(args, model, optimizer, dataset, loss_fn, logger):
         with torch.no_grad():
             for valid_x, valid_y in dataset.valid_loader:
                 valid_x, valid_y = valid_x.float().to(device), valid_y.float().to(device)
-                _, estimated_y = model(valid_x)
+                estimated_y = model(valid_x) if isinstance(model, MLP) else model(valid_x)[-1]
                 loss = loss_fn(estimated_y, valid_y)
 
                 valid_loss += loss.item() * valid_x.shape[0]
@@ -206,6 +227,8 @@ def main(args):
 
     device = args.device
     dataset = Dataset(args)
+
+    global original_best_model
 
     model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
     optimizer = getattr(torch.optim, args.train_optimizer)(filter(lambda p: p.requires_grad, model.parameters()), lr=args.train_lr)
@@ -237,12 +260,12 @@ def main(args):
     for batch_idx, (test_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
-            print("reset model!")
+            # print("reset model!")
 
         test_x, test_y = test_x.float().to(device), test_y.float().to(device)
         test_len += test_x.shape[0]
 
-        estimated_y = original_best_model(test_x)
+        estimated_y = original_best_model(test_x) if isinstance(original_best_model, MLP) else original_best_model(test_x)[-1]
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
@@ -250,13 +273,10 @@ def main(args):
         for _ in range(1, args.num_steps + 1):
             forward_and_adapt(args, test_x, best_model, test_optimizer)
 
-        estimated_y = best_model(test_x)
+        estimated_y = best_model(test_x) if isinstance(best_model, MLP) else best_model(test_x)[-1]
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
-        print(f"predicted label after adaptation: {torch.argmax(estimated_y, dim=-1)}")
-        print(f"estimated_y.shape: {estimated_y.shape}")
 
         # PREDICTED_LABEL.extend(torch.argmax(estimated_y, dim=-1).tolist())
         # BATCH_IDX.extend([batch_idx for _ in range(estimated_y.shape[0])])
@@ -310,25 +330,26 @@ def main_mae(args):
 
     device = args.device
     dataset = Dataset(args)
-    model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=5)
+    if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
+        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+        best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
+        best_model.load_state_dict(best_state_dict)
 
-    # self-supervised learning (with reconstruction)
-    optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="pretrain")[0], lr=args.pretrain_lr)
-    pretrain_loss_fn = nn.MSELoss()
-    model = pretrain(args, model, optimizer, dataset, pretrain_loss_fn, logger)
+        pretrain_loss_fn = nn.MSELoss()
+        loss_fn = nn.CrossEntropyLoss()
+        print(f"load pretrained model!")
+    else:
+        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
 
-    # supervised learning
-    optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(model, train_params="downstream")[0], lr=args.train_lr)
-    loss_fn = nn.CrossEntropyLoss()
-    best_model = train(args, model, optimizer, dataset, loss_fn, logger)
-    # if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
-    #     best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=5)
-    #     best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
-    #     best_model.load_state_dict(best_state_dict)
-    #     print(f"load pretrained model!")
-    # else:
-    #     best_model = train(args, model, optimizer, dataset, loss_fn, logger)
+        # self-supervised learning (with reconstruction)
+        optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="pretrain")[0], lr=args.pretrain_lr)
+        pretrain_loss_fn = nn.MSELoss()
+        model = pretrain(args, model, optimizer, dataset, pretrain_loss_fn, logger)
 
+        # supervised learning
+        optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(model, train_params="downstream")[0], lr=args.train_lr)
+        loss_fn = nn.CrossEntropyLoss()
+        best_model = train(args, model, optimizer, dataset, loss_fn, logger)
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
     best_model.eval().requires_grad_(True).to(device)
@@ -343,7 +364,6 @@ def main_mae(args):
     for _, (test_cor_x, test_x, test_y) in enumerate(dataset.mae_test_loader):
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
-            print("reset model!")
 
         test_cor_x, test_x, test_y = test_cor_x.float().to(device), test_x.float().to(device), test_y.float().to(device)
         test_len += test_x.shape[0]
@@ -352,8 +372,6 @@ def main_mae(args):
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
-        print(f"predicted label before adaptation: {torch.argmax(estimated_y, dim=-1)}")
 
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
@@ -367,13 +385,11 @@ def main_mae(args):
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
-        print(f"predicted label after adaptation: {torch.argmax(estimated_y, dim=-1)}")
-        print(f"estimated_y.shape: {estimated_y.shape}")
-
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
 
 
 if __name__ == "__main__":
+    # main()
     main_mae()

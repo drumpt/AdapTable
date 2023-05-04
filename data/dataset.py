@@ -148,6 +148,8 @@ class TableShiftDataset():
         self.train_x = np.array(train_x[sorted(train_x.columns)])
         self.valid_x = np.array(valid_x[sorted(valid_x.columns)])
         self.test_x = np.array(test_x[sorted(test_x.columns)])
+        self.train_cor_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+        self.test_cor_x = get_corrupted_data(self.test_x, self.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
 
         train_y = np.array(train_y).reshape(-1, 1)
         valid_y = np.array(valid_y).reshape(-1, 1)
