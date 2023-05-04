@@ -44,7 +44,7 @@ from tableshift.datasets.mooc import preprocess_mooc
 from tableshift.datasets.nhanes import preprocess_nhanes_cholesterol, \
     get_nhanes_data_sources, preprocess_nhanes_lead, NHANES_YEARS
 from tableshift.datasets.physionet import preprocess_physionet
-from tableshift.datasets.uci import WINE_FEATURES, ABALONE_FEATURES, \
+from tableshift.datasets.uci import WINE_CULTIVARS_FEATURES, ABALONE_FEATURES, \
     preprocess_abalone
 from tableshift.datasets.utils import apply_column_missingness_threshold
 
@@ -874,7 +874,7 @@ class HeartDiseaseDataSource(DataSource):
         return df
 
 
-class WineDataSource(DataSource):
+class WineCultivarsDataSource(DataSource):
     def __init__(self, **kwargs):
         _resources = [
             "https://archive.ics.uci.edu/ml/machine-learning-databases/wine/wine.data"]
@@ -885,7 +885,7 @@ class WineDataSource(DataSource):
     def _load_data(self) -> pd.DataFrame:
         df = pd.read_csv(
             os.path.join(self.cache_dir, "wine.data"),
-            names=WINE_FEATURES.names)
+            names=WINE_CULTIVARS_FEATURES.names)
         return df
 
 
@@ -1044,13 +1044,12 @@ class SfCrimeDataSource(KaggleCompetitionDataSource):
         super().__init__(kaggle_dataset_name='sf-crime',
                          preprocess_fn=lambda x: x, **kwargs)
 
+    @property
+    def zip_file_name(self):
+        return "train.csv.zip"
+
     def _load_data(self) -> pd.DataFrame:
         csv_fp = os.path.join(self.cache_dir, "sf-crime", "train.csv")
-        if not os.path.exists(csv_fp):
-            zip_fp = os.path.join(self.cache_dir, "sf-crime.zip")
-            # where to unzip the file to
-            with zipfile.ZipFile(zip_fp, 'r') as zf:
-                zf.extractall(self.cache_dir)
         df = pd.read_csv(csv_fp)
         return df
 

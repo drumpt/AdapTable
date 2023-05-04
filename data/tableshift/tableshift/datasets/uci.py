@@ -11,7 +11,7 @@ IRIS_FEATURES = FeatureList(features=[
     Feature('Petal_Length', float, name_extended='petal length'),
     Feature('Petal_Width', float, name_extended='petal width'),
     Feature('Class', cat_dtype, is_target=True),
-])
+], documentation="https://archive.ics.uci.edu/ml/datasets/Iris")
 
 DRY_BEAN_FEATURES = FeatureList(features=[
     Feature('Area', int, name_extended='area of bean zone in pixels'),
@@ -86,7 +86,7 @@ HEART_DISEASE_FEATURES = FeatureList(features=[
             }),
 ], documentation="https://archive.ics.uci.edu/ml/datasets/Heart+Disease")
 
-WINE_FEATURES = FeatureList(features=[
+WINE_CULTIVARS_FEATURES = FeatureList(features=[
     Feature('Cultivars', int, is_target=True, name_extended='cultivar'),
     Feature('Alcohol', float),
     Feature('Malic acid', float),
@@ -242,7 +242,7 @@ ABALONE_FEATURES = FeatureList(features=[
             name_extended='gut weight in grams after bleeding)'),
     Feature('Shell weight', float,
             name_extended='shell weight in grams after being dried'),
-    Feature('Rings', cat_dtype, 'number of rings', is_target=True),
+    Feature('Rings', int, 'number of rings', is_target=True),
 ], documentation='https://archive.ics.uci.edu/ml/datasets/Abalone')
 
 

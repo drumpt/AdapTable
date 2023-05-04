@@ -11,6 +11,7 @@ import argparse
 import json
 import logging
 import os
+import resource
 from typing import Optional, List
 
 import pandas as pd
@@ -75,6 +76,9 @@ def main(experiment: str, cache_dir: str,
         logging.info(f"dropping models {exclude_models}")
         models = list(set(models) - set(exclude_models))
 
+    logging.info("setting resource limits")
+    resource.setrlimit(resource.RLIMIT_NPROC, (65536, 65536))
+
     logging.info(f"training models {models}")
 
     if not ray_tmp_dir:
@@ -96,7 +100,6 @@ def main(experiment: str, cache_dir: str,
     else:
         dset = get_dataset(name=experiment, cache_dir=cache_dir,
                            use_cached=use_cached)
-
     logging.debug(f"torch.cuda.is_available(): {torch.cuda.is_available()}")
 
     expt_results_dir = os.path.join(results_dir, experiment, str(start_time))
@@ -122,31 +125,28 @@ def main(experiment: str, cache_dir: str,
             config_dict=config_dict,
             mode=mode) if not no_tune else None
 
-        try:
-            results = run_ray_tune_experiment(dset=dset, model_name=model_name,
-                                              tune_config=tune_config,
-                                              debug=debug)
+        results = run_ray_tune_experiment(dset=dset, model_name=model_name,
+                                          tune_config=tune_config,
+                                          debug=debug)
 
-            df = fetch_postprocessed_results_df(results)
+        df = fetch_postprocessed_results_df(results)
 
-            df["estimator"] = model_name
-            df["domain_split_varname"] = dset.domain_split_varname
-            df["domain_split_ood_values"] = str(dset.get_domains("ood_test"))
-            df["domain_split_id_values"] = str(dset.get_domains("id_test"))
-            if not debug:
-                iter_fp = os.path.join(
-                    expt_results_dir,
-                    f"tune_results_{experiment}_{start_time}_"
-                    f"{dset.uid.replace(' ', '')[:50]}_{model_name}.csv")
-                logging.info(f"writing results for {model_name} to {iter_fp}")
-                df.to_csv(iter_fp, index=False)
-            iterates.append(df)
+        df["estimator"] = model_name
+        df["domain_split_varname"] = dset.domain_split_varname
+        df["domain_split_ood_values"] = str(dset.get_domains("ood_test"))
+        df["domain_split_id_values"] = str(dset.get_domains("id_test"))
+        if not debug:
+            iter_fp = os.path.join(
+                expt_results_dir,
+                f"tune_results_{experiment}_{start_time}_"
+                f"{dset.uid.replace(' ', '')[:50]}_{model_name}.csv")
+            logging.info(f"writing results for {model_name} to {iter_fp}")
+            df.to_csv(iter_fp, index=False)
+        iterates.append(df)
 
-            print(df)
-            logging.info(f"finished training model {model_name}")
-        except Exception as e:
-            logging.warning(f"exception training {model_name}: {e}, skipping")
-            continue
+        print(df)
+        logging.info(f"finished training model {model_name}")
+
     fp = os.path.join(expt_results_dir,
                       f"tune_results_{experiment}_{start_time}_full.csv")
     logging.info(f"writing results to {fp}")
@@ -170,7 +170,7 @@ if __name__ == "__main__":
                         action="store_true",
                         help="whether to only use models that use CPU."
                              "Mutually exclusive of --gpu_models_only.")
-    parser.add_argument("--cpu_per_worker", default=0, type=int,
+    parser.add_argument("--cpu_per_worker", default=1, type=int,
                         help="Number of CPUs to provide per worker."
                              "If not set, Ray defaults to 1.")
     parser.add_argument("--debug", action="store_true", default=False,

@@ -5,20 +5,20 @@ Usage:
     python scripts/train_pytorch.py --model mlp --experiment adult
 """
 import argparse
+
 from tableshift.core import get_dataset
-
-from tableshift.models.utils import get_estimator
-from tableshift.models.training import train
-from tableshift.configs.domain_shift import domain_shift_experiment_configs
 from tableshift.models.default_hparams import get_default_config
+from tableshift.models.training import train
+from tableshift.models.utils import get_estimator
 
 
-def main(experiment, cache_dir, model, debug: bool):
+def main(experiment, cache_dir, model, debug: bool, use_cached: bool):
     if debug:
         print("[INFO] running in debug mode.")
         experiment = "_debug"
 
-    dset = get_dataset(name=experiment, cache_dir=cache_dir)
+    dset = get_dataset(name=experiment, cache_dir=cache_dir,
+                       use_cached=use_cached)
     config = get_default_config(model, dset)
     estimator = get_estimator(model, **config)
     train(estimator, dset, device="cpu", config=config)
@@ -37,5 +37,7 @@ if __name__ == "__main__":
                         help="Experiment to run. Overridden when debug=True.")
     parser.add_argument("--model", default="mlp",
                         help="model to use.")
+    parser.add_argument("--use_cached", default=False, action="store_true",
+                        help="whether to use cached data.")
     args = parser.parse_args()
     main(**vars(args))

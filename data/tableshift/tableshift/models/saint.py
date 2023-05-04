@@ -8,8 +8,8 @@ from torch.utils.data import DataLoader
 
 from tableshift.models.compat import SklearnStylePytorchModel, OPTIMIZER_ARGS
 from tableshift.models.training import train_epoch
-from tableshift.third_party.saint.models import SAINT
 from tableshift.third_party.saint.augmentations import embed_data_mask
+from tableshift.third_party.saint.models import SAINT
 
 
 class SaintModel(SAINT, SklearnStylePytorchModel):
@@ -21,6 +21,8 @@ class SaintModel(SAINT, SklearnStylePytorchModel):
         # Remove hparams that are not taken by the SAINT constructor.
         for k in OPTIMIZER_ARGS:
             hparams.pop(k)
+
+        self.cat_idxs = hparams.pop("cat_idxs")
 
         super().__init__(**hparams)
         self._init_optimizer()
@@ -43,7 +45,7 @@ class SaintModel(SAINT, SklearnStylePytorchModel):
         train_loader = list(train_loaders.values())[0]
         return train_epoch(self, self.optimizer, loss_fn, train_loader, device)
 
-    def forward(self, x_cont, x_categ):
+    def forward(self, x_cont: torch.Tensor, x_categ: Optional[torch.Tensor]):
         """Overrides forward() with modifications.
 
         Reverses the inputs to SAINT.forward(), but also implements a complete
@@ -52,10 +54,12 @@ class SaintModel(SAINT, SklearnStylePytorchModel):
         implementation (e.g. compare to
         https://github.com/somepago/saint/blob/main/train.py#L183 )
         """
-        assert not x_categ and not self.num_categories, \
-            "categorical SAINT not currently supported."
+        if x_categ is None:
+            cat_mask = torch.zeros(len(x_cont)).int().to(x_cont.device)
+        else:
+            cat_mask = torch.ones_like(x_categ).int().to(x_categ.device)
+            x_categ = x_categ.long()
 
-        cat_mask = torch.zeros(len(x_cont)).int().to(x_cont.device)
         con_mask = torch.ones_like(x_cont).int().to(x_cont.device)
         # We are converting the data to embeddings in the next step
         _, x_categ_enc, x_cont_enc = embed_data_mask(x_categ=x_categ,

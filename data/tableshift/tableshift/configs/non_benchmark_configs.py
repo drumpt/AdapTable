@@ -326,4 +326,19 @@ NON_BENCHMARK_CONFIGS = {
             passthrough_columns=_MIMIC_EXTRACT_PASSTHROUGH_COLUMNS),
         tabular_dataset_kwargs={"task": "mort_hosp",
                                 "name": "mimic_extract_mort_hosp_selected"}),
+
+    "communities_and_crime": ExperimentConfig(
+        splitter=RandomSplitter(val_size=DEFAULT_ID_VAL_SIZE,
+                                test_size=DEFAULT_ID_TEST_SIZE,
+                                random_state=DEFAULT_RANDOM_STATE),
+        grouper=None,
+        preprocessor_config=PreprocessorConfig(), tabular_dataset_kwargs={}),
+
+    "compas": ExperimentConfig(
+        splitter=RandomSplitter(test_size=0.2, val_size=0.01,
+                                random_state=90127),
+        grouper=Grouper({"race": ["Caucasian", ], "sex": ["Male", ]},
+                        drop=False),
+        preprocessor_config=PreprocessorConfig(), tabular_dataset_kwargs={}),
+
 }

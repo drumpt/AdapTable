@@ -1,6 +1,6 @@
 #!/bin/bash
 # usage:
-# sbatch --export=EXPERIMENT=$EXPERIMENT,EXPT_UID=$EXPT_UID scripts/sbatch/run_expt.sbatch
+# sbatch --export=EXPERIMENT=$EXPERIMENT scripts/sbatch/run_expt.sbatch
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=6
@@ -17,7 +17,6 @@
 date;hostname;id;pwd
 
 echo 'experiment is: ' $EXPERIMENT
-echo 'expt_uid is: ' $EXPT_UID
 
 echo 'activating virtual environment'
 source ~/.bashrc
@@ -28,7 +27,6 @@ which python
 ## experimental command to test on a single experiment iteration
 python scripts/ray_train.py \
   --experiment $EXPERIMENT \
-  --uid $EXPT_UID \
   --num_samples 100 \
   --gpu_models_only \
   --num_workers 3 \

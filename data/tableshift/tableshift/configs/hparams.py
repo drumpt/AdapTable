@@ -12,6 +12,14 @@ _DEFAULT_NN_SEARCH_SPACE = {
     "weight_decay": tune.loguniform(1e-6, 1.)
 }
 
+_aldro_search_space = {
+**_DEFAULT_NN_SEARCH_SPACE,
+    "eta_pi": tune.loguniform(1e-5, 1e-1),
+    'r': tune.uniform(1e-5, 0.5),
+    'clip_max': tune.loguniform(1e-1, 10),
+    'eps': tune.loguniform(1e-4, 1e-1),
+}
+
 _dann_search_space = {
     **{k: v for k, v in _DEFAULT_NN_SEARCH_SPACE.items()
        if k not in OPTIMIZER_ARGS},
@@ -42,8 +50,6 @@ _dro_search_space = {
     # Note: training is very slow for large values of uncertainty
     # set size (larger than ~0.5) for chi-square geometry, particularly
     # when the learning rate is small.
-    # TODO(jpgard): adjust uncertainty set size grid based
-    #  on discussion with authors.
     "size": tune.loguniform(1e-4, 1.),
 
 }
@@ -182,6 +188,7 @@ _tabtransformer_search_space = {
 }
 
 search_space = {
+    "aldro": _aldro_search_space,
     "dann": _dann_search_space,
     "deepcoral": _deepcoral_search_space,
     "dro": _dro_search_space,

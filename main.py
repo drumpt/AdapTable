@@ -77,7 +77,6 @@ def forward_and_adapt(args, x, model, optimizer):
         probs = torch.softmax(outputs, dim=-1)
         original_probs = torch.softmax(original_outputs, dim=-1)
         kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
-        print(f"kl_div_loss: {kl_div_loss}")
         (args.kld_weight * kl_div_loss).backward(retain_graph=True)
 
     if 'sar' in args.method:
@@ -151,14 +150,18 @@ def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer
 
 def pretrain(args, model, optimizer, dataset, loss_fn, logger):
     device = args.device
-
+    best_model, best_loss = None, float('inf')
     for epoch in range(1, args.pretrain_epochs):
         train_loss, train_len = 0, 0
         model.train().to(device)
         for cor_x, train_x in dataset.mae_train_loader:
             cor_x, train_x = cor_x.float().to(device), train_x.float().to(device)
-            estimated_x, _  = model(cor_x)
-            loss = loss_fn(estimated_x, train_x)
+            estimated_x = model(cor_x) if isinstance(model, MLP) else model(train_x)[0]
+            # loss = loss_fn(estimated_x, train_x)
+
+            # for bayesian masked autoencoder
+            mean, std = estimated_x
+            loss = (((mean - train_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
 
             optimizer.zero_grad()
             loss.backward()
@@ -167,14 +170,32 @@ def pretrain(args, model, optimizer, dataset, loss_fn, logger):
             train_loss += loss.item() * cor_x.shape[0]
             train_len += cor_x.shape[0]
 
-        torch.save(model.state_dict(), os.path.join(args.out_dir, "last_model.pth"))
-        logger.info(f"epoch {epoch}, train_loss {train_loss / train_len:.4f}")
-    return model
+        valid_loss, valid_len = 0, 0
+        model.eval().to(device)
+        with torch.no_grad():
+            for cor_x, valid_x in dataset.mae_valid_loader:
+                cor_x, valid_x = cor_x.float().to(device), valid_x.float().to(device)
+                estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
+                # loss = loss_fn(estimated_x, valid_x)
+
+                # for bayesian masked autoencoder
+                mean, std = estimated_x
+                loss = (((mean - valid_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
+
+                valid_loss += loss.item() * cor_x.shape[0]
+                valid_len += cor_x.shape[0]
+
+        if valid_loss < best_loss:
+            best_loss = valid_loss
+            best_model = deepcopy(model)
+            torch.save(best_model.state_dict(), os.path.join(args.out_dir, "best_pretrained_model.pth"))
+
+        logger.info(f"epoch {epoch}, train_loss {train_loss / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}")
+    return best_model
 
 
 def train(args, model, optimizer, dataset, loss_fn, logger):
     device = args.device
-
     best_model, best_loss = None, float('inf')
     for epoch in range(1, args.epochs + 1):
         train_loss, train_acc, train_len = 0, 0, 0
@@ -377,7 +398,12 @@ def main_mae(args):
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
             estimated_test_x, _ = best_model(test_cor_x)
-            loss = pretrain_loss_fn(estimated_test_x, test_x)
+            # loss = pretrain_loss_fn(estimated_test_x, test_x)
+
+            # for bayesian masked autoencoder
+            mean, std = estimated_test_x
+            loss = (((mean - test_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
+
             loss.backward()
             test_optimizer.step()
 
@@ -392,5 +418,5 @@ def main_mae(args):
 
 
 if __name__ == "__main__":
-    main()
-    # main_mae()
+    # main()
+    main_mae()

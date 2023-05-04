@@ -1,11 +1,10 @@
 import copy
-from typing import Optional, Callable, Any, Dict, Tuple
-
+from typing import Optional, Callable, Any, Dict
 
 import scipy
 import torch
-from torch.utils.data import DataLoader
 from tab_transformer_pytorch import TabTransformer
+from torch.utils.data import DataLoader
 
 from tableshift.models.compat import SklearnStylePytorchModel, OPTIMIZER_ARGS
 from tableshift.models.training import train_epoch
@@ -19,16 +18,19 @@ class TabTransformerModel(TabTransformer, SklearnStylePytorchModel):
         for k in OPTIMIZER_ARGS:
             hparams.pop(k)
 
+        self.cat_idxs = hparams.pop("cat_idxs")
+
         super().__init__(**hparams)
         self._init_optimizer()
 
-    def forward(self, x_cont, x_categ):
+    def forward(self, x_cont: torch.Tensor, x_categ: Optional[torch.Tensor]):
         """Forward pass with argument values reversed (to match other models).
 
         Also handles empty categorical values."""
         if x_categ is None:
             x_categ = torch.Tensor([])
-
+        else:
+            x_categ = x_categ.long()
         return TabTransformer.forward(self, x_categ=x_categ, x_cont=x_cont)
 
     @torch.no_grad()

@@ -1,19 +1,18 @@
+import logging
+import os
 from abc import ABC, abstractmethod
 from collections import defaultdict
-import logging
 from typing import Optional, Mapping, Union, Callable, Any, Dict
 
 import numpy as np
-import os
-
+import torch
 from ray.air import session
 from ray.air.checkpoint import Checkpoint
-import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from tableshift.models.torchutils import evaluate
 from tableshift.models.optimizers import get_optimizer
+from tableshift.models.torchutils import evaluate
 
 OPTIMIZER_ARGS = ("lr", "weight_decay")
 
@@ -119,13 +118,15 @@ DOMAIN_GENERALIZATION_MODEL_NAMES = ["dann", "deepcoral", "irm", "mixup", "mmd",
                                      "vrex"]
 DOMAIN_ADAPTATION_MODEL_NAMES = []
 DOMAIN_ROBUSTNESS_MODEL_NAMES = ["group_dro", "dro"]
+LABEL_ROBUSTNESS_MODEL_NAMES = ["aldro", ]
 SKLEARN_MODEL_NAMES = ("expgrad", "histgbm", "lightgbm", "wcs", "xgb")
 BASELINE_MODEL_NAMES = ["ft_transformer", "mlp", "resnet", "node", "saint",
                         "tabtransformer"]
 PYTORCH_MODEL_NAMES = BASELINE_MODEL_NAMES \
                       + DOMAIN_ROBUSTNESS_MODEL_NAMES \
                       + DOMAIN_GENERALIZATION_MODEL_NAMES \
-                      + DOMAIN_ADAPTATION_MODEL_NAMES
+                      + DOMAIN_ADAPTATION_MODEL_NAMES \
+                      + LABEL_ROBUSTNESS_MODEL_NAMES
 
 
 def is_domain_generalization_model_name(model_name: str) -> bool:

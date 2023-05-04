@@ -119,20 +119,6 @@ BENCHMARK_CONFIGS = {
                                 "task": "diabetes", "years": BRFSS_YEARS},
     ),
 
-    "communities_and_crime": ExperimentConfig(
-        splitter=RandomSplitter(test_size=0.2, val_size=0.01,
-                                random_state=94427),
-        grouper=Grouper({"Race": [1, ], "income_level_above_median": [1, ]},
-                        drop=False),
-        preprocessor_config=PreprocessorConfig(), tabular_dataset_kwargs={}),
-
-    "compas": ExperimentConfig(
-        splitter=RandomSplitter(test_size=0.2, val_size=0.01,
-                                random_state=90127),
-        grouper=Grouper({"race": ["Caucasian", ], "sex": ["Male", ]},
-                        drop=False),
-        preprocessor_config=PreprocessorConfig(), tabular_dataset_kwargs={}),
-
     "diabetes_readmission": ExperimentConfig(
         splitter=DomainSplitter(val_size=DEFAULT_ID_VAL_SIZE,
                                 ood_val_size=DEFAULT_OOD_VAL_SIZE,
@@ -208,6 +194,7 @@ BENCHMARK_CONFIGS = {
 
     "assistments": ExperimentConfig(
         splitter=DomainSplitter(val_size=DEFAULT_ID_VAL_SIZE,
+                                ood_val_size=DEFAULT_OOD_VAL_SIZE,
                                 random_state=DEFAULT_RANDOM_STATE,
                                 id_test_size=DEFAULT_ID_TEST_SIZE,
                                 domain_split_varname='school_id',
@@ -230,6 +217,7 @@ BENCHMARK_CONFIGS = {
 
     "college_scorecard": ExperimentConfig(
         splitter=DomainSplitter(val_size=DEFAULT_ID_VAL_SIZE,
+                                ood_val_size=DEFAULT_OOD_VAL_SIZE,
                                 random_state=DEFAULT_RANDOM_STATE,
                                 id_test_size=DEFAULT_ID_TEST_SIZE,
                                 domain_split_varname='CCBASIC',

@@ -153,9 +153,9 @@ _TASK_REGISTRY = {
     'melbourne_airbnb':
         TaskConfig(AutoMLBenchmarkDataSource, AIRBNB_FEATURES),
     'news_channel':
-        TaskConfig(AutoMLBenchmarkDataSource, CHANNEL_FEATURES),
+        TaskConfig(AutoMLBenchmarkDataSource, NEWS_CHANNEL_FEATURES),
     'wine_reviews':
-        TaskConfig(AutoMLBenchmarkDataSource, WINE_FEATURES),
+        TaskConfig(AutoMLBenchmarkDataSource, WINE_REVIEWS_FEATURES),
     'imdb_genre_prediction':
         TaskConfig(AutoMLBenchmarkDataSource, IMDB_FEATURES),
     'fake_job_postings2':
@@ -171,7 +171,7 @@ _TASK_REGISTRY = {
     'heart-disease':
         TaskConfig(HeartDiseaseDataSource, HEART_DISEASE_FEATURES),
     'wine':
-        TaskConfig(WineDataSource, WINE_FEATURES),
+        TaskConfig(WineCultivarsDataSource, WINE_CULTIVARS_FEATURES),
     'wine-quality':
         TaskConfig(WineQualityDataSource, WINE_QUALITY_FEATURES),
     'rice':

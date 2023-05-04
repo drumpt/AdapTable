@@ -2,19 +2,26 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
-meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression
+meta_dataset: tableshift # openml-cc18, tableshift, openml-regression
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
-dataset: semeion
-shift_type: null # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+dataset: heloc
+shift_type: mean_shift # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
 shift_severity: 0.6
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
+### hyperparameters for MAE
+pretrain_epochs: 20
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 1e-4
+mask_ratio: 0.75
+
 ### hyperparameters for training
-retrain: true
+retrain: false
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
@@ -23,18 +30,11 @@ train_lr: 1e-4
 ### hyperparameters for test-time adaptation
 episodic: true # reset model to the pretrained one for each batch if true
 num_steps: 10 # optimization steps for each batch
-test_batch_size: 64
+test_batch_size: 1
 test_optimizer: AdamW
-test_lr: 1e-6
+test_lr: 1e-4
 train_params: [all] # currently supported: all, LN, BN, GN
 # TODO: implement learning rate scheduler
-
-### hyperparameters for MAE
-pretrain_epochs: 20
-pretrain_batch_size: 64
-pretrain_optimizer: AdamW
-pretrain_lr: 1e-4
-mask_ratio: 0.75
 
 ##################################################################
 ### methods & other hyperparameters

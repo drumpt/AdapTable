@@ -4,10 +4,11 @@ import numpy as np
 import rtdl
 import scipy
 import sklearn
-from tqdm import tqdm
-from tableshift.third_party.saint.models import SAINT
-from tab_transformer_pytorch import TabTransformer
 import torch
+from tab_transformer_pytorch import TabTransformer
+from tqdm import tqdm
+
+from tableshift.third_party.saint.models import SAINT
 
 
 def get_module_attr(model, attr):
@@ -38,7 +39,21 @@ def unpack_batch(batch: Union[Dict, Tuple[Union[torch.Tensor, None]]]) -> Tuple[
     return x_batch, y_batch, g_batch, d_batch
 
 
-def apply_model(model: torch.nn.Module, x_num, x_cat=None):
+def split_num_cat(x, cat_idxs) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Use cat_idxs to slice the input batch."""
+    if not cat_idxs:
+        x_cont = x
+        x_categ = None
+    else:
+        assert max(cat_idxs) < x.shape[1], \
+            f"expected cat_idxs in range [0, {x.shape[1] - 1}], got {cat_idxs}"
+        categ_mask = np.isin(np.arange(x.shape[1]), cat_idxs)
+        x_cont = x[:, ~categ_mask]
+        x_categ = x[:, categ_mask]
+    return x_cont, x_categ
+
+
+def apply_model(model: torch.nn.Module, x):
     if isinstance(model, torch.nn.parallel.DistributedDataParallel):
         module = model.module
     else:
@@ -46,11 +61,11 @@ def apply_model(model: torch.nn.Module, x_num, x_cat=None):
 
     if isinstance(module, rtdl.FTTransformer) or isinstance(module, SAINT) \
             or isinstance(module, TabTransformer):
+        x_num, x_cat = split_num_cat(x, get_module_attr(module, "cat_idxs"))
         return module(x_num, x_cat)
 
     else:
-        assert x_cat is None
-        return module(x_num)
+        return module(x)
 
 
 @torch.no_grad()

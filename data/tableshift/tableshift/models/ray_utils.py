@@ -1,15 +1,14 @@
-from dataclasses import dataclass
-from functools import partial
 import gc
 import logging
 import os
-import psutil
 import re
+from dataclasses import dataclass
+from functools import partial
 from typing import Dict, Any, List, Union, Tuple
 
-import fairlearn.reductions
 import numpy as np
 import pandas as pd
+import psutil
 import ray
 import sklearn
 import torch
@@ -21,8 +20,8 @@ from ray.train.xgboost import XGBoostTrainer
 from ray.tune import Tuner
 from ray.tune.schedulers import ASHAScheduler
 from ray.tune.search.hyperopt import HyperOptSearch
-from tqdm import tqdm
 
+import tableshift.core
 from tableshift.configs.hparams import search_space
 from tableshift.core import TabularDataset, CachedDataset
 from tableshift.models.compat import is_pytorch_model_name, \
@@ -179,14 +178,16 @@ def ray_evaluate(model, split_loaders: Dict[str, Any]) -> dict:
         prediction_soft, target = get_predictions_and_labels(model, loader, dev)
         prediction_hard = np.round(prediction_soft)
         acc = sklearn.metrics.accuracy_score(target, prediction_hard)
-        auc_roc = sklearn.metrics.roc_auc_score(target, prediction_soft)
         avg_prec = sklearn.metrics.average_precision_score(target,
                                                            prediction_soft)
         metrics[f"{split}_accuracy"] = acc
-        metrics[f"{split}_auc"] = auc_roc
         metrics[f"{split}_map"] = avg_prec
         metrics[f"{split}_num_samples"] = len(target)
         metrics[f"{split}_ymean"] = np.mean(target).item()
+
+        metrics[f"{split}_auc"] = \
+            (sklearn.metrics.roc_auc_score(target, prediction_soft)
+             if len(np.unique(target)) > 1 else np.nan)
     return metrics
 
 
@@ -242,7 +243,6 @@ def prepare_ray_datasets(dset: Union[TabularDataset, CachedDataset],
                          ) -> Dict[str, ray.data.Dataset]:
     """Fetch a dict of {split:ray.data.Dataset} for each split."""
     ray_dsets = {}
-
     for split in dset.splits:
         if (split == "train" and split_train_loaders_by_domain) \
                 or (split in ["id_test", "ood_test"]):
@@ -306,9 +306,12 @@ def run_ray_tune_experiment(dset: Union[TabularDataset, CachedDataset],
         def _prepare_shard(shardname, infinite=False):
             """Get the dataset shard and, optionally, repeat infinitely."""
             shard = session.get_dataset_shard(shardname)
+            if shard is None:
+                logging.error(f'got empty Ray shard for shardname {shardname}')
             if infinite:
                 logging.debug(f"repeating shard {shardname} infinitely.")
                 shard = shard.repeat()
+            assert shard is not None, f"shard {shardname} is None!"
             return shard.iter_torch_batches(batch_size=config["batch_size"])
 
         def _prepare_eval_loaders(validation_only=False) -> Dict:
@@ -316,7 +319,7 @@ def run_ray_tune_experiment(dset: Union[TabularDataset, CachedDataset],
                 eval_shards = ('validation', 'ood_validation')
 
             elif validation_only:
-                eval_shards = ('validation')
+                eval_shards = ('validation',)
 
             elif dset.is_domain_split:
                 # Overall eval loaders (compute e.g. overall id/ood
@@ -351,7 +354,8 @@ def run_ray_tune_experiment(dset: Union[TabularDataset, CachedDataset],
 
         def _on_train_end(loss_train):
             """Function to be called at the end of each training epoch to log
-            validation/test metrics.
+            validation/test metrics. (This is also called at the end of the
+            first epoch, in order to populate the metrics for Ray).
 
             We only compute id/ood domain-level metrics at the end of training,
             because it is expensive to compute these every epoch.
@@ -361,15 +365,16 @@ def run_ray_tune_experiment(dset: Union[TabularDataset, CachedDataset],
             metrics).
             """
             eval_loaders = _prepare_eval_loaders(validation_only=False)
-            # TODO(jpgard): only compute ID val accuracy here. The others we
-            #  will only compute on train end.
-            id_test_loaders = {s: _prepare_shard(f"id_test_{s}")
-                               for s in dset_domains['id_test']}
-            oo_test_loaders = {s: _prepare_shard(f"ood_test_{s}")
-                               for s in dset_domains['ood_test']}
 
-            eval_loaders.update(id_test_loaders)
-            eval_loaders.update(oo_test_loaders)
+            if dset.is_domain_split:
+                id_test_loaders = {s: _prepare_shard(f"id_test_{s}")
+                                   for s in dset_domains['id_test']}
+                oo_test_loaders = {s: _prepare_shard(f"ood_test_{s}")
+                                   for s in dset_domains['ood_test']}
+
+                eval_loaders.update(id_test_loaders)
+                eval_loaders.update(oo_test_loaders)
+
             logging.info(f"computing metrics on splits {eval_loaders.keys()}")
             metrics = ray_evaluate(model, eval_loaders)
             metrics.update(dict(train_loss=loss_train))

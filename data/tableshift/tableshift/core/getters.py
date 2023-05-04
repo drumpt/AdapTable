@@ -47,6 +47,9 @@ def get_dataset(name: str, cache_dir: str = "tmp",
     if preprocessor_config is None:
         preprocessor_config = expt_config.preprocessor_config
 
+    print(f"expt_config: {expt_config}")
+    print(f"dataset_config: {dataset_config}")
+
     if not use_cached:
         dset = TabularDataset(
             config=dataset_config,

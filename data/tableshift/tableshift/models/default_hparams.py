@@ -13,9 +13,18 @@ DEFAULT_BATCH_SIZE = 4096
 # be good choices for hyperparameters. These values do set
 # values for the non-tuned hyperparameters (those not
 # defined in the search space for each algorithm in
-# tableshift.configs.default_hparams.py
+# tableshift.configs.default_hparams.py . Values here will *not* be overwritten
+# with other defaults (e.g. if batch_size is specified for your model, it will
+# not be set to the default batch size for the given model).
 
 _DEFAULT_CONFIGS = frozendict({
+    "aldro": {
+        "num_layers": 2,
+        "d_hidden": 512,
+        "dropouts": 0.,
+        "eta_pi": 0.01,
+        "r": 1.,
+    },
     "dann": {
         "num_layers": 2,
         "d_hidden": 256,
@@ -105,13 +114,13 @@ _DEFAULT_CONFIGS = frozendict({
             "batch_size": 256,
         },
     "tabtransformer":
-
         {"dim": 32,
          "depth": 6,
          "heads": 1,
          "attn_dropout": 0.1,
          "ff_dropout": 0.1,
-         "mlp_hidden_mults": (4, 2)},
+         "mlp_hidden_mults": (4, 2),
+         "batch_size": 256, },
     "vrex":
         {"num_layers": 4,
          "d_hidden": 512,
@@ -131,6 +140,14 @@ def get_default_config(model: str, dset: TabularDataset) -> dict:
     elif is_pytorch_model_name(model):
         config.update({"n_num_features": dset.X_shape[1]})
 
+    if model in ("tabtransformer", "saint"):
+        # TODO: Currently only supports dummy variables; later add support for
+        #  multinomial categorical variables by encoding `categories` properties
+        #  as part of a Dataset.
+        cat_idxs = dset.cat_idxs
+        config["cat_idxs"] = cat_idxs
+        config["categories"] = [2] * len(cat_idxs)
+
     # Models that use non-cross-entropy training objectives.
     if model == "dro":
         config["criterion"] = DROLoss(size=config["size"],
@@ -146,16 +163,17 @@ def get_default_config(model: str, dset: TabularDataset) -> dict:
         config["criterion"] = F.binary_cross_entropy_with_logits
 
     if is_pytorch_model_name(model) and model != "dann":
-        # Note: very small batch size is needed for domain shift
-        # when in debug mode.
-        config.update({"batch_size": DEFAULT_BATCH_SIZE,
-                       "lr": 0.01,
+        # Note: for DANN model, lr and weight decay are set separately for D
+        # and G.
+        config.update({"lr": 0.01,
                        "weight_decay": 0.01,
-                       "n_epochs": 1})
-    elif is_pytorch_model_name(model):
-        # Case: DANN model; lr and weight_decay set per-model (for disc and
-        # classifier separately).
-        config.update({"batch_size": DEFAULT_BATCH_SIZE,
-                       "n_epochs": 1})
+                       })
+
+    # Do not overwrite batch size or epochs if they are set in the default
+    # config for the model.
+    if "batch_size" not in config:
+        config["batch_size"] = DEFAULT_BATCH_SIZE
+    if "n_epochs" not in config:
+        config["n_epochs"] = 1
 
     return config

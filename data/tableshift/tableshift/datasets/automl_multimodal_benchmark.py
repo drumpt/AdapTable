@@ -193,7 +193,7 @@ AIRBNB_FEATURES = FeatureList(features=[
 ], documentation="https://www.kaggle.com/tylerx/melbourne-airbnb-open-data ,"
                  "https://docs.google.com/spreadsheets/d/1iWCNJcSutYqpULSQHlNyGInUvHg2BoUGoNRIGa6Szc4/edit#gid=1322284596")
 
-WINE_FEATURES = FeatureList([
+WINE_REVIEWS_FEATURES = FeatureList([
     Feature('country', cat_dtype),
     Feature('description', cat_dtype),
     Feature('points', int, name_extended='wine enthusiast rating'),
@@ -308,24 +308,24 @@ KICKSTARTER_FEATURES = FeatureList([
 ],
     documentation='https://www.kaggle.com/codename007/funding-successful-projects')
 
-CHANNEL_FEATURES = FeatureList([
-    Feature('n_tokens_content', float),
-    Feature('n_unique_tokens', float),
-    Feature('n_non_stop_words', float),
-    Feature('n_non_stop_unique_tokens', float),
-    Feature('num_hrefs', float),
-    Feature('num_self_hrefs', float),
-    Feature('num_imgs', float),
-    Feature('num_videos', float),
-    Feature('average_token_length', float),
-    Feature('num_keywords', float),
-    Feature('global_subjectivity', float),
-    Feature('global_sentiment_polarity', float),
-    Feature('global_rate_positive_words', float),
-    Feature('global_rate_negative_words', float),
-    Feature('rate_positive_words', float),
-    Feature('rate_negative_words', float),
-    Feature('article_title', cat_dtype),
+NEWS_CHANNEL_FEATURES = FeatureList([
+    Feature('n_tokens_content', float, name_extended='Number of words in the content'),
+    Feature('n_unique_tokens', float, name_extended='Rate of unique words in the content'),
+    Feature('n_non_stop_words', float, name_extended='Rate of non-stop words in the content'),
+    Feature('n_non_stop_unique_tokens', float, name_extended='Rate of unique non-stop words in the content'),
+    Feature('num_hrefs', float, name_extended='Number of links'),
+    Feature('num_self_hrefs', float, name_extended='Number of links to other articles published by Mashable'),
+    Feature('num_imgs', float, name_extended='Number of images'),
+    Feature('num_videos', float, name_extended='Number of videos'),
+    Feature('average_token_length', float, name_extended='Average length of the words in the content '),
+    Feature('num_keywords', float, name_extended='Number of keywords in the metadata'),
+    Feature('global_subjectivity', float, name_extended='Text subjectivity'),
+    Feature('global_sentiment_polarity', float, name_extended='Text sentiment polarity'),
+    Feature('global_rate_positive_words', float, name_extended='Rate of positive words in the content'),
+    Feature('global_rate_negative_words', float, name_extended='Rate of negative words in the content'),
+    Feature('rate_positive_words', float, name_extended='Rate of positive words among non-neutral tokens'),
+    Feature('rate_negative_words', float, name_extended='Rate of negative words among non-neutral tokens'),
+    Feature('article_title', cat_dtype, name_extended='article title'),
     Feature('channel', cat_dtype, is_target=True,
             value_mapping={
                 ' data_channel_is_tech': 'tech',
@@ -333,7 +333,7 @@ CHANNEL_FEATURES = FeatureList([
                 ' data_channel_is_lifestyle': 'lifestyle',
                 ' data_channel_is_bus': 'business',
                 ' data_channel_is_world': 'world',
-                ' data_channel_is_socmed': 'socmed',
+                ' data_channel_is_socmed': 'social media',
             }),
 ],
     documentation='https://archive.ics.uci.edu/ml/datasets/online+news+popularity')

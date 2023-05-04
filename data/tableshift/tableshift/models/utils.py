@@ -7,20 +7,34 @@ from sklearn.ensemble import HistGradientBoostingClassifier
 from tableshift.models.compat import OPTIMIZER_ARGS
 from tableshift.models.coral import DeepCoralModel, MMDModel
 from tableshift.models.dann import DANNModel
-from tableshift.models.dro import GroupDROModel
+from tableshift.models.dro import GroupDROModel, AdversarialLabelDROModel
 from tableshift.models.expgrad import ExponentiatedGradient
 from tableshift.models.irm import IRMModel
 from tableshift.models.mixup import MixUpModel
 from tableshift.models.node import NodeModel
+from tableshift.models.rex import VRExModel
 from tableshift.models.rtdl import ResNetModel, MLPModel, FTTransformerModel
 from tableshift.models.saint import SaintModel
 from tableshift.models.tab_transformer import TabTransformerModel
 from tableshift.models.wcs import WeightedCovariateShiftClassifier
-from tableshift.models.rex import VRExModel
 
 
 def get_estimator(model, d_out=1, **kwargs):
-    if model == "dann":
+    if model == "aldro":
+        assert d_out == 1, "assume binary classification."
+        return AdversarialLabelDROModel(
+            d_in=kwargs["d_in"],
+            d_layers=[kwargs["d_hidden"]] * kwargs["num_layers"],
+            d_out=d_out,
+            dropouts=kwargs["dropouts"],
+            activation=kwargs["activation"],
+            n_groups=2,
+            **{k: kwargs[k] for k in OPTIMIZER_ARGS},
+            eta_pi=kwargs["eta_pi"],
+            r=kwargs["r"],
+        )
+
+    elif model == "dann":
         return DANNModel(d_in=kwargs["d_in"],
                          d_layers=[kwargs["d_hidden"]] * kwargs[
                              "num_layers"],
@@ -156,18 +170,21 @@ def get_estimator(model, d_out=1, **kwargs):
         )
 
     elif model == "saint":
-        return SaintModel(categories=[],
-                          num_continuous=kwargs["d_in"],
-                          dim=kwargs["dim"],
-                          depth=kwargs["depth"],
-                          heads=kwargs["heads"],
-                          y_dim=1,
-                          **{k: kwargs[k] for k in OPTIMIZER_ARGS})
+        return SaintModel(
+            categories=kwargs["categories"],
+            cat_idxs=kwargs["cat_idxs"],
+            num_continuous=kwargs["d_in"] - len(kwargs["cat_idxs"]),
+            dim=kwargs["dim"],
+            depth=kwargs["depth"],
+            heads=kwargs["heads"],
+            y_dim=1,
+            **{k: kwargs[k] for k in OPTIMIZER_ARGS})
 
     elif model == "tabtransformer":
         return TabTransformerModel(
-            categories=[],
-            num_continuous=kwargs["d_in"],
+            categories=kwargs["categories"],
+            cat_idxs=kwargs["cat_idxs"],
+            num_continuous=kwargs["d_in"] - len(kwargs["cat_idxs"]),
             dim=kwargs["dim"],
             dim_out=1,
             depth=kwargs["depth"],

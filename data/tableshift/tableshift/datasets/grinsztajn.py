@@ -4,6 +4,7 @@ The benchmark of Grinsztajn at al. 22.
 See https://arxiv.org/abs/2207.08815
 """
 from typing import Dict, Callable
+
 import pandas as pd
 
 from tableshift.core.features import Feature, FeatureList
@@ -350,7 +351,8 @@ EYE_MOVEMENTS_FEATURES = FeatureList(features=[
     Feature('wordNo', int, name_extended='Word number (ordinal) in this title'),
     Feature('label', int, is_target=True,
             name_extended="sentence is irrelevant to the question",
-            value_mapping={1: 'irrelevant', 0: 'relevant'}),
+            value_mapping={1: 'irrelevant', 0: 'relevant'},
+            ),
 ], documentation="https://www.openml.org/d/44157, "
                  "http://research.ics.aalto.fi/events/eyechallenge2005/irem-2005-03-03.pdf")
 
@@ -837,7 +839,8 @@ ROAD_SAFETY_FEATURES = FeatureList(features=[
                 7: "Less deprived 30-40%", 8: "Less deprived 20-30%",
                 9: "Less deprived 10-20%", 10: "Least deprived 10%",
                 -1: "Data missing or out of range", }),
-    Feature('SexofDriver', int, is_target=True, name_extended='sex of driver'),
+    Feature('SexofDriver', int, is_target=True,
+            name_extended='driver is male'),
 ], documentation='https://www.openml.org/d/45038 ,'
                  'https://www.data.gov.uk/dataset/cb7ae6f0-4be6-4935-9277-47e5ce24a11f/road-safety-data')
 

@@ -100,7 +100,7 @@ def main(experiment: str, cache_dir: str, results_dir: str, num_samples: int,
 
     iter_fp = os.path.join(
         expt_results_dir,
-        f"tune_results_{experiment}_{start_time}_{uid}_"
+        f"tune_results_{experiment}_{start_time}_{uid[:100]}_"
         f"{model_name}.csv")
     if not os.path.exists(expt_results_dir):
         os.makedirs(expt_results_dir)

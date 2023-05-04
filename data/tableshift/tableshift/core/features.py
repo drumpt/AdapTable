@@ -54,12 +54,7 @@ def column_is_of_type(x: pd.Series, dtype) -> bool:
         # Check if x is a subdtype of the more general type specified in
         # dtype; this will not perform casting of identical subtypes (i.e.
         # does not cast int64 to int).
-        try:
-            return np.issubdtype(x.dtype, dtype)
-        except Exception as e:
-            logging.error(e)
-            import ipdb;
-            ipdb.set_trace()
+        return np.issubdtype(x.dtype, dtype)
 
 
 @dataclass(frozen=True)
@@ -115,7 +110,7 @@ class FeatureList:
         return [x.name for x in self.features if not x.is_target]
 
     @property
-    def names(self):
+    def names(self) -> List[str]:
         return [f.name for f in self.features]
 
     @property
@@ -179,7 +174,7 @@ class FeatureList:
             logging.debug(f"checking feature {f.name}")
             if f.name not in df.columns:
                 # Case: expected this feature, and it is missing.
-                raise ValueError(f"feature {f.name} not present in data with"
+                raise ValueError(f"feature {f.name} not present in data with "
                                  f"columns {df.columns}.")
 
             # Fill na values (before casting)
@@ -190,7 +185,6 @@ class FeatureList:
             if not column_is_of_type(df[f.name], f.kind):
                 df[f.name] = f.apply_dtype(df[f.name])
 
-        # Drop any rows containing missing values.
         if _contains_missing_values(df):
             logging.debug("missing values detected in data; counts by column:")
             logging.debug(pd.isnull(df).sum())
@@ -257,7 +251,18 @@ class PreprocessorConfig:
 
 
 def map_values(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
-    return df.stack().map(mapping).unstack()
+    column = df.stack()
+    unmapped_values = list(set(column.unique()) - set(mapping.keys()))
+    if unmapped_values:
+        logging.warning(
+            f'got value(s) in column {df.columns[0]} with no'
+            f'mapping: {unmapped_values}; will pass these values through '
+            f'instead. If this is intended, then no action is required. '
+            f'For guaranteed behavior (to ensure the value is not mapped), '
+            f'it is best to define this explicitly in your mapping.')
+        mapping.update({x: x for x in unmapped_values})
+
+    return column.map(mapping).unstack()
 
 
 def get_numeric_columns(data: pd.DataFrame) -> List[str]:
@@ -445,8 +450,6 @@ class Preprocessor:
         """Postprocess the result of a ColumnTransformer."""
         transformed.columns = [c.replace("remainder__", "")
                                for c in transformed.columns]
-        transformed.columns = [sub_illegal_chars(c) for c in
-                               transformed.columns]
 
         # By default transformed columns will be cast to 'object' dtype; we
         # cast them back to a numeric type.
@@ -462,6 +465,9 @@ class Preprocessor:
         if self.config.use_extended_names:
             transformed.columns = self.map_names_extended(
                 transformed.columns.tolist())
+        else:
+            transformed.columns = [sub_illegal_chars(c) for c in
+                                   transformed.columns]
 
         return transformed
 
@@ -592,7 +598,7 @@ class Preprocessor:
         transformed = self._post_transform(
             transformed, cast_dtypes=post_transform_cast_dtypes)
 
-        if domain_label_colname:
+        if domain_label_colname and domain_label_colname in transformed.columns:
             # Case: fit the domain label transformer and apply it.
             transformed.loc[:, domain_label_colname] = \
                 self.fit_transform_domain_labels(

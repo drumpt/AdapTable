@@ -57,7 +57,9 @@ class Dataset(ABC):
     splits = None  # dict mapping {split_name: list of idxs in split}
     grouper: Optional[Grouper] = None
 
+    # List of the names of the predictors only.
     feature_names: Union[List[str], None] = None
+
     group_feature_names: Union[List[str], None] = None
     target: str = None
 
@@ -119,6 +121,18 @@ class Dataset(ABC):
         """Load the data/labels/groups from a data source."""
         raise
 
+    @property
+    @abstractmethod
+    def cat_idxs(self) -> List[int]:
+        """Return a list of the indices of categorical columns."""
+        raise
+
+    @property
+    @abstractmethod
+    def features(self) -> List[str]:
+        """Fetch a list of the feature names."""
+        raise
+
     def _check_split(self, split):
         """Check that a split name is valid."""
         assert self._is_valid_split(split), \
@@ -136,7 +150,10 @@ class Dataset(ABC):
         for name in ("feature_names", "target", "group_feature_names"):
             assert getattr(self, name) is not None, f"{name} is None."
         df = self._get_split_df(split, domain=domain)
-        X = df[self.feature_names]
+
+        # preserve ordering of columns in df
+        assert all(fn in df.columns for fn in self.feature_names)
+        X = df[[c for c in df.columns if c in self.feature_names]]
         y = df[self.target]
         G = df[self.group_feature_names]
         d = df[self.domain_label_colname] \
@@ -152,6 +169,7 @@ class Dataset(ABC):
                        shuffle=True, infinite=False) -> DataLoader:
         """Fetch a dataloader yielding (X, y, G, d) tuples."""
         data = self._get_split_xygd(split)
+
         if not self.domain_label_colname:
             # Drop the empty domain labels.
             data = data[:-1]
@@ -198,7 +216,7 @@ class TabularDataset(Dataset):
             self._initialize_data()
 
     @property
-    def features(self):
+    def features(self) -> List[str]:
         return self.task_config.feature_list.names
 
     @property
@@ -233,6 +251,11 @@ class TabularDataset(Dataset):
             return 0
         else:
             return self._df[self.domain_label_colname].nunique()
+
+    @property
+    def cat_idxs(self) -> List[int]:
+        # TODO: implement this.
+        raise
 
     def get_domains(self, split) -> Union[List[str], None]:
         """Fetch a list of the domains."""
@@ -551,6 +574,8 @@ class CachedDataset(Dataset):
 
         self.domain_label_values = None
         self.group_feature_names = None
+
+        # Shape of the full data matrix, including domain label and target
         self.X_shape = None
 
         self.schema = None
@@ -560,6 +585,22 @@ class CachedDataset(Dataset):
     @property
     def base_dir(self):
         return os.path.join(self.cache_dir, self.uid)
+
+    @property
+    def cat_idxs(self) -> List[int]:
+        """Fetch indices of categorical features in the data.
+
+        These are indices into the `X` array, with columns ordered according to
+        self.feature_names (which is the default ordering provided by all
+        TableShift functions).
+        """
+        features_and_dtypes = [(x, self.schema[x]) for x in self.feature_names]
+        idxs = np.nonzero([x[1] == np.int8 for x in features_and_dtypes])[0]
+        return idxs.tolist()
+
+    @property
+    def features(self) -> List[str]:
+        return list(self.schema.keys())
 
     def _initialize_data(self):
         raise NotImplementedError
@@ -571,6 +612,21 @@ class CachedDataset(Dataset):
         else:
             return False
 
+    def _init_feature_names(self):
+        # Hack: since feature names don't match the ordering in the file on
+        # disk, we peek at the file on disk; it is critical that the ordering
+        # of the feature names matches the ordering in the data.
+        f = self._get_split_files("train")[0]
+        df = pd.read_csv(f, nrows=1)
+        assert set(df.columns) == set(self.schema.keys())
+        feature_names = df.columns.tolist()
+        feature_names.remove(self.target)
+        if isinstance(self.splitter, DomainSplitter) \
+                and self.splitter.drop_domain_split_col \
+                and self.domain_label_colname in feature_names:
+            feature_names.remove(self.domain_label_colname)
+        self.feature_names = feature_names
+
     def _load_info_from_cache(self):
         """Load the dataset metadata from cache (data is lazily loaded)."""
         logging.info(f"loading from {self.base_dir}")
@@ -578,10 +634,13 @@ class CachedDataset(Dataset):
             ds_info = json.loads(f.read())
 
         for k, v in ds_info.items():
-            setattr(self, k, v)
+            if k != "feature_names":
+                setattr(self, k, v)
 
         with open(os.path.join(self.base_dir, "schema.pickle"), "rb") as f:
             self.schema = pickle.load(f)
+
+        self._init_feature_names()
 
     def get_domains(self, split) -> Union[List[str], None]:
         """Fetch a list of the cached domains."""

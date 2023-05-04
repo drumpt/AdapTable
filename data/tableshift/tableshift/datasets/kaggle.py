@@ -100,7 +100,18 @@ OTTO_FEATURES = FeatureList(features=[
     Feature('feat_91', int),
     Feature('feat_92', int),
     Feature('feat_93', int),
-    Feature('target', int, is_target=True),
+    Feature('target', cat_dtype, is_target=True,
+            value_mapping={
+                'Class_1': '1',
+                'Class_2': '2',
+                'Class_3': '3',
+                'Class_4': '4',
+                'Class_5': '5',
+                'Class_6': '6',
+                'Class_7': '7',
+                'Class_8': '8',
+                'Class_9': '9',
+            }),
 ],
     documentation="https://www.kaggle.com/competitions/otto-group-product-classification-challenge/data")
 
@@ -144,8 +155,7 @@ PLASTICC_FEATURES = FeatureList(features=[
     Feature('detected', int,
             "If 1, the object's brightness is significantly different at the "
             "3-sigma level relative to the reference template. Only objects "
-            "with at least 2 detections are included in the dataset.",
-            is_target=True),
+            "with at least 2 detections are included in the dataset."),
     Feature('ra', float,
             "right ascension, sky coordinate: co-longitude in degrees",
             name_extended="right ascension, sky coordinate: co-longitude in degrees"),
@@ -366,420 +376,421 @@ TRADESHIFT_FEATURES = FeatureList(features=[
 SCHIZOPHRENIA_FEATURES = FeatureList(features=[
     Feature('Class', int, is_target=True,
                 value_mapping={0: 'Healthy Control',
-                               1: 'Schizophrenic Patient'}),
-    Feature('FNC233', float),  # importance: 0.1325
-    Feature('FNC237', float),  # importance: 0.0963
-    Feature('FNC226', float),  # importance: 0.0812
-    Feature('FNC194', float),  # importance: 0.0578
-    Feature('SBM_map7', float),  # importance: 0.0549
-    Feature('FNC33', float),  # importance: 0.0538
-    Feature('SBM_map36', float),  # importance: 0.0468
-    Feature('FNC105', float),  # importance: 0.0465
-    Feature('FNC161', float),  # importance: 0.038
-    Feature('FNC353', float),  # importance: 0.0371
-    Feature('FNC290', float),  # importance: 0.0353
-    Feature('FNC80', float),  # importance: 0.0299
-    Feature('FNC243', float),  # importance: 0.0277
-    Feature('FNC345', float),  # importance: 0.025
-    Feature('FNC293', float),  # importance: 0.022
-    Feature('FNC158', float),  # importance: 0.0201
-    Feature('FNC48', float),  # importance: 0.0196
-    Feature('FNC110', float),  # importance: 0.0175
-    Feature('FNC270', float),  # importance: 0.017
-    Feature('FNC295', float),  # importance: 0.0158
-    Feature('FNC301', float),  # importance: 0.0136
-    Feature('SBM_map67', float),  # importance: 0.0134
-    Feature('FNC75', float),  # importance: 0.0113
-    Feature('FNC337', float),  # importance: 0.0079
-    Feature('FNC67', float),  # importance: 0.0076
-    Feature('SBM_map17', float),  # importance: 0.0074
-    Feature('FNC165', float),  # importance: 0.0068
-    Feature('FNC61', float),  # importance: 0.0068
-    Feature('FNC278', float),  # importance: 0.0067
-    Feature('FNC208', float),  # importance: 0.0066
-    Feature('FNC136', float),  # importance: 0.0065
-    Feature('FNC5', float),  # importance: 0.0049
-    Feature('FNC189', float),  # importance: 0.0047
+                               1: 'Schizophrenic Patient'}
+            ),
+    Feature('FNC233', float, 'functional MRI feature 233'),  # importance: 0.1325
+    Feature('FNC237', float, 'functional MRI feature 237'),  # importance: 0.0963
+    Feature('FNC226', float, 'functional MRI feature 226'),  # importance: 0.0812
+    Feature('FNC194', float, 'functional MRI feature 194'),  # importance: 0.0578
+    Feature('SBM_map7', float, 'structural ICA map feature 7'),  # importance: 0.0549
+    Feature('FNC33', float, 'functional MRI feature 33'),  # importance: 0.0538
+    Feature('SBM_map36', float, 'structural ICA map feature 36'),  # importance: 0.0468
+    Feature('FNC105', float, 'functional MRI feature 105'),  # importance: 0.0465
+    Feature('FNC161', float, 'functional MRI feature 161'),  # importance: 0.038
+    Feature('FNC353', float, 'functional MRI feature 353'),  # importance: 0.0371
+    Feature('FNC290', float, 'functional MRI feature 290'),  # importance: 0.0353
+    Feature('FNC80', float, 'functional MRI feature 80'),  # importance: 0.0299
+    Feature('FNC243', float, 'functional MRI feature 243'),  # importance: 0.0277
+    Feature('FNC345', float, 'functional MRI feature 345'),  # importance: 0.025
+    Feature('FNC293', float, 'functional MRI feature 293'),  # importance: 0.022
+    Feature('FNC158', float, 'functional MRI feature 158'),  # importance: 0.0201
+    Feature('FNC48', float, 'functional MRI feature 48'),  # importance: 0.0196
+    Feature('FNC110', float, 'functional MRI feature 110'),  # importance: 0.0175
+    Feature('FNC270', float, 'functional MRI feature 270'),  # importance: 0.017
+    Feature('FNC295', float, 'functional MRI feature 295'),  # importance: 0.0158
+    Feature('FNC301', float, 'functional MRI feature 301'),  # importance: 0.0136
+    Feature('SBM_map67', float, 'structural ICA map feature 67'),  # importance: 0.0134
+    Feature('FNC75', float, 'functional MRI feature 75'),  # importance: 0.0113
+    Feature('FNC337', float, 'functional MRI feature 337'),  # importance: 0.0079
+    Feature('FNC67', float, 'functional MRI feature 67'),  # importance: 0.0076
+    Feature('SBM_map17', float, 'structural ICA map feature 17'),  # importance: 0.0074
+    Feature('FNC165', float, 'functional MRI feature 165'),  # importance: 0.0068
+    Feature('FNC61', float, 'functional MRI feature 61'),  # importance: 0.0068
+    Feature('FNC278', float, 'functional MRI feature 278'),  # importance: 0.0067
+    Feature('FNC208', float, 'functional MRI feature 208'),  # importance: 0.0066
+    Feature('FNC136', float, 'functional MRI feature 136'),  # importance: 0.0065
+    Feature('FNC5', float, 'functional MRI feature 5'),  # importance: 0.0049
+    Feature('FNC189', float, 'functional MRI feature 189'),  # importance: 0.0047
     ##################################################
     ##################################################
-    # Feature('FNC232', float),  # importance: 0.0043
-    # Feature('FNC376', float),  # importance: 0.0041
-    # Feature('SBM_map13', float),  # importance: 0.0035
-    # Feature('FNC167', float),  # importance: 0.0032
-    # Feature('FNC263', float),  # importance: 0.0025
-    # Feature('FNC20', float),  # importance: 0.0025
-    # Feature('FNC357', float),  # importance: 0.0007
-    # Feature('FNC352', float),  # importance: 0.0
-    # Feature('FNC39', float),  # importance: 0.0
-    # Feature('FNC229', float),  # importance: 0.0
-    # Feature('FNC129', float),  # importance: 0.0
-    # Feature('SBM_map71', float),  # importance: 0.0
-    # Feature('FNC296', float),  # importance: 0.0
-    # Feature('FNC209', float),  # importance: 0.0
-    # Feature('FNC305', float),  # importance: 0.0
-    # Feature('SBM_map26', float),  # importance: 0.0
-    # Feature('FNC211', float),  # importance: 0.0
-    # Feature('FNC144', float),  # importance: 0.0
-    # Feature('FNC362', float),  # importance: 0.0
-    # Feature('FNC22', float),  # importance: 0.0
-    # Feature('FNC182', float),  # importance: 0.0
-    # Feature('FNC2', float),  # importance: 0.0
-    # Feature('FNC107', float),  # importance: 0.0
-    # Feature('FNC98', float),  # importance: 0.0
-    # Feature('FNC145', float),  # importance: 0.0
-    # Feature('FNC43', float),  # importance: 0.0
-    # Feature('FNC162', float),  # importance: 0.0
-    # Feature('FNC84', float),  # importance: 0.0
-    # Feature('FNC9', float),  # importance: 0.0
-    # Feature('FNC283', float),  # importance: 0.0
-    # Feature('FNC146', float),  # importance: 0.0
-    # Feature('FNC60', float),  # importance: 0.0
-    # Feature('FNC1', float),  # importance: 0.0
-    # Feature('FNC184', float),  # importance: 0.0
-    # Feature('FNC176', float),  # importance: 0.0
-    # Feature('SBM_map51', float),  # importance: 0.0
-    # Feature('FNC222', float),  # importance: 0.0
-    # Feature('FNC56', float),  # importance: 0.0
-    # Feature('FNC254', float),  # importance: 0.0
-    # Feature('FNC282', float),  # importance: 0.0
-    # Feature('FNC78', float),  # importance: 0.0
-    # Feature('FNC50', float),  # importance: 0.0
-    # Feature('FNC6', float),  # importance: 0.0
-    # Feature('FNC186', float),  # importance: 0.0
-    # Feature('FNC331', float),  # importance: 0.0
-    # Feature('FNC168', float),  # importance: 0.0
-    # Feature('FNC45', float),  # importance: 0.0
-    # Feature('FNC69', float),  # importance: 0.0
-    # Feature('FNC73', float),  # importance: 0.0
-    # Feature('FNC117', float),  # importance: 0.0
-    # Feature('FNC173', float),  # importance: 0.0
-    # Feature('FNC109', float),  # importance: 0.0
-    # Feature('FNC319', float),  # importance: 0.0
-    # Feature('FNC7', float),  # importance: 0.0
-    # Feature('FNC215', float),  # importance: 0.0
-    # Feature('FNC302', float),  # importance: 0.0
-    # Feature('FNC36', float),  # importance: 0.0
-    # Feature('FNC174', float),  # importance: 0.0
-    # Feature('FNC90', float),  # importance: 0.0
-    # Feature('FNC225', float),  # importance: 0.0
-    # Feature('FNC212', float),  # importance: 0.0
-    # Feature('FNC77', float),  # importance: 0.0
-    # Feature('SBM_map45', float),  # importance: 0.0
-    # Feature('FNC371', float),  # importance: 0.0
-    # Feature('FNC370', float),  # importance: 0.0
-    # Feature('FNC157', float),  # importance: 0.0
-    # Feature('SBM_map1', float),  # importance: 0.0
-    # Feature('FNC3', float),  # importance: 0.0
-    # Feature('FNC164', float),  # importance: 0.0
-    # Feature('FNC128', float),  # importance: 0.0
-    # Feature('FNC231', float),  # importance: 0.0
-    # Feature('FNC286', float),  # importance: 0.0
-    # Feature('FNC138', float),  # importance: 0.0
-    # Feature('FNC193', float),  # importance: 0.0
-    # Feature('SBM_map8', float),  # importance: 0.0
-    # Feature('FNC369', float),  # importance: 0.0
-    # Feature('FNC299', float),  # importance: 0.0
-    # Feature('SBM_map2', float),  # importance: 0.0
-    # Feature('FNC130', float),  # importance: 0.0
-    # Feature('FNC126', float),  # importance: 0.0
-    # Feature('FNC197', float),  # importance: 0.0
-    # Feature('FNC111', float),  # importance: 0.0
-    # Feature('FNC312', float),  # importance: 0.0
-    # Feature('FNC142', float),  # importance: 0.0
-    # Feature('FNC300', float),  # importance: 0.0
-    # Feature('FNC85', float),  # importance: 0.0
-    # Feature('FNC104', float),  # importance: 0.0
-    # Feature('FNC242', float),  # importance: 0.0
-    # Feature('FNC114', float),  # importance: 0.0
-    # Feature('FNC342', float),  # importance: 0.0
-    # Feature('SBM_map55', float),  # importance: 0.0
-    # Feature('FNC21', float),  # importance: 0.0
-    # Feature('FNC15', float),  # importance: 0.0
-    # Feature('FNC235', float),  # importance: 0.0
-    # Feature('FNC99', float),  # importance: 0.0
-    # Feature('FNC47', float),  # importance: 0.0
-    # Feature('FNC274', float),  # importance: 0.0
-    # Feature('FNC304', float),  # importance: 0.0
-    # Feature('FNC100', float),  # importance: 0.0
-    # Feature('FNC344', float),  # importance: 0.0
-    # Feature('FNC310', float),  # importance: 0.0
-    # Feature('FNC377', float),  # importance: 0.0
-    # Feature('FNC248', float),  # importance: 0.0
-    # Feature('FNC292', float),  # importance: 0.0
-    # Feature('FNC323', float),  # importance: 0.0
-    # Feature('FNC249', float),  # importance: 0.0
-    # Feature('FNC124', float),  # importance: 0.0
-    # Feature('FNC332', float),  # importance: 0.0
-    # Feature('FNC350', float),  # importance: 0.0
-    # Feature('FNC64', float),  # importance: 0.0
-    # Feature('FNC375', float),  # importance: 0.0
+    # Feature('FNC232', float, 'functional MRI feature 232'),  # importance: 0.0043
+    # Feature('FNC376', float, 'functional MRI feature 376'),  # importance: 0.0041
+    # Feature('SBM_map13', float, 'structural ICA map feature 13'),  # importance: 0.0035
+    # Feature('FNC167', float, 'functional MRI feature 167'),  # importance: 0.0032
+    # Feature('FNC263', float, 'functional MRI feature 263'),  # importance: 0.0025
+    # Feature('FNC20', float, 'functional MRI feature 20'),  # importance: 0.0025
+    # Feature('FNC357', float, 'functional MRI feature 357'),  # importance: 0.0007
+    # Feature('FNC352', float, 'functional MRI feature 352'),  # importance: 0.0
+    # Feature('FNC39', float, 'functional MRI feature 39'),  # importance: 0.0
+    # Feature('FNC229', float, 'functional MRI feature 229'),  # importance: 0.0
+    # Feature('FNC129', float, 'functional MRI feature 129'),  # importance: 0.0
+    # Feature('SBM_map71', float, 'structural ICA map feature 71'),  # importance: 0.0
+    # Feature('FNC296', float, 'functional MRI feature 296'),  # importance: 0.0
+    # Feature('FNC209', float, 'functional MRI feature 209'),  # importance: 0.0
+    # Feature('FNC305', float, 'functional MRI feature 305'),  # importance: 0.0
+    # Feature('SBM_map26', float, 'structural ICA map feature 26'),  # importance: 0.0
+    # Feature('FNC211', float, 'functional MRI feature 211'),  # importance: 0.0
+    # Feature('FNC144', float, 'functional MRI feature 144'),  # importance: 0.0
+    # Feature('FNC362', float, 'functional MRI feature 362'),  # importance: 0.0
+    # Feature('FNC22', float, 'functional MRI feature 22'),  # importance: 0.0
+    # Feature('FNC182', float, 'functional MRI feature 182'),  # importance: 0.0
+    # Feature('FNC2', float, 'functional MRI feature 2'),  # importance: 0.0
+    # Feature('FNC107', float, 'functional MRI feature 107'),  # importance: 0.0
+    # Feature('FNC98', float, 'functional MRI feature 98'),  # importance: 0.0
+    # Feature('FNC145', float, 'functional MRI feature 145'),  # importance: 0.0
+    # Feature('FNC43', float, 'functional MRI feature 43'),  # importance: 0.0
+    # Feature('FNC162', float, 'functional MRI feature 162'),  # importance: 0.0
+    # Feature('FNC84', float, 'functional MRI feature 84'),  # importance: 0.0
+    # Feature('FNC9', float, 'functional MRI feature 9'),  # importance: 0.0
+    # Feature('FNC283', float, 'functional MRI feature 283'),  # importance: 0.0
+    # Feature('FNC146', float, 'functional MRI feature 146'),  # importance: 0.0
+    # Feature('FNC60', float, 'functional MRI feature 60'),  # importance: 0.0
+    # Feature('FNC1', float, 'functional MRI feature 1'),  # importance: 0.0
+    # Feature('FNC184', float, 'functional MRI feature 184'),  # importance: 0.0
+    # Feature('FNC176', float, 'functional MRI feature 176'),  # importance: 0.0
+    # Feature('SBM_map51', float, 'structural ICA map feature 51'),  # importance: 0.0
+    # Feature('FNC222', float, 'functional MRI feature 222'),  # importance: 0.0
+    # Feature('FNC56', float, 'functional MRI feature 56'),  # importance: 0.0
+    # Feature('FNC254', float, 'functional MRI feature 254'),  # importance: 0.0
+    # Feature('FNC282', float, 'functional MRI feature 282'),  # importance: 0.0
+    # Feature('FNC78', float, 'functional MRI feature 78'),  # importance: 0.0
+    # Feature('FNC50', float, 'functional MRI feature 50'),  # importance: 0.0
+    # Feature('FNC6', float, 'functional MRI feature 6'),  # importance: 0.0
+    # Feature('FNC186', float, 'functional MRI feature 186'),  # importance: 0.0
+    # Feature('FNC331', float, 'functional MRI feature 331'),  # importance: 0.0
+    # Feature('FNC168', float, 'functional MRI feature 168'),  # importance: 0.0
+    # Feature('FNC45', float, 'functional MRI feature 45'),  # importance: 0.0
+    # Feature('FNC69', float, 'functional MRI feature 69'),  # importance: 0.0
+    # Feature('FNC73', float, 'functional MRI feature 73'),  # importance: 0.0
+    # Feature('FNC117', float, 'functional MRI feature 117'),  # importance: 0.0
+    # Feature('FNC173', float, 'functional MRI feature 173'),  # importance: 0.0
+    # Feature('FNC109', float, 'functional MRI feature 109'),  # importance: 0.0
+    # Feature('FNC319', float, 'functional MRI feature 319'),  # importance: 0.0
+    # Feature('FNC7', float, 'functional MRI feature 7'),  # importance: 0.0
+    # Feature('FNC215', float, 'functional MRI feature 215'),  # importance: 0.0
+    # Feature('FNC302', float, 'functional MRI feature 302'),  # importance: 0.0
+    # Feature('FNC36', float, 'functional MRI feature 36'),  # importance: 0.0
+    # Feature('FNC174', float, 'functional MRI feature 174'),  # importance: 0.0
+    # Feature('FNC90', float, 'functional MRI feature 90'),  # importance: 0.0
+    # Feature('FNC225', float, 'functional MRI feature 225'),  # importance: 0.0
+    # Feature('FNC212', float, 'functional MRI feature 212'),  # importance: 0.0
+    # Feature('FNC77', float, 'functional MRI feature 77'),  # importance: 0.0
+    # Feature('SBM_map45', float, 'structural ICA map feature 45'),  # importance: 0.0
+    # Feature('FNC371', float, 'functional MRI feature 371'),  # importance: 0.0
+    # Feature('FNC370', float, 'functional MRI feature 370'),  # importance: 0.0
+    # Feature('FNC157', float, 'functional MRI feature 157'),  # importance: 0.0
+    # Feature('SBM_map1', float, 'structural ICA map feature 1'),  # importance: 0.0
+    # Feature('FNC3', float, 'functional MRI feature 3'),  # importance: 0.0
+    # Feature('FNC164', float, 'functional MRI feature 164'),  # importance: 0.0
+    # Feature('FNC128', float, 'functional MRI feature 128'),  # importance: 0.0
+    # Feature('FNC231', float, 'functional MRI feature 231'),  # importance: 0.0
+    # Feature('FNC286', float, 'functional MRI feature 286'),  # importance: 0.0
+    # Feature('FNC138', float, 'functional MRI feature 138'),  # importance: 0.0
+    # Feature('FNC193', float, 'functional MRI feature 193'),  # importance: 0.0
+    # Feature('SBM_map8', float, 'structural ICA map feature 8'),  # importance: 0.0
+    # Feature('FNC369', float, 'functional MRI feature 369'),  # importance: 0.0
+    # Feature('FNC299', float, 'functional MRI feature 299'),  # importance: 0.0
+    # Feature('SBM_map2', float, 'structural ICA map feature 2'),  # importance: 0.0
+    # Feature('FNC130', float, 'functional MRI feature 130'),  # importance: 0.0
+    # Feature('FNC126', float, 'functional MRI feature 126'),  # importance: 0.0
+    # Feature('FNC197', float, 'functional MRI feature 197'),  # importance: 0.0
+    # Feature('FNC111', float, 'functional MRI feature 111'),  # importance: 0.0
+    # Feature('FNC312', float, 'functional MRI feature 312'),  # importance: 0.0
+    # Feature('FNC142', float, 'functional MRI feature 142'),  # importance: 0.0
+    # Feature('FNC300', float, 'functional MRI feature 300'),  # importance: 0.0
+    # Feature('FNC85', float, 'functional MRI feature 85'),  # importance: 0.0
+    # Feature('FNC104', float, 'functional MRI feature 104'),  # importance: 0.0
+    # Feature('FNC242', float, 'functional MRI feature 242'),  # importance: 0.0
+    # Feature('FNC114', float, 'functional MRI feature 114'),  # importance: 0.0
+    # Feature('FNC342', float, 'functional MRI feature 342'),  # importance: 0.0
+    # Feature('SBM_map55', float, 'structural ICA map feature 55'),  # importance: 0.0
+    # Feature('FNC21', float, 'functional MRI feature 21'),  # importance: 0.0
+    # Feature('FNC15', float, 'functional MRI feature 15'),  # importance: 0.0
+    # Feature('FNC235', float, 'functional MRI feature 235'),  # importance: 0.0
+    # Feature('FNC99', float, 'functional MRI feature 99'),  # importance: 0.0
+    # Feature('FNC47', float, 'functional MRI feature 47'),  # importance: 0.0
+    # Feature('FNC274', float, 'functional MRI feature 274'),  # importance: 0.0
+    # Feature('FNC304', float, 'functional MRI feature 304'),  # importance: 0.0
+    # Feature('FNC100', float, 'functional MRI feature 100'),  # importance: 0.0
+    # Feature('FNC344', float, 'functional MRI feature 344'),  # importance: 0.0
+    # Feature('FNC310', float, 'functional MRI feature 310'),  # importance: 0.0
+    # Feature('FNC377', float, 'functional MRI feature 377'),  # importance: 0.0
+    # Feature('FNC248', float, 'functional MRI feature 248'),  # importance: 0.0
+    # Feature('FNC292', float, 'functional MRI feature 292'),  # importance: 0.0
+    # Feature('FNC323', float, 'functional MRI feature 323'),  # importance: 0.0
+    # Feature('FNC249', float, 'functional MRI feature 249'),  # importance: 0.0
+    # Feature('FNC124', float, 'functional MRI feature 124'),  # importance: 0.0
+    # Feature('FNC332', float, 'functional MRI feature 332'),  # importance: 0.0
+    # Feature('FNC350', float, 'functional MRI feature 350'),  # importance: 0.0
+    # Feature('FNC64', float, 'functional MRI feature 64'),  # importance: 0.0
+    # Feature('FNC375', float, 'functional MRI feature 375'),  # importance: 0.0
     # Feature('Id', float),  # importance: 0.0
-    # Feature('FNC76', float),  # importance: 0.0
-    # Feature('FNC70', float),  # importance: 0.0
-    # Feature('FNC351', float),  # importance: 0.0
-    # Feature('FNC218', float),  # importance: 0.0
-    # Feature('FNC199', float),  # importance: 0.0
-    # Feature('FNC55', float),  # importance: 0.0
-    # Feature('FNC59', float),  # importance: 0.0
-    # Feature('FNC267', float),  # importance: 0.0
-    # Feature('FNC178', float),  # importance: 0.0
-    # Feature('FNC143', float),  # importance: 0.0
-    # Feature('FNC269', float),  # importance: 0.0
-    # Feature('FNC32', float),  # importance: 0.0
-    # Feature('FNC281', float),  # importance: 0.0
-    # Feature('FNC373', float),  # importance: 0.0
-    # Feature('FNC303', float),  # importance: 0.0
-    # Feature('FNC236', float),  # importance: 0.0
-    # Feature('FNC185', float),  # importance: 0.0
-    # Feature('SBM_map32', float),  # importance: 0.0
-    # Feature('FNC285', float),  # importance: 0.0
-    # Feature('FNC10', float),  # importance: 0.0
-    # Feature('SBM_map52', float),  # importance: 0.0
-    # Feature('FNC359', float),  # importance: 0.0
-    # Feature('FNC53', float),  # importance: 0.0
-    # Feature('FNC150', float),  # importance: 0.0
-    # Feature('FNC205', float),  # importance: 0.0
-    # Feature('FNC82', float),  # importance: 0.0
-    # Feature('FNC72', float),  # importance: 0.0
-    # Feature('FNC37', float),  # importance: 0.0
-    # Feature('FNC35', float),  # importance: 0.0
-    # Feature('FNC246', float),  # importance: 0.0
-    # Feature('FNC361', float),  # importance: 0.0
-    # Feature('FNC333', float),  # importance: 0.0
-    # Feature('FNC374', float),  # importance: 0.0
-    # Feature('FNC207', float),  # importance: 0.0
-    # Feature('FNC135', float),  # importance: 0.0
-    # Feature('FNC95', float),  # importance: 0.0
-    # Feature('FNC160', float),  # importance: 0.0
-    # Feature('FNC42', float),  # importance: 0.0
-    # Feature('FNC31', float),  # importance: 0.0
-    # Feature('FNC201', float),  # importance: 0.0
-    # Feature('FNC358', float),  # importance: 0.0
-    # Feature('FNC206', float),  # importance: 0.0
-    # Feature('FNC24', float),  # importance: 0.0
-    # Feature('FNC87', float),  # importance: 0.0
-    # Feature('FNC336', float),  # importance: 0.0
-    # Feature('FNC13', float),  # importance: 0.0
-    # Feature('FNC297', float),  # importance: 0.0
-    # Feature('FNC288', float),  # importance: 0.0
-    # Feature('FNC147', float),  # importance: 0.0
-    # Feature('FNC329', float),  # importance: 0.0
-    # Feature('FNC202', float),  # importance: 0.0
-    # Feature('FNC325', float),  # importance: 0.0
-    # Feature('FNC343', float),  # importance: 0.0
-    # Feature('FNC321', float),  # importance: 0.0
-    # Feature('FNC378', float),  # importance: 0.0
-    # Feature('FNC28', float),  # importance: 0.0
-    # Feature('FNC311', float),  # importance: 0.0
-    # Feature('FNC308', float),  # importance: 0.0
-    # Feature('FNC102', float),  # importance: 0.0
-    # Feature('FNC307', float),  # importance: 0.0
-    # Feature('FNC250', float),  # importance: 0.0
-    # Feature('FNC188', float),  # importance: 0.0
-    # Feature('SBM_map6', float),  # importance: 0.0
-    # Feature('SBM_map61', float),  # importance: 0.0
-    # Feature('FNC91', float),  # importance: 0.0
-    # Feature('FNC347', float),  # importance: 0.0
-    # Feature('FNC262', float),  # importance: 0.0
-    # Feature('FNC169', float),  # importance: 0.0
-    # Feature('FNC118', float),  # importance: 0.0
-    # Feature('FNC190', float),  # importance: 0.0
-    # Feature('FNC68', float),  # importance: 0.0
-    # Feature('FNC314', float),  # importance: 0.0
-    # Feature('FNC348', float),  # importance: 0.0
-    # Feature('FNC210', float),  # importance: 0.0
-    # Feature('FNC217', float),  # importance: 0.0
-    # Feature('FNC4', float),  # importance: 0.0
-    # Feature('FNC94', float),  # importance: 0.0
-    # Feature('FNC132', float),  # importance: 0.0
-    # Feature('FNC172', float),  # importance: 0.0
-    # Feature('FNC83', float),  # importance: 0.0
-    # Feature('FNC356', float),  # importance: 0.0
-    # Feature('FNC317', float),  # importance: 0.0
-    # Feature('FNC239', float),  # importance: 0.0
-    # Feature('FNC272', float),  # importance: 0.0
-    # Feature('SBM_map43', float),  # importance: 0.0
-    # Feature('FNC341', float),  # importance: 0.0
-    # Feature('FNC192', float),  # importance: 0.0
-    # Feature('FNC113', float),  # importance: 0.0
-    # Feature('FNC58', float),  # importance: 0.0
-    # Feature('FNC221', float),  # importance: 0.0
-    # Feature('FNC71', float),  # importance: 0.0
-    # Feature('FNC334', float),  # importance: 0.0
-    # Feature('FNC79', float),  # importance: 0.0
-    # Feature('FNC251', float),  # importance: 0.0
-    # Feature('FNC141', float),  # importance: 0.0
-    # Feature('FNC200', float),  # importance: 0.0
-    # Feature('FNC177', float),  # importance: 0.0
-    # Feature('FNC322', float),  # importance: 0.0
-    # Feature('FNC220', float),  # importance: 0.0
-    # Feature('FNC93', float),  # importance: 0.0
-    # Feature('FNC8', float),  # importance: 0.0
-    # Feature('FNC170', float),  # importance: 0.0
-    # Feature('FNC134', float),  # importance: 0.0
-    # Feature('FNC44', float),  # importance: 0.0
-    # Feature('FNC234', float),  # importance: 0.0
-    # Feature('FNC277', float),  # importance: 0.0
-    # Feature('FNC223', float),  # importance: 0.0
-    # Feature('SBM_map28', float),  # importance: 0.0
-    # Feature('FNC25', float),  # importance: 0.0
-    # Feature('FNC152', float),  # importance: 0.0
-    # Feature('FNC196', float),  # importance: 0.0
-    # Feature('FNC115', float),  # importance: 0.0
-    # Feature('FNC155', float),  # importance: 0.0
-    # Feature('FNC309', float),  # importance: 0.0
-    # Feature('FNC338', float),  # importance: 0.0
-    # Feature('FNC180', float),  # importance: 0.0
-    # Feature('FNC367', float),  # importance: 0.0
-    # Feature('FNC255', float),  # importance: 0.0
-    # Feature('FNC137', float),  # importance: 0.0
-    # Feature('FNC62', float),  # importance: 0.0
-    # Feature('FNC51', float),  # importance: 0.0
-    # Feature('FNC14', float),  # importance: 0.0
-    # Feature('FNC54', float),  # importance: 0.0
-    # Feature('FNC224', float),  # importance: 0.0
-    # Feature('FNC198', float),  # importance: 0.0
-    # Feature('FNC363', float),  # importance: 0.0
-    # Feature('FNC203', float),  # importance: 0.0
-    # Feature('FNC227', float),  # importance: 0.0
-    # Feature('SBM_map64', float),  # importance: 0.0
-    # Feature('FNC291', float),  # importance: 0.0
-    # Feature('FNC258', float),  # importance: 0.0
-    # Feature('FNC256', float),  # importance: 0.0
-    # Feature('FNC213', float),  # importance: 0.0
-    # Feature('FNC204', float),  # importance: 0.0
-    # Feature('FNC57', float),  # importance: 0.0
-    # Feature('FNC16', float),  # importance: 0.0
-    # Feature('FNC238', float),  # importance: 0.0
-    # Feature('FNC74', float),  # importance: 0.0
-    # Feature('FNC191', float),  # importance: 0.0
-    # Feature('FNC276', float),  # importance: 0.0
-    # Feature('FNC346', float),  # importance: 0.0
-    # Feature('FNC52', float),  # importance: 0.0
-    # Feature('FNC97', float),  # importance: 0.0
-    # Feature('FNC372', float),  # importance: 0.0
-    # Feature('FNC316', float),  # importance: 0.0
-    # Feature('FNC253', float),  # importance: 0.0
-    # Feature('FNC26', float),  # importance: 0.0
-    # Feature('FNC101', float),  # importance: 0.0
-    # Feature('FNC89', float),  # importance: 0.0
-    # Feature('SBM_map74', float),  # importance: 0.0
-    # Feature('FNC368', float),  # importance: 0.0
-    # Feature('FNC179', float),  # importance: 0.0
-    # Feature('FNC121', float),  # importance: 0.0
-    # Feature('FNC49', float),  # importance: 0.0
-    # Feature('FNC355', float),  # importance: 0.0
-    # Feature('FNC12', float),  # importance: 0.0
-    # Feature('FNC139', float),  # importance: 0.0
-    # Feature('FNC116', float),  # importance: 0.0
-    # Feature('FNC275', float),  # importance: 0.0
-    # Feature('FNC112', float),  # importance: 0.0
-    # Feature('FNC81', float),  # importance: 0.0
-    # Feature('FNC264', float),  # importance: 0.0
-    # Feature('FNC364', float),  # importance: 0.0
-    # Feature('FNC271', float),  # importance: 0.0
-    # Feature('SBM_map40', float),  # importance: 0.0
-    # Feature('FNC38', float),  # importance: 0.0
-    # Feature('FNC153', float),  # importance: 0.0
-    # Feature('SBM_map73', float),  # importance: 0.0
-    # Feature('FNC294', float),  # importance: 0.0
-    # Feature('FNC328', float),  # importance: 0.0
-    # Feature('FNC46', float),  # importance: 0.0
-    # Feature('SBM_map22', float),  # importance: 0.0
-    # Feature('FNC339', float),  # importance: 0.0
-    # Feature('FNC103', float),  # importance: 0.0
-    # Feature('SBM_map4', float),  # importance: 0.0
-    # Feature('FNC287', float),  # importance: 0.0
-    # Feature('FNC127', float),  # importance: 0.0
-    # Feature('FNC241', float),  # importance: 0.0
-    # Feature('FNC140', float),  # importance: 0.0
-    # Feature('FNC280', float),  # importance: 0.0
-    # Feature('FNC260', float),  # importance: 0.0
-    # Feature('FNC88', float),  # importance: 0.0
-    # Feature('FNC214', float),  # importance: 0.0
-    # Feature('FNC30', float),  # importance: 0.0
-    # Feature('FNC86', float),  # importance: 0.0
-    # Feature('FNC63', float),  # importance: 0.0
-    # Feature('FNC175', float),  # importance: 0.0
-    # Feature('FNC340', float),  # importance: 0.0
-    # Feature('FNC268', float),  # importance: 0.0
-    # Feature('FNC151', float),  # importance: 0.0
-    # Feature('SBM_map48', float),  # importance: 0.0
-    # Feature('SBM_map3', float),  # importance: 0.0
-    # Feature('FNC360', float),  # importance: 0.0
-    # Feature('FNC259', float),  # importance: 0.0
-    # Feature('FNC34', float),  # importance: 0.0
-    # Feature('FNC289', float),  # importance: 0.0
-    # Feature('FNC326', float),  # importance: 0.0
-    # Feature('FNC273', float),  # importance: 0.0
-    # Feature('FNC41', float),  # importance: 0.0
-    # Feature('FNC266', float),  # importance: 0.0
-    # Feature('FNC298', float),  # importance: 0.0
-    # Feature('FNC257', float),  # importance: 0.0
-    # Feature('FNC240', float),  # importance: 0.0
-    # Feature('FNC131', float),  # importance: 0.0
-    # Feature('FNC245', float),  # importance: 0.0
-    # Feature('FNC366', float),  # importance: 0.0
-    # Feature('FNC284', float),  # importance: 0.0
-    # Feature('FNC159', float),  # importance: 0.0
-    # Feature('FNC120', float),  # importance: 0.0
-    # Feature('FNC11', float),  # importance: 0.0
-    # Feature('FNC216', float),  # importance: 0.0
-    # Feature('FNC156', float),  # importance: 0.0
-    # Feature('FNC320', float),  # importance: 0.0
-    # Feature('FNC96', float),  # importance: 0.0
-    # Feature('FNC119', float),  # importance: 0.0
-    # Feature('FNC40', float),  # importance: 0.0
-    # Feature('FNC324', float),  # importance: 0.0
-    # Feature('FNC187', float),  # importance: 0.0
-    # Feature('FNC163', float),  # importance: 0.0
-    # Feature('FNC265', float),  # importance: 0.0
-    # Feature('FNC349', float),  # importance: 0.0
-    # Feature('FNC219', float),  # importance: 0.0
-    # Feature('SBM_map72', float),  # importance: 0.0
-    # Feature('FNC195', float),  # importance: 0.0
-    # Feature('FNC18', float),  # importance: 0.0
-    # Feature('FNC313', float),  # importance: 0.0
-    # Feature('FNC354', float),  # importance: 0.0
-    # Feature('FNC125', float),  # importance: 0.0
-    # Feature('FNC19', float),  # importance: 0.0
-    # Feature('FNC122', float),  # importance: 0.0
-    # Feature('FNC261', float),  # importance: 0.0
-    # Feature('FNC247', float),  # importance: 0.0
-    # Feature('FNC17', float),  # importance: 0.0
-    # Feature('FNC228', float),  # importance: 0.0
-    # Feature('FNC27', float),  # importance: 0.0
-    # Feature('FNC92', float),  # importance: 0.0
-    # Feature('SBM_map75', float),  # importance: 0.0
-    # Feature('FNC108', float),  # importance: 0.0
-    # Feature('FNC29', float),  # importance: 0.0
-    # Feature('FNC154', float),  # importance: 0.0
-    # Feature('FNC335', float),  # importance: 0.0
-    # Feature('FNC65', float),  # importance: 0.0
-    # Feature('FNC106', float),  # importance: 0.0
-    # Feature('FNC66', float),  # importance: 0.0
-    # Feature('FNC23', float),  # importance: 0.0
-    # Feature('FNC123', float),  # importance: 0.0
-    # Feature('FNC183', float),  # importance: 0.0
-    # Feature('FNC365', float),  # importance: 0.0
-    # Feature('FNC318', float),  # importance: 0.0
-    # Feature('FNC244', float),  # importance: 0.0
-    # Feature('FNC252', float),  # importance: 0.0
-    # Feature('FNC148', float),  # importance: 0.0
-    # Feature('FNC330', float),  # importance: 0.0
-    # Feature('FNC171', float),  # importance: 0.0
-    # Feature('SBM_map10', float),  # importance: 0.0
-    # Feature('FNC327', float),  # importance: 0.0
-    # Feature('SBM_map5', float),  # importance: 0.0
-    # Feature('SBM_map69', float),  # importance: 0.0
-    # Feature('FNC279', float),  # importance: 0.0
-    # Feature('FNC181', float),  # importance: 0.0
-    # Feature('FNC166', float),  # importance: 0.0
-    # Feature('FNC306', float),  # importance: 0.0
-    # Feature('FNC149', float),  # importance: 0.0
-    # Feature('FNC133', float),  # importance: 0.0
-    # Feature('FNC230', float),  # importance: 0.0
-    # Feature('FNC315', float),  # importance: 0.0
+    # Feature('FNC76', float, 'functional MRI feature 76'),  # importance: 0.0
+    # Feature('FNC70', float, 'functional MRI feature 70'),  # importance: 0.0
+    # Feature('FNC351', float, 'functional MRI feature 351'),  # importance: 0.0
+    # Feature('FNC218', float, 'functional MRI feature 218'),  # importance: 0.0
+    # Feature('FNC199', float, 'functional MRI feature 199'),  # importance: 0.0
+    # Feature('FNC55', float, 'functional MRI feature 55'),  # importance: 0.0
+    # Feature('FNC59', float, 'functional MRI feature 59'),  # importance: 0.0
+    # Feature('FNC267', float, 'functional MRI feature 267'),  # importance: 0.0
+    # Feature('FNC178', float, 'functional MRI feature 178'),  # importance: 0.0
+    # Feature('FNC143', float, 'functional MRI feature 143'),  # importance: 0.0
+    # Feature('FNC269', float, 'functional MRI feature 269'),  # importance: 0.0
+    # Feature('FNC32', float, 'functional MRI feature 32'),  # importance: 0.0
+    # Feature('FNC281', float, 'functional MRI feature 281'),  # importance: 0.0
+    # Feature('FNC373', float, 'functional MRI feature 373'),  # importance: 0.0
+    # Feature('FNC303', float, 'functional MRI feature 303'),  # importance: 0.0
+    # Feature('FNC236', float, 'functional MRI feature 236'),  # importance: 0.0
+    # Feature('FNC185', float, 'functional MRI feature 185'),  # importance: 0.0
+    # Feature('SBM_map32', float, 'structural ICA map feature 32'),  # importance: 0.0
+    # Feature('FNC285', float, 'functional MRI feature 285'),  # importance: 0.0
+    # Feature('FNC10', float, 'functional MRI feature 10'),  # importance: 0.0
+    # Feature('SBM_map52', float, 'structural ICA map feature 52'),  # importance: 0.0
+    # Feature('FNC359', float, 'functional MRI feature 359'),  # importance: 0.0
+    # Feature('FNC53', float, 'functional MRI feature 53'),  # importance: 0.0
+    # Feature('FNC150', float, 'functional MRI feature 150'),  # importance: 0.0
+    # Feature('FNC205', float, 'functional MRI feature 205'),  # importance: 0.0
+    # Feature('FNC82', float, 'functional MRI feature 82'),  # importance: 0.0
+    # Feature('FNC72', float, 'functional MRI feature 72'),  # importance: 0.0
+    # Feature('FNC37', float, 'functional MRI feature 37'),  # importance: 0.0
+    # Feature('FNC35', float, 'functional MRI feature 35'),  # importance: 0.0
+    # Feature('FNC246', float, 'functional MRI feature 246'),  # importance: 0.0
+    # Feature('FNC361', float, 'functional MRI feature 361'),  # importance: 0.0
+    # Feature('FNC333', float, 'functional MRI feature 333'),  # importance: 0.0
+    # Feature('FNC374', float, 'functional MRI feature 374'),  # importance: 0.0
+    # Feature('FNC207', float, 'functional MRI feature 207'),  # importance: 0.0
+    # Feature('FNC135', float, 'functional MRI feature 135'),  # importance: 0.0
+    # Feature('FNC95', float, 'functional MRI feature 95'),  # importance: 0.0
+    # Feature('FNC160', float, 'functional MRI feature 160'),  # importance: 0.0
+    # Feature('FNC42', float, 'functional MRI feature 42'),  # importance: 0.0
+    # Feature('FNC31', float, 'functional MRI feature 31'),  # importance: 0.0
+    # Feature('FNC201', float, 'functional MRI feature 201'),  # importance: 0.0
+    # Feature('FNC358', float, 'functional MRI feature 358'),  # importance: 0.0
+    # Feature('FNC206', float, 'functional MRI feature 206'),  # importance: 0.0
+    # Feature('FNC24', float, 'functional MRI feature 24'),  # importance: 0.0
+    # Feature('FNC87', float, 'functional MRI feature 87'),  # importance: 0.0
+    # Feature('FNC336', float, 'functional MRI feature 336'),  # importance: 0.0
+    # Feature('FNC13', float, 'functional MRI feature 13'),  # importance: 0.0
+    # Feature('FNC297', float, 'functional MRI feature 297'),  # importance: 0.0
+    # Feature('FNC288', float, 'functional MRI feature 288'),  # importance: 0.0
+    # Feature('FNC147', float, 'functional MRI feature 147'),  # importance: 0.0
+    # Feature('FNC329', float, 'functional MRI feature 329'),  # importance: 0.0
+    # Feature('FNC202', float, 'functional MRI feature 202'),  # importance: 0.0
+    # Feature('FNC325', float, 'functional MRI feature 325'),  # importance: 0.0
+    # Feature('FNC343', float, 'functional MRI feature 343'),  # importance: 0.0
+    # Feature('FNC321', float, 'functional MRI feature 321'),  # importance: 0.0
+    # Feature('FNC378', float, 'functional MRI feature 378'),  # importance: 0.0
+    # Feature('FNC28', float, 'functional MRI feature 28'),  # importance: 0.0
+    # Feature('FNC311', float, 'functional MRI feature 311'),  # importance: 0.0
+    # Feature('FNC308', float, 'functional MRI feature 308'),  # importance: 0.0
+    # Feature('FNC102', float, 'functional MRI feature 102'),  # importance: 0.0
+    # Feature('FNC307', float, 'functional MRI feature 307'),  # importance: 0.0
+    # Feature('FNC250', float, 'functional MRI feature 250'),  # importance: 0.0
+    # Feature('FNC188', float, 'functional MRI feature 188'),  # importance: 0.0
+    # Feature('SBM_map6', float, 'structural ICA map feature 6'),  # importance: 0.0
+    # Feature('SBM_map61', float, 'structural ICA map feature 61'),  # importance: 0.0
+    # Feature('FNC91', float, 'functional MRI feature 91'),  # importance: 0.0
+    # Feature('FNC347', float, 'functional MRI feature 347'),  # importance: 0.0
+    # Feature('FNC262', float, 'functional MRI feature 262'),  # importance: 0.0
+    # Feature('FNC169', float, 'functional MRI feature 169'),  # importance: 0.0
+    # Feature('FNC118', float, 'functional MRI feature 118'),  # importance: 0.0
+    # Feature('FNC190', float, 'functional MRI feature 190'),  # importance: 0.0
+    # Feature('FNC68', float, 'functional MRI feature 68'),  # importance: 0.0
+    # Feature('FNC314', float, 'functional MRI feature 314'),  # importance: 0.0
+    # Feature('FNC348', float, 'functional MRI feature 348'),  # importance: 0.0
+    # Feature('FNC210', float, 'functional MRI feature 210'),  # importance: 0.0
+    # Feature('FNC217', float, 'functional MRI feature 217'),  # importance: 0.0
+    # Feature('FNC4', float, 'functional MRI feature 4'),  # importance: 0.0
+    # Feature('FNC94', float, 'functional MRI feature 94'),  # importance: 0.0
+    # Feature('FNC132', float, 'functional MRI feature 132'),  # importance: 0.0
+    # Feature('FNC172', float, 'functional MRI feature 172'),  # importance: 0.0
+    # Feature('FNC83', float, 'functional MRI feature 83'),  # importance: 0.0
+    # Feature('FNC356', float, 'functional MRI feature 356'),  # importance: 0.0
+    # Feature('FNC317', float, 'functional MRI feature 317'),  # importance: 0.0
+    # Feature('FNC239', float, 'functional MRI feature 239'),  # importance: 0.0
+    # Feature('FNC272', float, 'functional MRI feature 272'),  # importance: 0.0
+    # Feature('SBM_map43', float, 'structural ICA map feature 43'),  # importance: 0.0
+    # Feature('FNC341', float, 'functional MRI feature 341'),  # importance: 0.0
+    # Feature('FNC192', float, 'functional MRI feature 192'),  # importance: 0.0
+    # Feature('FNC113', float, 'functional MRI feature 113'),  # importance: 0.0
+    # Feature('FNC58', float, 'functional MRI feature 58'),  # importance: 0.0
+    # Feature('FNC221', float, 'functional MRI feature 221'),  # importance: 0.0
+    # Feature('FNC71', float, 'functional MRI feature 71'),  # importance: 0.0
+    # Feature('FNC334', float, 'functional MRI feature 334'),  # importance: 0.0
+    # Feature('FNC79', float, 'functional MRI feature 79'),  # importance: 0.0
+    # Feature('FNC251', float, 'functional MRI feature 251'),  # importance: 0.0
+    # Feature('FNC141', float, 'functional MRI feature 141'),  # importance: 0.0
+    # Feature('FNC200', float, 'functional MRI feature 200'),  # importance: 0.0
+    # Feature('FNC177', float, 'functional MRI feature 177'),  # importance: 0.0
+    # Feature('FNC322', float, 'functional MRI feature 322'),  # importance: 0.0
+    # Feature('FNC220', float, 'functional MRI feature 220'),  # importance: 0.0
+    # Feature('FNC93', float, 'functional MRI feature 93'),  # importance: 0.0
+    # Feature('FNC8', float, 'functional MRI feature 8'),  # importance: 0.0
+    # Feature('FNC170', float, 'functional MRI feature 170'),  # importance: 0.0
+    # Feature('FNC134', float, 'functional MRI feature 134'),  # importance: 0.0
+    # Feature('FNC44', float, 'functional MRI feature 44'),  # importance: 0.0
+    # Feature('FNC234', float, 'functional MRI feature 234'),  # importance: 0.0
+    # Feature('FNC277', float, 'functional MRI feature 277'),  # importance: 0.0
+    # Feature('FNC223', float, 'functional MRI feature 223'),  # importance: 0.0
+    # Feature('SBM_map28', float, 'structural ICA map feature 28'),  # importance: 0.0
+    # Feature('FNC25', float, 'functional MRI feature 25'),  # importance: 0.0
+    # Feature('FNC152', float, 'functional MRI feature 152'),  # importance: 0.0
+    # Feature('FNC196', float, 'functional MRI feature 196'),  # importance: 0.0
+    # Feature('FNC115', float, 'functional MRI feature 115'),  # importance: 0.0
+    # Feature('FNC155', float, 'functional MRI feature 155'),  # importance: 0.0
+    # Feature('FNC309', float, 'functional MRI feature 309'),  # importance: 0.0
+    # Feature('FNC338', float, 'functional MRI feature 338'),  # importance: 0.0
+    # Feature('FNC180', float, 'functional MRI feature 180'),  # importance: 0.0
+    # Feature('FNC367', float, 'functional MRI feature 367'),  # importance: 0.0
+    # Feature('FNC255', float, 'functional MRI feature 255'),  # importance: 0.0
+    # Feature('FNC137', float, 'functional MRI feature 137'),  # importance: 0.0
+    # Feature('FNC62', float, 'functional MRI feature 62'),  # importance: 0.0
+    # Feature('FNC51', float, 'functional MRI feature 51'),  # importance: 0.0
+    # Feature('FNC14', float, 'functional MRI feature 14'),  # importance: 0.0
+    # Feature('FNC54', float, 'functional MRI feature 54'),  # importance: 0.0
+    # Feature('FNC224', float, 'functional MRI feature 224'),  # importance: 0.0
+    # Feature('FNC198', float, 'functional MRI feature 198'),  # importance: 0.0
+    # Feature('FNC363', float, 'functional MRI feature 363'),  # importance: 0.0
+    # Feature('FNC203', float, 'functional MRI feature 203'),  # importance: 0.0
+    # Feature('FNC227', float, 'functional MRI feature 227'),  # importance: 0.0
+    # Feature('SBM_map64', float, 'structural ICA map feature 64'),  # importance: 0.0
+    # Feature('FNC291', float, 'functional MRI feature 291'),  # importance: 0.0
+    # Feature('FNC258', float, 'functional MRI feature 258'),  # importance: 0.0
+    # Feature('FNC256', float, 'functional MRI feature 256'),  # importance: 0.0
+    # Feature('FNC213', float, 'functional MRI feature 213'),  # importance: 0.0
+    # Feature('FNC204', float, 'functional MRI feature 204'),  # importance: 0.0
+    # Feature('FNC57', float, 'functional MRI feature 57'),  # importance: 0.0
+    # Feature('FNC16', float, 'functional MRI feature 16'),  # importance: 0.0
+    # Feature('FNC238', float, 'functional MRI feature 238'),  # importance: 0.0
+    # Feature('FNC74', float, 'functional MRI feature 74'),  # importance: 0.0
+    # Feature('FNC191', float, 'functional MRI feature 191'),  # importance: 0.0
+    # Feature('FNC276', float, 'functional MRI feature 276'),  # importance: 0.0
+    # Feature('FNC346', float, 'functional MRI feature 346'),  # importance: 0.0
+    # Feature('FNC52', float, 'functional MRI feature 52'),  # importance: 0.0
+    # Feature('FNC97', float, 'functional MRI feature 97'),  # importance: 0.0
+    # Feature('FNC372', float, 'functional MRI feature 372'),  # importance: 0.0
+    # Feature('FNC316', float, 'functional MRI feature 316'),  # importance: 0.0
+    # Feature('FNC253', float, 'functional MRI feature 253'),  # importance: 0.0
+    # Feature('FNC26', float, 'functional MRI feature 26'),  # importance: 0.0
+    # Feature('FNC101', float, 'functional MRI feature 101'),  # importance: 0.0
+    # Feature('FNC89', float, 'functional MRI feature 89'),  # importance: 0.0
+    # Feature('SBM_map74', float, 'structural ICA map feature 74'),  # importance: 0.0
+    # Feature('FNC368', float, 'functional MRI feature 368'),  # importance: 0.0
+    # Feature('FNC179', float, 'functional MRI feature 179'),  # importance: 0.0
+    # Feature('FNC121', float, 'functional MRI feature 121'),  # importance: 0.0
+    # Feature('FNC49', float, 'functional MRI feature 49'),  # importance: 0.0
+    # Feature('FNC355', float, 'functional MRI feature 355'),  # importance: 0.0
+    # Feature('FNC12', float, 'functional MRI feature 12'),  # importance: 0.0
+    # Feature('FNC139', float, 'functional MRI feature 139'),  # importance: 0.0
+    # Feature('FNC116', float, 'functional MRI feature 116'),  # importance: 0.0
+    # Feature('FNC275', float, 'functional MRI feature 275'),  # importance: 0.0
+    # Feature('FNC112', float, 'functional MRI feature 112'),  # importance: 0.0
+    # Feature('FNC81', float, 'functional MRI feature 81'),  # importance: 0.0
+    # Feature('FNC264', float, 'functional MRI feature 264'),  # importance: 0.0
+    # Feature('FNC364', float, 'functional MRI feature 364'),  # importance: 0.0
+    # Feature('FNC271', float, 'functional MRI feature 271'),  # importance: 0.0
+    # Feature('SBM_map40', float, 'structural ICA map feature 40'),  # importance: 0.0
+    # Feature('FNC38', float, 'functional MRI feature 38'),  # importance: 0.0
+    # Feature('FNC153', float, 'functional MRI feature 153'),  # importance: 0.0
+    # Feature('SBM_map73', float, 'structural ICA map feature 73'),  # importance: 0.0
+    # Feature('FNC294', float, 'functional MRI feature 294'),  # importance: 0.0
+    # Feature('FNC328', float, 'functional MRI feature 328'),  # importance: 0.0
+    # Feature('FNC46', float, 'functional MRI feature 46'),  # importance: 0.0
+    # Feature('SBM_map22', float, 'structural ICA map feature 22'),  # importance: 0.0
+    # Feature('FNC339', float, 'functional MRI feature 339'),  # importance: 0.0
+    # Feature('FNC103', float, 'functional MRI feature 103'),  # importance: 0.0
+    # Feature('SBM_map4', float, 'structural ICA map feature 4'),  # importance: 0.0
+    # Feature('FNC287', float, 'functional MRI feature 287'),  # importance: 0.0
+    # Feature('FNC127', float, 'functional MRI feature 127'),  # importance: 0.0
+    # Feature('FNC241', float, 'functional MRI feature 241'),  # importance: 0.0
+    # Feature('FNC140', float, 'functional MRI feature 140'),  # importance: 0.0
+    # Feature('FNC280', float, 'functional MRI feature 280'),  # importance: 0.0
+    # Feature('FNC260', float, 'functional MRI feature 260'),  # importance: 0.0
+    # Feature('FNC88', float, 'functional MRI feature 88'),  # importance: 0.0
+    # Feature('FNC214', float, 'functional MRI feature 214'),  # importance: 0.0
+    # Feature('FNC30', float, 'functional MRI feature 30'),  # importance: 0.0
+    # Feature('FNC86', float, 'functional MRI feature 86'),  # importance: 0.0
+    # Feature('FNC63', float, 'functional MRI feature 63'),  # importance: 0.0
+    # Feature('FNC175', float, 'functional MRI feature 175'),  # importance: 0.0
+    # Feature('FNC340', float, 'functional MRI feature 340'),  # importance: 0.0
+    # Feature('FNC268', float, 'functional MRI feature 268'),  # importance: 0.0
+    # Feature('FNC151', float, 'functional MRI feature 151'),  # importance: 0.0
+    # Feature('SBM_map48', float, 'structural ICA map feature 48'),  # importance: 0.0
+    # Feature('SBM_map3', float, 'structural ICA map feature 3'),  # importance: 0.0
+    # Feature('FNC360', float, 'functional MRI feature 360'),  # importance: 0.0
+    # Feature('FNC259', float, 'functional MRI feature 259'),  # importance: 0.0
+    # Feature('FNC34', float, 'functional MRI feature 34'),  # importance: 0.0
+    # Feature('FNC289', float, 'functional MRI feature 289'),  # importance: 0.0
+    # Feature('FNC326', float, 'functional MRI feature 326'),  # importance: 0.0
+    # Feature('FNC273', float, 'functional MRI feature 273'),  # importance: 0.0
+    # Feature('FNC41', float, 'functional MRI feature 41'),  # importance: 0.0
+    # Feature('FNC266', float, 'functional MRI feature 266'),  # importance: 0.0
+    # Feature('FNC298', float, 'functional MRI feature 298'),  # importance: 0.0
+    # Feature('FNC257', float, 'functional MRI feature 257'),  # importance: 0.0
+    # Feature('FNC240', float, 'functional MRI feature 240'),  # importance: 0.0
+    # Feature('FNC131', float, 'functional MRI feature 131'),  # importance: 0.0
+    # Feature('FNC245', float, 'functional MRI feature 245'),  # importance: 0.0
+    # Feature('FNC366', float, 'functional MRI feature 366'),  # importance: 0.0
+    # Feature('FNC284', float, 'functional MRI feature 284'),  # importance: 0.0
+    # Feature('FNC159', float, 'functional MRI feature 159'),  # importance: 0.0
+    # Feature('FNC120', float, 'functional MRI feature 120'),  # importance: 0.0
+    # Feature('FNC11', float, 'functional MRI feature 11'),  # importance: 0.0
+    # Feature('FNC216', float, 'functional MRI feature 216'),  # importance: 0.0
+    # Feature('FNC156', float, 'functional MRI feature 156'),  # importance: 0.0
+    # Feature('FNC320', float, 'functional MRI feature 320'),  # importance: 0.0
+    # Feature('FNC96', float, 'functional MRI feature 96'),  # importance: 0.0
+    # Feature('FNC119', float, 'functional MRI feature 119'),  # importance: 0.0
+    # Feature('FNC40', float, 'functional MRI feature 40'),  # importance: 0.0
+    # Feature('FNC324', float, 'functional MRI feature 324'),  # importance: 0.0
+    # Feature('FNC187', float, 'functional MRI feature 187'),  # importance: 0.0
+    # Feature('FNC163', float, 'functional MRI feature 163'),  # importance: 0.0
+    # Feature('FNC265', float, 'functional MRI feature 265'),  # importance: 0.0
+    # Feature('FNC349', float, 'functional MRI feature 349'),  # importance: 0.0
+    # Feature('FNC219', float, 'functional MRI feature 219'),  # importance: 0.0
+    # Feature('SBM_map72', float, 'structural ICA map feature 72'),  # importance: 0.0
+    # Feature('FNC195', float, 'functional MRI feature 195'),  # importance: 0.0
+    # Feature('FNC18', float, 'functional MRI feature 18'),  # importance: 0.0
+    # Feature('FNC313', float, 'functional MRI feature 313'),  # importance: 0.0
+    # Feature('FNC354', float, 'functional MRI feature 354'),  # importance: 0.0
+    # Feature('FNC125', float, 'functional MRI feature 125'),  # importance: 0.0
+    # Feature('FNC19', float, 'functional MRI feature 19'),  # importance: 0.0
+    # Feature('FNC122', float, 'functional MRI feature 122'),  # importance: 0.0
+    # Feature('FNC261', float, 'functional MRI feature 261'),  # importance: 0.0
+    # Feature('FNC247', float, 'functional MRI feature 247'),  # importance: 0.0
+    # Feature('FNC17', float, 'functional MRI feature 17'),  # importance: 0.0
+    # Feature('FNC228', float, 'functional MRI feature 228'),  # importance: 0.0
+    # Feature('FNC27', float, 'functional MRI feature 27'),  # importance: 0.0
+    # Feature('FNC92', float, 'functional MRI feature 92'),  # importance: 0.0
+    # Feature('SBM_map75', float, 'structural ICA map feature 75'),  # importance: 0.0
+    # Feature('FNC108', float, 'functional MRI feature 108'),  # importance: 0.0
+    # Feature('FNC29', float, 'functional MRI feature 29'),  # importance: 0.0
+    # Feature('FNC154', float, 'functional MRI feature 154'),  # importance: 0.0
+    # Feature('FNC335', float, 'functional MRI feature 335'),  # importance: 0.0
+    # Feature('FNC65', float, 'functional MRI feature 65'),  # importance: 0.0
+    # Feature('FNC106', float, 'functional MRI feature 106'),  # importance: 0.0
+    # Feature('FNC66', float, 'functional MRI feature 66'),  # importance: 0.0
+    # Feature('FNC23', float, 'functional MRI feature 23'),  # importance: 0.0
+    # Feature('FNC123', float, 'functional MRI feature 123'),  # importance: 0.0
+    # Feature('FNC183', float, 'functional MRI feature 183'),  # importance: 0.0
+    # Feature('FNC365', float, 'functional MRI feature 365'),  # importance: 0.0
+    # Feature('FNC318', float, 'functional MRI feature 318'),  # importance: 0.0
+    # Feature('FNC244', float, 'functional MRI feature 244'),  # importance: 0.0
+    # Feature('FNC252', float, 'functional MRI feature 252'),  # importance: 0.0
+    # Feature('FNC148', float, 'functional MRI feature 148'),  # importance: 0.0
+    # Feature('FNC330', float, 'functional MRI feature 330'),  # importance: 0.0
+    # Feature('FNC171', float, 'functional MRI feature 171'),  # importance: 0.0
+    # Feature('SBM_map10', float, 'structural ICA map feature 10'),  # importance: 0.0
+    # Feature('FNC327', float, 'functional MRI feature 327'),  # importance: 0.0
+    # Feature('SBM_map5', float, 'structural ICA map feature 5'),  # importance: 0.0
+    # Feature('SBM_map69', float, 'structural ICA map feature 69'),  # importance: 0.0
+    # Feature('FNC279', float, 'functional MRI feature 279'),  # importance: 0.0
+    # Feature('FNC181', float, 'functional MRI feature 181'),  # importance: 0.0
+    # Feature('FNC166', float, 'functional MRI feature 166'),  # importance: 0.0
+    # Feature('FNC306', float, 'functional MRI feature 306'),  # importance: 0.0
+    # Feature('FNC149', float, 'functional MRI feature 149'),  # importance: 0.0
+    # Feature('FNC133', float, 'functional MRI feature 133'),  # importance: 0.0
+    # Feature('FNC230', float, 'functional MRI feature 230'),  # importance: 0.0
+    # Feature('FNC315', float, 'functional MRI feature 315'),  # importance: 0.0
 ], documentation="https://www.kaggle.com/competitions/mlsp-2014-mri/data")
 
 TITANIC_FEATURES = FeatureList(features=[
@@ -1513,63 +1524,63 @@ IEEE_FRAUD_DETECTION_FEATURES = FeatureList(features=[
 SAFE_DRIVER_PREDICTION_FEATURES = FeatureList(features=[
     Feature('id', int),
     Feature('target', int, is_target=True),
-    Feature('ps_ind_01', int),
-    Feature('ps_ind_02_cat', int),
-    Feature('ps_ind_03', int),
-    Feature('ps_ind_04_cat', int),
-    Feature('ps_ind_05_cat', int),
-    Feature('ps_ind_06_bin', int),
-    Feature('ps_ind_07_bin', int),
-    Feature('ps_ind_08_bin', int),
-    Feature('ps_ind_09_bin', int),
-    Feature('ps_ind_10_bin', int),
-    Feature('ps_ind_11_bin', int),
-    Feature('ps_ind_12_bin', int),
-    Feature('ps_ind_13_bin', int),
-    Feature('ps_ind_14', int),
-    Feature('ps_ind_15', int),
-    Feature('ps_ind_16_bin', int),
-    Feature('ps_ind_17_bin', int),
-    Feature('ps_ind_18_bin', int),
-    Feature('ps_reg_01', float),
-    Feature('ps_reg_02', float),
-    Feature('ps_reg_03', float),
-    Feature('ps_car_01_cat', int),
-    Feature('ps_car_02_cat', int),
-    Feature('ps_car_03_cat', int),
-    Feature('ps_car_04_cat', int),
-    Feature('ps_car_05_cat', int),
-    Feature('ps_car_06_cat', int),
-    Feature('ps_car_07_cat', int),
-    Feature('ps_car_08_cat', int),
-    Feature('ps_car_09_cat', int),
-    Feature('ps_car_10_cat', int),
-    Feature('ps_car_11_cat', int),
-    Feature('ps_car_11', int),
-    Feature('ps_car_12', float),
-    Feature('ps_car_13', float),
-    Feature('ps_car_14', float),
-    Feature('ps_car_15', float),
-    Feature('ps_calc_01', float),
-    Feature('ps_calc_02', float),
-    Feature('ps_calc_03', float),
-    Feature('ps_calc_04', int),
-    Feature('ps_calc_05', int),
-    Feature('ps_calc_06', int),
-    Feature('ps_calc_07', int),
-    Feature('ps_calc_08', int),
-    Feature('ps_calc_09', int),
-    Feature('ps_calc_10', int),
-    Feature('ps_calc_11', int),
-    Feature('ps_calc_12', int),
-    Feature('ps_calc_13', int),
-    Feature('ps_calc_14', int),
-    Feature('ps_calc_15_bin', int),
-    Feature('ps_calc_16_bin', int),
-    Feature('ps_calc_17_bin', int),
-    Feature('ps_calc_18_bin', int),
-    Feature('ps_calc_19_bin', int),
-    Feature('ps_calc_20_bin', int),
+    Feature('ps_ind_01', int, name_extended='individual feature 1'),
+    Feature('ps_ind_02_cat', int, name_extended='individual categorical feature 2'),
+    Feature('ps_ind_03', int, name_extended='individual feature 3'),
+    Feature('ps_ind_04_cat', int, name_extended='individual categorical feature 4'),
+    Feature('ps_ind_05_cat', int, name_extended='individual categorical feature 5'),
+    Feature('ps_ind_06_bin', int, name_extended='individual binary feature 6'),
+    Feature('ps_ind_07_bin', int, name_extended='individual binary feature 7'),
+    Feature('ps_ind_08_bin', int, name_extended='individual binary feature 8'),
+    Feature('ps_ind_09_bin', int, name_extended='individual binary feature 9'),
+    Feature('ps_ind_10_bin', int, name_extended='individual binary feature 0'),
+    Feature('ps_ind_11_bin', int, name_extended='individual binary feature 1'),
+    Feature('ps_ind_12_bin', int, name_extended='individual binary feature 2'),
+    Feature('ps_ind_13_bin', int, name_extended='individual binary feature 3'),
+    Feature('ps_ind_14', int, name_extended='individual feature 4'),
+    Feature('ps_ind_15', int, name_extended='individual feature 5'),
+    Feature('ps_ind_16_bin', int, name_extended='individual binary feature 6'),
+    Feature('ps_ind_17_bin', int, name_extended='individual binary feature 7'),
+    Feature('ps_ind_18_bin', int, name_extended='individual binary feature 8'),
+    Feature('ps_reg_01', float, name_extended='registration feature 1'),
+    Feature('ps_reg_02', float, name_extended='registration feature 2'),
+    Feature('ps_reg_03', float, name_extended='registration feature 3'),
+    Feature('ps_car_01_cat', int, name_extended='car categorical feature 1'),
+    Feature('ps_car_02_cat', int, name_extended='car categorical feature 2'),
+    Feature('ps_car_03_cat', int, name_extended='car categorical feature 3'),
+    Feature('ps_car_04_cat', int, name_extended='car categorical feature 4'),
+    Feature('ps_car_05_cat', int, name_extended='car categorical feature 5'),
+    Feature('ps_car_06_cat', int, name_extended='car categorical feature 6'),
+    Feature('ps_car_07_cat', int, name_extended='car categorical feature 7'),
+    Feature('ps_car_08_cat', int, name_extended='car categorical feature 8'),
+    Feature('ps_car_09_cat', int, name_extended='car categorical feature 9'),
+    Feature('ps_car_10_cat', int, name_extended='car categorical feature 0'),
+    Feature('ps_car_11_cat', int, name_extended='car categorical feature 1'),
+    Feature('ps_car_11', int, name_extended='car feature 1'),
+    Feature('ps_car_12', float, name_extended='car feature 2'),
+    Feature('ps_car_13', float, name_extended='car feature 3'),
+    Feature('ps_car_14', float, name_extended='car feature 4'),
+    Feature('ps_car_15', float, name_extended='car feature 5'),
+    Feature('ps_calc_01', float, name_extended='calculated feature 01'),
+    Feature('ps_calc_02', float, name_extended='calculated feature 02'),
+    Feature('ps_calc_03', float, name_extended='calculated feature 03'),
+    Feature('ps_calc_04', int, name_extended='calculated feature 04'),
+    Feature('ps_calc_05', int, name_extended='calculated feature 05'),
+    Feature('ps_calc_06', int, name_extended='calculated feature 06'),
+    Feature('ps_calc_07', int, name_extended='calculated feature 07'),
+    Feature('ps_calc_08', int, name_extended='calculated feature 08'),
+    Feature('ps_calc_09', int, name_extended='calculated feature 09'),
+    Feature('ps_calc_10', int, name_extended='calculated feature 10'),
+    Feature('ps_calc_11', int, name_extended='calculated feature 11'),
+    Feature('ps_calc_12', int, name_extended='calculated feature 12'),
+    Feature('ps_calc_13', int, name_extended='calculated feature 13'),
+    Feature('ps_calc_14', int, name_extended='calculated feature 14'),
+    Feature('ps_calc_15_bin', int, name_extended='calculated binary feature 15'),
+    Feature('ps_calc_16_bin', int, name_extended='calculated binary feature 16'),
+    Feature('ps_calc_17_bin', int, name_extended='calculated binary feature 17'),
+    Feature('ps_calc_18_bin', int, name_extended='calculated binary feature 18'),
+    Feature('ps_calc_19_bin', int, name_extended='calculated binary feature 19'),
+    Feature('ps_calc_20_bin', int, name_extended='calculated binary feature 20'),
 
 ],
     documentation='https://www.kaggle.com/competitions/porto-seguro-safe-driver-prediction/data')
