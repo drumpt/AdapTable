@@ -1,11 +1,17 @@
 import os
 from os import path
 import sys
+
+import pandas
+
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 from collections import Counter
 
 import openml
 from openml import tasks, runs
+import conf
+from data.utils.util_functions import load_opt
+from datasets import load_dataset
 from tableshift import get_dataset, get_iid_dataset
 
 import numpy as np
@@ -163,10 +169,119 @@ class TableShiftDataset():
 
 
 
-# class OpenMLRegressionDataset():
-#     def __init__(self, args):
-#         pass
+class OpenMLRegressionDataset():
+    def __init__(self, args):
+        # conda install -c huggingface -c conda-forge datasets
+        # TODO: give arguments as data_split(type of dataset) and dataset_specification(dataset name)
+        dataset_specification = args.dataset
 
+        from scipy.io import arff
+        if dataset_specification == "cholestrol":
+            config = load_opt(dataset_specification)
+
+            data = arff.loadarff('./data/OpenML_arff/dataset_2190_cholesterol.arff')
+            df = pd.DataFrame(data[0])
+
+            # load as dataframe and convert datatypes to float
+            str_df = df.select_dtypes([object])
+            str_df = str_df.stack().str.decode('utf-8').unstack()
+            str_df.replace(to_replace='?', value=np.nan, inplace=True)
+            df[str_df.columns] = str_df.astype(np.float64)
+
+            dataset_df = df
+            wo_target = list(dataset_df.columns[:-1])
+            target = list([dataset_df.columns[-1]])
+
+            x = dataset_df[wo_target]
+            y = dataset_df[target]
+
+            # train/valid/test split
+            train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
+            valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+
+            # remove nan in training
+            tot_train = pd.concat([train_x, train_y], axis=1, join="inner")
+            tot_train = tot_train.dropna()
+            train_x = tot_train[wo_target]
+            train_y = tot_train[target]
+
+            tot_valid = pd.concat([valid_x, valid_y], axis=1, join="inner")
+            tot_valid = tot_valid.dropna()
+            valid_x = tot_valid[wo_target]
+            valid_y = tot_valid[target]
+
+        elif dataset_specification == "abalone":
+            dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"reg_cat/{dataset_specification}.csv")
+
+            config = load_opt(dataset_specification)
+
+            # dataset = load_dataset("inria_soda/tabular-benchmark", data_files=f"{data_split}/{args.dataset}.csv")
+            # last column is target
+            column_names = dataset['train'].column_names
+            wo_target = dataset['train'].column_names[:-1]
+            target = [dataset['train'].column_names[-1]]
+
+            pandas_dataset = dataset['train'].to_pandas()
+            x = pandas_dataset[wo_target]
+            y = pandas_dataset[target]
+
+            # train/valid/test split
+            train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
+            valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+        else:
+            raise NotImplementedError
+
+        # data preprocessing (normalization and one-hot encoding)
+        cat_indicator = [True if column_name in config['nominal_columns'] else False for column_name in x.columns]
+        cat_indices = np.argwhere(np.array(cat_indicator) == True).flatten()
+        cont_indices = np.array(sorted(set(np.arange(x.shape[1] - 1)).difference(set(cat_indices))))
+
+        if len(cont_indices):
+            self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
+            self.input_scaler.fit(
+                np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
+            train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
+            valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
+            test_cont_x = self.input_scaler.transform(
+                get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]),
+                                   data_type="numerical", shift_type=args.shift_type,
+                                   shift_severity=args.shift_severity, imputation_method=args.imputation_method)
+            )
+        else:
+            train_cont_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([])
+
+        if len(cat_indices):
+            self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+            self.input_one_hot_encoder.fit(
+                np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
+            train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
+            valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
+            test_cat_x = self.input_one_hot_encoder.transform(
+                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]),
+                                   data_type="categorical", shift_type=args.shift_type,
+                                   shift_severity=args.shift_severity, imputation_method=args.imputation_method)
+            )
+        else:
+            train_cat_x, valid_cat_x, test_cat_x = np.array([]), np.array([]), np.array([])
+        self.train_x = np.concatenate([
+            train_cont_x if len(cont_indices) else train_cont_x.reshape(train_cat_x.shape[0], 0),
+            train_cat_x if len(cat_indices) else train_cat_x.reshape(train_cont_x.shape[0], 0)
+        ], axis=-1
+        )
+        self.valid_x = np.concatenate([
+            valid_cont_x if len(cont_indices) else valid_cont_x.reshape(valid_cat_x.shape[0], 0),
+            valid_cat_x if len(cat_indices) else valid_cat_x.reshape(valid_cont_x.shape[0], 0)
+        ], axis=-1
+        )
+        self.test_x = np.concatenate([
+            test_cont_x if len(cont_indices) else test_cont_x.reshape(test_cat_x.shape[0], 0),
+            test_cat_x if len(cat_indices) else test_cat_x.reshape(test_cont_x.shape[0], 0)
+        ], axis=-1
+        )
+
+        self.train_y = np.array(train_y)
+        self.valid_y = np.array(valid_y)
+        self.test_y = np.array(test_y)
 
 
 # class ShiftsDataset():
