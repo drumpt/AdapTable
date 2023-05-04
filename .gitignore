@@ -1,11 +1,11 @@
 **/__pycache__
 .idea/
 
-ContrastiveMixup
 cutoff.py
 
 data/UCI
 data/tableshift/tmp
+data/tableshift/tableshift/datasets
 
 log
 exps
