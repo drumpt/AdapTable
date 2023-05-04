@@ -392,5 +392,5 @@ def main_mae(args):
 
 
 if __name__ == "__main__":
-    # main()
-    main_mae()
+    main()
+    # main_mae()

@@ -37,15 +37,15 @@ class Dataset():
         train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_x), torch.from_numpy(dataset.train_y))
         valid_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.valid_x), torch.from_numpy(dataset.valid_y))
         test_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.test_x), torch.from_numpy(dataset.test_y))
-        mae_train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_cor_x), torch.from_numpy(dataset.train_x))
-        mae_test_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.test_cor_x), torch.from_numpy(dataset.test_x), torch.from_numpy(dataset.test_y))
+        # mae_train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_cor_x), torch.from_numpy(dataset.train_x))
+        # mae_test_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.test_cor_x), torch.from_numpy(dataset.test_x), torch.from_numpy(dataset.test_y))
 
         self.in_dim, self.out_dim = dataset.train_x.shape[-1], dataset.train_y.shape[-1]
         self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True)
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=True)
         self.test_loader =  torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True)
-        self.mae_train_loader = torch.utils.data.DataLoader(mae_train_data, batch_size=args.pretrain_batch_size, shuffle=True)
-        self.mae_test_loader = torch.utils.data.DataLoader(mae_test_data, batch_size=args.test_batch_size, shuffle=True)
+        # self.mae_train_loader = torch.utils.data.DataLoader(mae_train_data, batch_size=args.pretrain_batch_size, shuffle=True)
+        # self.mae_test_loader = torch.utils.data.DataLoader(mae_test_data, batch_size=args.test_batch_size, shuffle=True)
 
 
 class OpenMLCC18Dataset():
@@ -282,6 +282,9 @@ class OpenMLRegressionDataset():
         self.train_y = np.array(train_y)
         self.valid_y = np.array(valid_y)
         self.test_y = np.array(test_y)
+
+        print(f"self.train_x: {self.train_x}")
+        print(f"self.train_y: {self.train_y}")
 
 
 # class ShiftsDataset():
