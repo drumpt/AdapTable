@@ -323,6 +323,7 @@ def main_mae(args):
         utils.set_seed(args.seed)
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
+    utils.disable_logger(args)
     logger = utils.get_logger(args)
     logger.info(OmegaConf.to_yaml(args))
     if not os.path.exists(args.out_dir):

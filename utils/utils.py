@@ -32,6 +32,11 @@ def get_logger(args):
     return logger
 
 
+def disable_logger(args):
+    logger = logging.getLogger('openml.datasets.dataset')
+    logger.propagate = False
+
+
 def softmax_entropy(x, dim=-1):
     return -(x.softmax(dim) * x.log_softmax(dim)).sum(dim)
 

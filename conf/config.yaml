@@ -13,7 +13,7 @@ normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for training
-retrain: false
+retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
