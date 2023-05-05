@@ -66,6 +66,7 @@ class OpenMLCC18Dataset():
         target_feature = benchmark_df[benchmark_df["name"] == args.dataset].iloc[0]["target_feature"]
         
         dataset = openml.datasets.get_dataset(args.dataset)
+        print(f"dataset: {dataset}")
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
         y = np.array(y).reshape(-1, 1)
 
@@ -81,20 +82,19 @@ class OpenMLCC18Dataset():
             self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            test_cont_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
-            )
+            
+            test_cont_x, test_cont_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
+            test_cont_x = self.input_scaler.transform(test_cont_x)
 
             # for MAE
-            train_cont_cor_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(train_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            )
-            valid_cont_cor_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(valid_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            )
-            test_cont_cor_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            )
+            train_cont_cor_x, train_cont_cor_mask_x = get_corrupted_data(np.array(train_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            train_cont_cor_x = self.input_scaler.transform(train_cont_cor_x)
+
+            valid_cont_cor_x, valid_cont_cor_mask_x = get_corrupted_data(np.array(valid_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            valid_cont_cor_x = self.input_scaler.transform(valid_cont_cor_x)
+
+            test_cont_cor_x, test_cont_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            test_cont_cor_x = self.input_scaler.transform(test_cont_cor_x)
         else:
             train_cont_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([])
             train_cont_cor_x, valid_cont_cor_x, test_cont_cor_x = np.array([]), np.array([]), np.array([])
@@ -103,20 +103,18 @@ class OpenMLCC18Dataset():
             self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            test_cat_x = self.input_one_hot_encoder.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
-            )
+
+            test_cat_x, test_cat_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
+            test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
 
             # for MAE
-            train_cat_cor_x = self.input_one_hot_encoder.transform(
-                get_corrupted_data(np.array(train_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            )
-            valid_cat_cor_x = self.input_one_hot_encoder.transform(
-                get_corrupted_data(np.array(valid_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            )
-            test_cat_cor_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            )
+            train_cat_cor_x, train_cat_cor_mask_x = get_corrupted_data(np.array(train_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            train_cat_cor_x = self.input_one_hot_encoder.transform(train_cat_cor_x)
+
+            valid_cat_cor_x, valid_cat_cor_mask_x = get_corrupted_data(np.array(valid_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            valid_cat_cor_x = self.input_one_hot_encoder.transform(valid_cat_cor_x)
+            test_cat_cor_x, test_cat_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            test_cat_cor_x = self.input_one_hot_encoder.transform(test_cat_cor_x)
         else:
             train_cat_x, valid_cat_x, test_cat_x = np.array([]), np.array([]), np.array([])
             train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])
