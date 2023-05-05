@@ -2,12 +2,12 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
-meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression, uci
+meta_dataset: tableshift # openml-cc18, tableshift, openml-regression
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
-dataset: cmc
+dataset: diabetes_readmission
 shift_type: mean_std_shift # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
 shift_severity: 0.6
 normalizer: StandardScaler
@@ -21,7 +21,7 @@ pretrain_lr: 1e-4
 mask_ratio: 0.75
 
 ### hyperparameters for training
-retrain: false
+retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
@@ -30,7 +30,7 @@ train_lr: 1e-4
 ### hyperparameters for test-time adaptation
 episodic: true # reset model to the pretrained one for each batch if true
 num_steps: 30 # optimization steps for each batch
-test_batch_size: 1
+test_batch_size: 64
 test_optimizer: AdamW
 test_lr: 1e-4
 train_params: [all] # currently supported: all, LN, BN, GN
@@ -38,7 +38,7 @@ train_params: [all] # currently supported: all, LN, BN, GN
 
 ##################################################################
 ### methods & other hyperparameters
-method: [ns, kld] # currently supported: sar, em, gem, ns, kld
+method: [sar] # currently supported: sar, em, gem, ns, kld
 temp: 2.5 # temperature scaling
 renyi_entropy_alpha: 1.5
 ns_threshold: 0.04 # negative sampling
