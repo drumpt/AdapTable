@@ -36,3 +36,5 @@ datasets
 openpyxl
 tune_sklearn
 optuna
+hydra-core
+slack-sdk
