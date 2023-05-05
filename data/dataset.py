@@ -29,10 +29,12 @@ class Dataset():
             dataset = OpenMLCC18Dataset(args)
         elif args.meta_dataset == "tableshift":
             dataset = TableShiftDataset(args)
-        # elif args.meta_dataset == "shifts":
-        #     dataset = ShiftsDataset(args)
         elif args.meta_dataset == "openml-regression":
             dataset = OpenMLRegressionDataset(args)
+        elif args.meta_dataset == "shifts":
+            dataset = ShiftsDataset(args)
+        elif args.meta_dataset == "uci":
+            dataset = UCIDataset(args, args.dataset, "data")
 
         train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_x), torch.from_numpy(dataset.train_y))
         valid_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.valid_x), torch.from_numpy(dataset.valid_y))
@@ -112,9 +114,9 @@ class OpenMLCC18Dataset():
             valid_cat_cor_x = self.input_one_hot_encoder.transform(
                 get_corrupted_data(np.array(valid_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
             )
-            test_cont_cor_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            )            
+            test_cat_cor_x = self.input_scaler.transform(
+                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            )
         else:
             train_cat_x, valid_cat_x, test_cat_x = np.array([]), np.array([]), np.array([])
             train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])
@@ -171,6 +173,12 @@ class TableShiftDataset():
             test_x, test_y, _, _ = dataset.get_pandas("ood_test")
         else:
             test_x, test_y, _, _ = dataset.get_pandas("test")
+
+        # print(f"dir(dataset): {dir(dataset)}")
+        # print(f"dataset.features: {dataset.features}")
+        # print(f"dataset.feature_names: {dataset.feature_names}")
+        # print(f"dataset.cat_idxs: {dataset.cat_idxs}")
+        # print(f"dataset.get_domains")
 
         self.train_x = np.array(train_x[sorted(train_x.columns)])
         self.valid_x = np.array(valid_x[sorted(valid_x.columns)])
@@ -424,6 +432,7 @@ class OpenMLRegressionDataset():
 
 def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
     # assert shift_type in ["Gaussian", "random_drop", "column_drop", "column_block_drop", "mean_shift", "std_shift", "mean_std_shift"]
+    mask = None
 
     if shift_type == "Gaussian" and data_type == "numerical":
         scaler = StandardScaler()
@@ -464,7 +473,7 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
             mean_noise = shift_severity * np.random.randn(*scaler.mean_.shape)
             std_noise = shift_severity * np.exp(np.random.randn(*scaler.var_.shape))
             test_data = std_noise * test_data + mean_noise * np.sqrt(scaler.var_) + (1 - std_noise) * scaler.mean_
-    return test_data
+    return test_data, mask
 
 
 def get_imputed_data(test_data, train_data, data_type, imputation_method):

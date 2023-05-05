@@ -62,5 +62,7 @@ class MLP_MAE(nn.Module):
         hidden_repr = self.encoder(inputs)
         recon_mean = self.recon_mean(hidden_repr)
         recon_std = torch.exp(self.recon_std(hidden_repr))
+        recon_out = recon_mean + torch.randn_like(recon_mean) * recon_std
         main_out = self.main_head(hidden_repr)
+        # return recon_out, main_out
         return [recon_mean, recon_std], main_out

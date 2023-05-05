@@ -157,9 +157,9 @@ def pretrain(args, model, optimizer, dataset, loss_fn, logger):
         for cor_x, train_x in dataset.mae_train_loader:
             cor_x, train_x = cor_x.float().to(device), train_x.float().to(device)
             estimated_x = model(cor_x) if isinstance(model, MLP) else model(train_x)[0]
-            # loss = loss_fn(estimated_x, train_x)
 
             # for bayesian masked autoencoder
+            # loss = loss_fn(estimated_x, train_x)
             mean, std = estimated_x
             loss = (((mean - train_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
 
@@ -176,9 +176,9 @@ def pretrain(args, model, optimizer, dataset, loss_fn, logger):
             for cor_x, valid_x in dataset.mae_valid_loader:
                 cor_x, valid_x = cor_x.float().to(device), valid_x.float().to(device)
                 estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
-                # loss = loss_fn(estimated_x, valid_x)
 
                 # for bayesian masked autoencoder
+                # loss = loss_fn(estimated_x, valid_x)
                 mean, std = estimated_x
                 loss = (((mean - valid_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
 
@@ -398,9 +398,9 @@ def main_mae(args):
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
             estimated_test_x, _ = best_model(test_cor_x)
-            # loss = pretrain_loss_fn(estimated_test_x, test_x)
 
             # for bayesian masked autoencoder
+            # loss = pretrain_loss_fn(estimated_test_x, test_x)
             mean, std = estimated_test_x
             loss = (((mean - test_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
 
