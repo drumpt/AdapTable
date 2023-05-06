@@ -66,7 +66,6 @@ class OpenMLCC18Dataset():
         target_feature = benchmark_df[benchmark_df["name"] == args.dataset].iloc[0]["target_feature"]
         
         dataset = openml.datasets.get_dataset(args.dataset)
-        print(f"dataset: {dataset}")
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
         y = np.array(y).reshape(-1, 1)
 
@@ -171,12 +170,6 @@ class TableShiftDataset():
             test_x, test_y, _, _ = dataset.get_pandas("ood_test")
         else:
             test_x, test_y, _, _ = dataset.get_pandas("test")
-
-        # print(f"dir(dataset): {dir(dataset)}")
-        # print(f"dataset.features: {dataset.features}")
-        # print(f"dataset.feature_names: {dataset.feature_names}")
-        # print(f"dataset.cat_idxs: {dataset.cat_idxs}")
-        # print(f"dataset.get_domains")
 
         self.train_x = np.array(train_x[sorted(train_x.columns)])
         self.valid_x = np.array(valid_x[sorted(valid_x.columns)])
@@ -312,8 +305,6 @@ class OpenMLRegressionDataset():
         self.valid_y = np.array(valid_y)
         self.test_y = np.array(test_y)
 
-        print(f"self.train_x: {self.train_x}")
-        print(f"self.train_y: {self.train_y}")
 
 
 # class ShiftsDataset():

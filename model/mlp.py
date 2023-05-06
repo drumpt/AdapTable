@@ -31,10 +31,11 @@ class MLP_MAE(nn.Module):
         super().__init__()
 
         self.encoder = nn.Sequential()
+        self.main_head = nn.Sequential()
+
         # self.recon_head = nn.Sequential()
         self.recon_mean = nn.Sequential()
         self.recon_std = nn.Sequential()
-        self.main_head = nn.Sequential()
 
         in_dim = input_dim
         for _ in range(n_layers - 3):
@@ -62,7 +63,8 @@ class MLP_MAE(nn.Module):
         hidden_repr = self.encoder(inputs)
         recon_mean = self.recon_mean(hidden_repr)
         recon_std = torch.exp(self.recon_std(hidden_repr))
-        recon_out = recon_mean + torch.randn_like(recon_mean) * recon_std
         main_out = self.main_head(hidden_repr)
-        # return recon_out, main_out
         return [recon_mean, recon_std], main_out
+
+        # recon_out = self.recon_head(hidden_repr)
+        # return recon_out, main_out

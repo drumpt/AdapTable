@@ -1,4 +1,6 @@
 import os
+import warnings
+warnings.filterwarnings("ignore")
 from copy import deepcopy
 import hydra
 from omegaconf import OmegaConf
@@ -124,7 +126,6 @@ def collect_params(model, train_params):
                     continue
                 params.append(p)
                 names.append(f"{nm}.{np}")
-    print(f"parameters to adapt: {names}")
     return params, names
 
 
@@ -156,7 +157,8 @@ def pretrain(args, model, optimizer, dataset, loss_fn, logger):
         model.train().to(device)
         for cor_x, train_x in dataset.mae_train_loader:
             cor_x, train_x = cor_x.float().to(device), train_x.float().to(device)
-            estimated_x = model(cor_x) if isinstance(model, MLP) else model(train_x)[0]
+            estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
+            # estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)
 
             # for bayesian masked autoencoder
             # loss = loss_fn(estimated_x, train_x)
@@ -237,6 +239,13 @@ def train(args, model, optimizer, dataset, loss_fn, logger):
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(args):
+    if 'mae' in args.method:
+        main_mae(args)
+    else:
+        main_em(args)
+
+
+def main_em(args):
     if args.seed:
         utils.set_seed(args.seed)
     if not os.path.exists(args.log_dir):
@@ -338,7 +347,6 @@ def main(args):
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config")
 def main_mae(args):
     if args.seed:
         utils.set_seed(args.seed)
@@ -418,5 +426,4 @@ def main_mae(args):
 
 
 if __name__ == "__main__":
-    # main()
-    main_mae()
+    main()
