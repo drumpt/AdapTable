@@ -33,9 +33,9 @@ class MLP_MAE(nn.Module):
         self.encoder = nn.Sequential()
         self.main_head = nn.Sequential()
 
-        # self.recon_head = nn.Sequential()
-        self.recon_mean = nn.Sequential()
-        self.recon_std = nn.Sequential()
+        self.recon_head = nn.Sequential()
+        # self.recon_mean = nn.Sequential()
+        # self.recon_std = nn.Sequential()
 
         in_dim = input_dim
         for _ in range(n_layers - 3):
@@ -48,10 +48,10 @@ class MLP_MAE(nn.Module):
         # self.recon_head.append(nn.Linear(in_dim, hidden_dim))
         # self.recon_head.append(nn.ReLU(inplace=True))
         # self.recon_head.append(nn.Dropout(dropout))
-        # self.recon_head.append(nn.Linear(in_dim, input_dim))
+        self.recon_head.append(nn.Linear(in_dim, input_dim))
 
-        self.recon_mean.append(nn.Linear(in_dim, input_dim))
-        self.recon_std.append(nn.Linear(in_dim, input_dim))
+        # self.recon_mean.append(nn.Linear(in_dim, input_dim))
+        # self.recon_std.append(nn.Linear(in_dim, input_dim))
 
         self.main_head.append(nn.Linear(in_dim, hidden_dim))
         self.main_head.append(nn.ReLU(inplace=True))
@@ -61,10 +61,10 @@ class MLP_MAE(nn.Module):
 
     def forward(self, inputs):
         hidden_repr = self.encoder(inputs)
-        recon_mean = self.recon_mean(hidden_repr)
-        recon_std = torch.exp(self.recon_std(hidden_repr))
         main_out = self.main_head(hidden_repr)
-        return [recon_mean, recon_std], main_out
+        # recon_mean = self.recon_mean(hidden_repr)
+        # recon_std = torch.exp(self.recon_std(hidden_repr))
+        # return [recon_mean, recon_std], main_out
 
-        # recon_out = self.recon_head(hidden_repr)
-        # return recon_out, main_out
+        recon_out = self.recon_head(hidden_repr)
+        return recon_out, main_out

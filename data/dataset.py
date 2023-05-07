@@ -1,9 +1,6 @@
 import os
 from os import path
 import sys
-
-import pandas
-
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 from collections import Counter
 

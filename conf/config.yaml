@@ -21,7 +21,7 @@ pretrain_lr: 1e-4
 mask_ratio: 0.75
 
 ### hyperparameters for training
-retrain: false
+retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
@@ -30,7 +30,7 @@ train_lr: 1e-4
 ### hyperparameters for test-time adaptation
 episodic: true # reset model to the pretrained one for each batch if true
 num_steps: 10 # optimization steps for each batch
-test_batch_size: 1
+test_batch_size: 64
 test_optimizer: AdamW
 test_lr: 1e-4
 train_params: [all] # currently supported: all, LN, BN, GN
