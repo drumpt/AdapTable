@@ -32,7 +32,7 @@ episodic: true # reset model to the pretrained one for each batch if true
 num_steps: 10 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
-test_lr: 1e-4
+test_lr: 1e-3
 train_params: [all] # currently supported: all, LN, BN, GN
 # TODO: implement learning rate scheduler
 

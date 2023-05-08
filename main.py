@@ -413,7 +413,7 @@ def main_mae(args):
     device = args.device
     dataset = Dataset(args)
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
-        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=100, n_layers=4)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
         best_model.load_state_dict(best_state_dict)
 
@@ -421,7 +421,7 @@ def main_mae(args):
         loss_fn = nn.CrossEntropyLoss()
         print(f"load pretrained model!")
     else:
-        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=0)
+        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=100, n_layers=4, dropout=0)
 
         # # self-supervised learning (with reconstruction)
         optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)

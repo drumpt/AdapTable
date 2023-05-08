@@ -4,8 +4,8 @@
 cutoff.py
 
 data/UCI
-data/tableshift/tmp
-data/tableshift/tableshift/datasets
+data/shifts/
+data/tableshift/
 
 log
 exps
