@@ -239,7 +239,7 @@ def train(args, model, optimizer, dataset, loss_fn, logger):
     return best_model
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config_sar.yaml")
+@hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     if 'mae' in args.method:
         main_mae(args)
