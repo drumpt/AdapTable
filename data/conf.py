@@ -27,3 +27,8 @@ BostonOpt = {
     'path': './data/OpenML_arff/boston.arff',
     'nominal_columns':['CHAS', 'RAD']
 }
+
+NewsOpt = {
+    'path': './data/OpenML_arff/colleges_usnews.arff',
+    'nominal_columns':['College_name', 'State']
+}

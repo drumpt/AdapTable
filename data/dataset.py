@@ -257,22 +257,22 @@ class OpenMLRegressionDataset():
         dataset_specification = args.dataset
 
         from scipy.io import arff
-        if dataset_specification in ["cholestrol", "sarcos", "boston"]:
+        if dataset_specification in ["cholestrol", "sarcos", "boston", "news"]:
             config = load_opt(dataset_specification)
 
             data = arff.loadarff(config['path'])
             df = pd.DataFrame(data[0])
 
-            if dataset_specification != 'sarcos':
+            if dataset_specification not in ['sarcos', 'news'] :
                 # load as dataframe and convert datatypes to float
                 str_df = df.select_dtypes([object])
                 str_df = str_df.stack().str.decode('utf-8').unstack()
                 str_df.replace(to_replace='?', value=np.nan, inplace=True)
                 df[str_df.columns] = str_df.astype(np.float64)
 
-                dataset_df = df
-                wo_target = list(dataset_df.columns[:-1])
-                target = list([dataset_df.columns[-1]])
+            dataset_df = df
+            wo_target = list(dataset_df.columns[:-1])
+            target = list([dataset_df.columns[-1]])
 
             x = dataset_df[wo_target]
             y = dataset_df[target]
@@ -435,8 +435,8 @@ class OpenMLRegressionDataset():
         self.valid_y = np.array(valid_y)
         self.test_y = np.array(test_y)
 
-        print(f"self.train_x: {self.train_x}")
-        print(f"self.train_y: {self.train_y}")
+        # print(f"self.train_x: {self.train_x}")
+        # print(f"self.train_y: {self.train_y}")
 
 
 # class ShiftsDataset():
