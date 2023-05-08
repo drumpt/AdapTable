@@ -22,27 +22,43 @@ from sklearn.model_selection import train_test_split
 import torch
 
 
-
 class Dataset():
     def __init__(self, args):
         if args.meta_dataset == "openml-cc18":
             dataset = OpenMLCC18Dataset(args)
         elif args.meta_dataset == "tableshift":
             dataset = TableShiftDataset(args)
-        # elif args.meta_dataset == "shifts":
-        #     dataset = ShiftsDataset(args)
         elif args.meta_dataset == "openml-regression":
             dataset = OpenMLRegressionDataset(args)
+        elif args.meta_dataset == "shifts":
+            dataset = ShiftsDataset(args)
+        elif args.meta_dataset == "uci":
+            dataset = UCIDataset(args, args.dataset, "data")
 
-        train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_x), torch.from_numpy(dataset.train_y))
-        valid_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.valid_x), torch.from_numpy(dataset.valid_y))
+        train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_x),
+                                                    torch.from_numpy(dataset.train_y))
+        valid_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.valid_x),
+                                                    torch.from_numpy(dataset.valid_y))
         test_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.test_x), torch.from_numpy(dataset.test_y))
+
+        mae_train_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.train_cor_x),
+                                                        torch.from_numpy(dataset.train_x))
+        mae_valid_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.valid_cor_x),
+                                                        torch.from_numpy(dataset.valid_x))
+        mae_test_data = torch.utils.data.TensorDataset(torch.from_numpy(dataset.test_cor_x),
+                                                       torch.from_numpy(dataset.test_x),
+                                                       torch.from_numpy(dataset.test_y))
 
         self.in_dim, self.out_dim = dataset.train_x.shape[-1], dataset.train_y.shape[-1]
         self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True)
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=True)
-        self.test_loader =  torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True)
+        self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True)
 
+        self.mae_train_loader = torch.utils.data.DataLoader(mae_train_data, batch_size=args.pretrain_batch_size,
+                                                            shuffle=True)
+        self.mae_valid_loader = torch.utils.data.DataLoader(mae_valid_data, batch_size=args.pretrain_batch_size,
+                                                            shuffle=True)
+        self.mae_test_loader = torch.utils.data.DataLoader(mae_test_data, batch_size=args.test_batch_size, shuffle=True)
 
 
 class OpenMLCC18Dataset():
@@ -55,8 +71,9 @@ class OpenMLCC18Dataset():
         else:
             benchmark_df = pd.read_csv(benchmark_list_path)
         target_feature = benchmark_df[benchmark_df["name"] == args.dataset].iloc[0]["target_feature"]
-        
+
         dataset = openml.datasets.get_dataset(args.dataset)
+        print(f"dataset: {dataset}")
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
         y = np.array(y).reshape(-1, 1)
 
@@ -69,38 +86,114 @@ class OpenMLCC18Dataset():
         cont_indices = np.array(sorted(set(np.arange(x.shape[1] - 1)).difference(set(cat_indices))))
         if len(cont_indices):
             self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
-            self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
+            self.input_scaler.fit(
+                np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            test_cont_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
-            )
+
+            test_cont_x, test_cont_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cont_indices]),
+                                                               np.array(train_x.iloc[:, cont_indices]),
+                                                               data_type="numerical", shift_type=args.shift_type,
+                                                               shift_severity=args.shift_severity,
+                                                               imputation_method=args.imputation_method)
+            test_cont_x = self.input_scaler.transform(test_cont_x)
+
+            # for MAE
+            train_cont_cor_x, train_cont_cor_mask_x = get_corrupted_data(np.array(train_x.iloc[:, cont_indices]),
+                                                                         np.array(train_x.iloc[:, cont_indices]),
+                                                                         data_type="numerical",
+                                                                         shift_type="random_drop",
+                                                                         shift_severity=args.mask_ratio,
+                                                                         imputation_method="emd")
+            train_cont_cor_x = self.input_scaler.transform(train_cont_cor_x)
+
+            valid_cont_cor_x, valid_cont_cor_mask_x = get_corrupted_data(np.array(valid_x.iloc[:, cont_indices]),
+                                                                         np.array(train_x.iloc[:, cont_indices]),
+                                                                         data_type="numerical",
+                                                                         shift_type="random_drop",
+                                                                         shift_severity=args.mask_ratio,
+                                                                         imputation_method="emd")
+            valid_cont_cor_x = self.input_scaler.transform(valid_cont_cor_x)
+
+            test_cont_cor_x, test_cont_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cont_indices]),
+                                                                       np.array(train_x.iloc[:, cont_indices]),
+                                                                       data_type="numerical", shift_type="random_drop",
+                                                                       shift_severity=args.mask_ratio,
+                                                                       imputation_method="emd")
+            test_cont_cor_x = self.input_scaler.transform(test_cont_cor_x)
         else:
             train_cont_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([])
+            train_cont_cor_x, valid_cont_cor_x, test_cont_cor_x = np.array([]), np.array([]), np.array([])
         if len(cat_indices):
             self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-            self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
+            self.input_one_hot_encoder.fit(
+                np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            test_cat_x = self.input_one_hot_encoder.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
-            )
+
+            test_cat_x, test_cat_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]),
+                                                             np.array(train_x.iloc[:, cat_indices]),
+                                                             data_type="categorical", shift_type=args.shift_type,
+                                                             shift_severity=args.shift_severity,
+                                                             imputation_method=args.imputation_method)
+            test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
+
+            # for MAE
+            train_cat_cor_x, train_cat_cor_mask_x = get_corrupted_data(np.array(train_x.iloc[:, cat_indices]),
+                                                                       np.array(train_x.iloc[:, cat_indices]),
+                                                                       data_type="categorical",
+                                                                       shift_type="random_drop",
+                                                                       shift_severity=args.mask_ratio,
+                                                                       imputation_method="emd")
+            train_cat_cor_x = self.input_one_hot_encoder.transform(train_cat_cor_x)
+
+            valid_cat_cor_x, valid_cat_cor_mask_x = get_corrupted_data(np.array(valid_x.iloc[:, cat_indices]),
+                                                                       np.array(train_x.iloc[:, cat_indices]),
+                                                                       data_type="categorical",
+                                                                       shift_type="random_drop",
+                                                                       shift_severity=args.mask_ratio,
+                                                                       imputation_method="emd")
+            valid_cat_cor_x = self.input_one_hot_encoder.transform(valid_cat_cor_x)
+            test_cat_cor_x, test_cat_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]),
+                                                                     np.array(train_x.iloc[:, cat_indices]),
+                                                                     data_type="categorical", shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+            test_cat_cor_x = self.input_one_hot_encoder.transform(test_cat_cor_x)
         else:
             train_cat_x, valid_cat_x, test_cat_x = np.array([]), np.array([]), np.array([])
+            train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])
         self.train_x = np.concatenate([
             train_cont_x if len(cont_indices) else train_cont_x.reshape(train_cat_x.shape[0], 0),
             train_cat_x if len(cat_indices) else train_cat_x.reshape(train_cont_x.shape[0], 0)
-            ], axis=-1
+        ], axis=-1
         )
         self.valid_x = np.concatenate([
             valid_cont_x if len(cont_indices) else valid_cont_x.reshape(valid_cat_x.shape[0], 0),
             valid_cat_x if len(cat_indices) else valid_cat_x.reshape(valid_cont_x.shape[0], 0)
-            ], axis=-1
+        ], axis=-1
         )
         self.test_x = np.concatenate([
             test_cont_x if len(cont_indices) else test_cont_x.reshape(test_cat_x.shape[0], 0),
             test_cat_x if len(cat_indices) else test_cat_x.reshape(test_cont_x.shape[0], 0)
-            ], axis=-1
+        ], axis=-1
+        )
+
+        # for MAE
+        self.train_cor_x = np.concatenate([
+            train_cont_cor_x if len(cont_indices) else train_cont_cor_x.reshape(train_cat_cor_x.shape[0], 0),
+            train_cat_cor_x if len(cat_indices) else train_cat_cor_x.reshape(train_cont_cor_x.shape[0], 0)
+        ], axis=-1
+        )
+        self.valid_cor_x = np.concatenate([
+            valid_cont_cor_x if len(cont_indices) else valid_cont_cor_x.reshape(valid_cat_cor_x.shape[0], 0),
+            valid_cat_cor_x if len(cat_indices) else valid_cat_cor_x.reshape(valid_cont_cor_x.shape[0], 0)
+        ], axis=-1
+        )
+        self.test_cor_x = np.concatenate([
+            test_cont_cor_x if len(cont_indices) else test_cont_cor_x.reshape(test_cat_cor_x.shape[0], 0),
+            test_cat_cor_x if len(cat_indices) else test_cat_cor_x.reshape(test_cont_cor_x.shape[0], 0)
+        ], axis=-1
         )
 
         self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
@@ -108,7 +201,6 @@ class OpenMLCC18Dataset():
         self.train_y = self.output_one_hot_encoder.transform(train_y)
         self.valid_y = self.output_one_hot_encoder.transform(valid_y)
         self.test_y = self.output_one_hot_encoder.transform(test_y)
-
 
 
 class TableShiftDataset():
@@ -124,9 +216,28 @@ class TableShiftDataset():
         else:
             test_x, test_y, _, _ = dataset.get_pandas("test")
 
+        # print(f"dir(dataset): {dir(dataset)}")
+        # print(f"dataset.features: {dataset.features}")
+        # print(f"dataset.feature_names: {dataset.feature_names}")
+        # print(f"dataset.cat_idxs: {dataset.cat_idxs}")
+        # print(f"dataset.get_domains")
+
         self.train_x = np.array(train_x[sorted(train_x.columns)])
         self.valid_x = np.array(valid_x[sorted(valid_x.columns)])
         self.test_x = np.array(test_x[sorted(test_x.columns)])
+
+        self.train_cor_x, self.train_cor_mask_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical",
+                                                                     shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+        self.valid_cor_x, self.valid_cor_mask_x = get_corrupted_data(self.valid_x, self.train_x, data_type="numerical",
+                                                                     shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+        self.test_cor_x, self.test_cor_mask_x = get_corrupted_data(self.test_x, self.train_x, data_type="numerical",
+                                                                   shift_type="random_drop",
+                                                                   shift_severity=args.mask_ratio,
+                                                                   imputation_method="emd")
 
         train_y = np.array(train_y).reshape(-1, 1)
         valid_y = np.array(valid_y).reshape(-1, 1)
@@ -139,7 +250,6 @@ class TableShiftDataset():
         self.test_y = self.output_one_hot_encoder.transform(test_y)
 
 
-
 class OpenMLRegressionDataset():
     def __init__(self, args):
         # conda install -c huggingface -c conda-forge datasets
@@ -147,21 +257,22 @@ class OpenMLRegressionDataset():
         dataset_specification = args.dataset
 
         from scipy.io import arff
-        if dataset_specification == "cholestrol":
+        if dataset_specification in ["cholestrol", "sarcos", "boston"]:
             config = load_opt(dataset_specification)
 
-            data = arff.loadarff('./data/OpenML_arff/dataset_2190_cholesterol.arff')
+            data = arff.loadarff(config['path'])
             df = pd.DataFrame(data[0])
 
-            # load as dataframe and convert datatypes to float
-            str_df = df.select_dtypes([object])
-            str_df = str_df.stack().str.decode('utf-8').unstack()
-            str_df.replace(to_replace='?', value=np.nan, inplace=True)
-            df[str_df.columns] = str_df.astype(np.float64)
+            if dataset_specification != 'sarcos':
+                # load as dataframe and convert datatypes to float
+                str_df = df.select_dtypes([object])
+                str_df = str_df.stack().str.decode('utf-8').unstack()
+                str_df.replace(to_replace='?', value=np.nan, inplace=True)
+                df[str_df.columns] = str_df.astype(np.float64)
 
-            dataset_df = df
-            wo_target = list(dataset_df.columns[:-1])
-            target = list([dataset_df.columns[-1]])
+                dataset_df = df
+                wo_target = list(dataset_df.columns[:-1])
+                target = list([dataset_df.columns[-1]])
 
             x = dataset_df[wo_target]
             y = dataset_df[target]
@@ -180,6 +291,7 @@ class OpenMLRegressionDataset():
             tot_valid = tot_valid.dropna()
             valid_x = tot_valid[wo_target]
             valid_y = tot_valid[target]
+
 
         elif dataset_specification == "abalone":
             dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"reg_cat/{dataset_specification}.csv")
@@ -213,27 +325,79 @@ class OpenMLRegressionDataset():
                 np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            test_cont_x = self.input_scaler.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]),
-                                   data_type="numerical", shift_type=args.shift_type,
-                                   shift_severity=args.shift_severity, imputation_method=args.imputation_method)
-            )
+
+            test_cont_x, test_cont_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cont_indices]),
+                                                               np.array(train_x.iloc[:, cont_indices]),
+                                                               data_type="numerical", shift_type=args.shift_type,
+                                                               shift_severity=args.shift_severity,
+                                                               imputation_method=args.imputation_method)
+            test_cont_x = self.input_scaler.transform(test_cont_x)
+
+            # for MAE
+            train_cont_cor_x, train_cont_cor_mask_x = get_corrupted_data(np.array(train_x.iloc[:, cont_indices]),
+                                                                         np.array(train_x.iloc[:, cont_indices]),
+                                                                         data_type="numerical",
+                                                                         shift_type="random_drop",
+                                                                         shift_severity=args.mask_ratio,
+                                                                         imputation_method="emd")
+            train_cont_cor_x = self.input_scaler.transform(train_cont_cor_x)
+
+            valid_cont_cor_x, valid_cont_cor_mask_x = get_corrupted_data(np.array(valid_x.iloc[:, cont_indices]),
+                                                                         np.array(train_x.iloc[:, cont_indices]),
+                                                                         data_type="numerical",
+                                                                         shift_type="random_drop",
+                                                                         shift_severity=args.mask_ratio,
+                                                                         imputation_method="emd")
+            valid_cont_cor_x = self.input_scaler.transform(valid_cont_cor_x)
+
+            test_cont_cor_x, test_cont_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cont_indices]),
+                                                                       np.array(train_x.iloc[:, cont_indices]),
+                                                                       data_type="numerical", shift_type="random_drop",
+                                                                       shift_severity=args.mask_ratio,
+                                                                       imputation_method="emd")
+            test_cont_cor_x = self.input_scaler.transform(test_cont_cor_x)
         else:
             train_cont_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([])
-
+            train_cont_cor_x, valid_cont_cor_x, test_cont_cor_x = np.array([]), np.array([]), np.array([])
         if len(cat_indices):
             self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
             self.input_one_hot_encoder.fit(
                 np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            test_cat_x = self.input_one_hot_encoder.transform(
-                get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]),
-                                   data_type="categorical", shift_type=args.shift_type,
-                                   shift_severity=args.shift_severity, imputation_method=args.imputation_method)
-            )
+
+            test_cat_x, test_cat_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]),
+                                                             np.array(train_x.iloc[:, cat_indices]),
+                                                             data_type="categorical", shift_type=args.shift_type,
+                                                             shift_severity=args.shift_severity,
+                                                             imputation_method=args.imputation_method)
+            test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
+
+            # for MAE
+            train_cat_cor_x, train_cat_cor_mask_x = get_corrupted_data(np.array(train_x.iloc[:, cat_indices]),
+                                                                       np.array(train_x.iloc[:, cat_indices]),
+                                                                       data_type="categorical",
+                                                                       shift_type="random_drop",
+                                                                       shift_severity=args.mask_ratio,
+                                                                       imputation_method="emd")
+            train_cat_cor_x = self.input_one_hot_encoder.transform(train_cat_cor_x)
+
+            valid_cat_cor_x, valid_cat_cor_mask_x = get_corrupted_data(np.array(valid_x.iloc[:, cat_indices]),
+                                                                       np.array(train_x.iloc[:, cat_indices]),
+                                                                       data_type="categorical",
+                                                                       shift_type="random_drop",
+                                                                       shift_severity=args.mask_ratio,
+                                                                       imputation_method="emd")
+            valid_cat_cor_x = self.input_one_hot_encoder.transform(valid_cat_cor_x)
+            test_cat_cor_x, test_cat_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]),
+                                                                     np.array(train_x.iloc[:, cat_indices]),
+                                                                     data_type="categorical", shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+            test_cat_cor_x = self.input_one_hot_encoder.transform(test_cat_cor_x)
         else:
             train_cat_x, valid_cat_x, test_cat_x = np.array([]), np.array([]), np.array([])
+            train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])
         self.train_x = np.concatenate([
             train_cont_x if len(cont_indices) else train_cont_x.reshape(train_cat_x.shape[0], 0),
             train_cat_x if len(cat_indices) else train_cat_x.reshape(train_cont_x.shape[0], 0)
@@ -250,9 +414,29 @@ class OpenMLRegressionDataset():
         ], axis=-1
         )
 
+        # for MAE
+        self.train_cor_x = np.concatenate([
+            train_cont_cor_x if len(cont_indices) else train_cont_cor_x.reshape(train_cat_cor_x.shape[0], 0),
+            train_cat_cor_x if len(cat_indices) else train_cat_cor_x.reshape(train_cont_cor_x.shape[0], 0)
+        ], axis=-1
+        )
+        self.valid_cor_x = np.concatenate([
+            valid_cont_cor_x if len(cont_indices) else valid_cont_cor_x.reshape(valid_cat_cor_x.shape[0], 0),
+            valid_cat_cor_x if len(cat_indices) else valid_cat_cor_x.reshape(valid_cont_cor_x.shape[0], 0)
+        ], axis=-1
+        )
+        self.test_cor_x = np.concatenate([
+            test_cont_cor_x if len(cont_indices) else test_cont_cor_x.reshape(test_cat_cor_x.shape[0], 0),
+            test_cat_cor_x if len(cat_indices) else test_cat_cor_x.reshape(test_cont_cor_x.shape[0], 0)
+        ], axis=-1
+        )
+
         self.train_y = np.array(train_y)
         self.valid_y = np.array(valid_y)
         self.test_y = np.array(test_y)
+
+        print(f"self.train_x: {self.train_x}")
+        print(f"self.train_y: {self.train_y}")
 
 
 # class ShiftsDataset():
@@ -366,14 +550,15 @@ class OpenMLRegressionDataset():
 #         self.test_loader =  torch.utils.data.DataLoader(test_data, batch_size=64, shuffle=True)
 
 
-
 def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
     # assert shift_type in ["Gaussian", "random_drop", "column_drop", "column_block_drop", "mean_shift", "std_shift", "mean_std_shift"]
+    mask = None
 
     if shift_type == "Gaussian" and data_type == "numerical":
         scaler = StandardScaler()
         scaler.fit(train_data)
-        test_data = test_data.astype(np.float64) + shift_severity * np.random.randn(*test_data.shape) * np.sqrt(scaler.var_)
+        test_data = test_data.astype(np.float64) + shift_severity * np.random.randn(*test_data.shape) * np.sqrt(
+            scaler.var_)
 
     elif shift_type in ["random_drop", "column_drop", "column_block_drop"]:
         assert 0 <= shift_severity <= 1
@@ -381,11 +566,14 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
         if shift_type == "random_drop":
             mask = (np.random.rand(*test_data.shape) >= shift_severity).astype(np.int64)
         elif shift_type == "column_drop":
-            mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :], test_data.shape[0], axis=0)
+            mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :],
+                             test_data.shape[0], axis=0)
         elif shift_type == "column_block_drop":
             start_idx = np.random.randint(0, int(test_data.shape[-1] * (1 - shift_severity)) + 1)
             end_idx = start_idx + int(test_data.shape[-1] * shift_severity)
-            mask = np.repeat(np.array([0 if start_idx <= idx <= end_idx else 1 for idx in range(len(test_data[0]))])[None, :], test_data.shape[0], axis=0)
+            mask = np.repeat(
+                np.array([0 if start_idx <= idx <= end_idx else 1 for idx in range(len(test_data[0]))])[None, :],
+                test_data.shape[0], axis=0)
         imputed_data = get_imputed_data(test_data, train_data, data_type, imputation_method)
 
         if data_type == "numerical":
@@ -409,7 +597,7 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
             mean_noise = shift_severity * np.random.randn(*scaler.mean_.shape)
             std_noise = shift_severity * np.exp(np.random.randn(*scaler.var_.shape))
             test_data = std_noise * test_data + mean_noise * np.sqrt(scaler.var_) + (1 - std_noise) * scaler.mean_
-    return test_data
+    return test_data, mask
 
 
 def get_imputed_data(test_data, train_data, data_type, imputation_method):
@@ -417,7 +605,7 @@ def get_imputed_data(test_data, train_data, data_type, imputation_method):
         if imputation_method == "zero":
             imputed_data = np.zeros_like(test_data)
         elif imputation_method == "mean":
-            imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], test_data.shape[0], axis=0)
+            imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], len(test_data), axis=0)
         elif imputation_method == "emd":
             imputed_data = []
             for train_col in train_data.T:
@@ -430,7 +618,7 @@ def get_imputed_data(test_data, train_data, data_type, imputation_method):
                 train_col = set([str(train_col_elem) for train_col_elem in train_col])
                 imputed_data.append(np.array([max(train_col) + "." for _ in range(len(test_data))]))
             imputed_data = np.stack(imputed_data, axis=-1)
-        elif imputation_method == "mean": # mode (most frequent value)
+        elif imputation_method == "mean":  # mode (most frequent value)
             imputed_data = []
             for train_col in train_data.T:
                 unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
