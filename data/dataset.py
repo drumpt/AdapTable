@@ -438,6 +438,90 @@ class OpenMLRegressionDataset():
         # print(f"self.train_x: {self.train_x}")
         # print(f"self.train_y: {self.train_y}")
 
+class ShiftsDataset():
+    def __init__(self, args):
+
+
+        if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/{args.dataset}/train.csv")) and args.dataset == 'weather':
+            csv_list = [
+                os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             f"shifts/{args.dataset}/shifts_canonical_train.csv"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             f"shifts/{args.dataset}/shifts_canonical_dev_in.csv"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             f"shifts/{args.dataset}/shifts_canonical_eval_in.csv"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             f"shifts/{args.dataset}/shifts_canonical_eval_out.csv"),
+                os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             f"shifts/{args.dataset}/shifts_canonical_dev_out.csv"),
+            ]
+            train_df, valid_df, test_df = self.concat_csvs(csv_list, args)
+            train_df = train_df
+            valid_df = valid_df
+            test_df = test_df
+
+        else:
+            train_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                f"shifts/{args.dataset}/train.csv"))
+            valid_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                f"shifts/{args.dataset}/dev_in.csv"))
+            test_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                f"shifts/{args.dataset}/dev_out.csv"))
+
+        if args.dataset == 'weather':
+            train_x = train_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float64)
+            valid_x = valid_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float64)
+            test_x = test_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float64)
+            train_y = train_df['fact_temperature'].astype(np.float64)
+            valid_y = valid_df['fact_temperature'].astype(np.float64)
+            test_y = test_df['fact_temperature'].astype(np.float64)
+        elif args.dataset == 'power':
+            train_x = train_df[train_df.columns.difference(['power'])].astype(np.float64)
+            valid_x = valid_df[train_df.columns.difference(['power'])].astype(np.float64)
+            test_x = test_df[train_df.columns.difference(['power'])].astype(np.float64)
+            train_y = train_df['power'].astype(np.float64)
+            valid_y = valid_df['power'].astype(np.float64)
+            test_y = test_df['power'].astype(np.float64)
+        print('loading done!')
+
+        self.train_x = np.array(train_x[sorted(train_x.columns)])
+        self.valid_x = np.array(valid_x[sorted(valid_x.columns)])
+        self.test_x = np.array(test_x[sorted(test_x.columns)])
+
+        self.train_cor_x, self.train_cor_mask_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical",
+                                                                     shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+        self.valid_cor_x, self.valid_cor_mask_x = get_corrupted_data(self.valid_x, self.train_x, data_type="numerical",
+                                                                     shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+        self.test_cor_x, self.test_cor_mask_x = get_corrupted_data(self.test_x, self.train_x, data_type="numerical",
+                                                                   shift_type="random_drop",
+                                                                   shift_severity=args.mask_ratio,
+                                                                   imputation_method="emd")
+
+        self.train_y = np.array(train_y).reshape(-1, 1)
+        self.valid_y = np.array(valid_y).reshape(-1, 1)
+        self.test_y = np.array(test_y).reshape(-1, 1)
+
+        print('dataset preprocess done!')
+
+    def concat_csvs(self, path_list, args):
+        import pandas as pd
+        pd_list = []
+        for path in path_list:
+            pd_list.append(pd.read_csv(path))
+        train_pd = pd.concat(pd_list[:3])
+        train_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                f"shifts/{args.dataset}/train.csv"))
+        eval_pd = pd.concat([pd_list[3]])
+        eval_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                f"shifts/{args.dataset}/dev_in.csv"))
+        test_pd = pd.concat(pd_list[4:])
+        test_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                f"shifts/{args.dataset}/dev_out.csv"))
+        return (train_pd, eval_pd, test_pd)
 
 # class ShiftsDataset():
 #     def __init__(self, args):
