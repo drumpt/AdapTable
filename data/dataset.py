@@ -440,20 +440,23 @@ class OpenMLRegressionDataset():
 
 class ShiftsDataset():
     def __init__(self, args):
+        if 'weather' in args.dataset:
+            dataset_path_name = 'weather'
+        else:
+            dataset_path_name = args.dataset
 
-
-        if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/{args.dataset}/train.csv")) and args.dataset == 'weather':
+        if (not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/{dataset_path_name}/train.csv"))) and 'weather' in args.dataset:
             csv_list = [
                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             f"shifts/{args.dataset}/shifts_canonical_train.csv"),
+                             f"shifts/{dataset_path_name}/shifts_canonical_train.csv"),
                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             f"shifts/{args.dataset}/shifts_canonical_dev_in.csv"),
+                             f"shifts/{dataset_path_name}/shifts_canonical_dev_in.csv"),
                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             f"shifts/{args.dataset}/shifts_canonical_eval_in.csv"),
+                             f"shifts/{dataset_path_name}/shifts_canonical_eval_in.csv"),
                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             f"shifts/{args.dataset}/shifts_canonical_eval_out.csv"),
+                             f"shifts/{dataset_path_name}/shifts_canonical_eval_out.csv"),
                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                             f"shifts/{args.dataset}/shifts_canonical_dev_out.csv"),
+                             f"shifts/{dataset_path_name}/shifts_canonical_dev_out.csv"),
             ]
             train_df, valid_df, test_df = self.concat_csvs(csv_list, args)
             train_df = train_df
@@ -462,19 +465,28 @@ class ShiftsDataset():
 
         else:
             train_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{args.dataset}/train.csv"))
+                                                f"shifts/{dataset_path_name}/train.csv"))
             valid_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{args.dataset}/dev_in.csv"))
+                                                f"shifts/{dataset_path_name}/dev_in.csv"))
             test_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{args.dataset}/dev_out.csv"))
+                                                f"shifts/{dataset_path_name}/dev_out.csv"))
 
-        if args.dataset == 'weather':
+        if args.dataset == 'weather_reg':
             train_x = train_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float64)
             valid_x = valid_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float64)
             test_x = test_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float64)
             train_y = train_df['fact_temperature'].astype(np.float64)
             valid_y = valid_df['fact_temperature'].astype(np.float64)
             test_y = test_df['fact_temperature'].astype(np.float64)
+        elif args.dataset == 'weather_cls':
+            # print(list(train_df.columns))
+            # print(train_df.dtypes.to_dict())
+            train_x = train_df[train_df.columns.difference(['fact_cwsm_class', 'climate'])].astype(np.float64)
+            valid_x = valid_df[train_df.columns.difference(['fact_cwsm_class', 'climate'])].astype(np.float64)
+            test_x = test_df[train_df.columns.difference(['fact_cwsm_class', 'climate'])].astype(np.float64)
+            train_y = train_df['fact_cwsm_class'].astype(np.float64)
+            valid_y = valid_df['fact_cwsm_class'].astype(np.float64)
+            test_y = test_df['fact_cwsm_class'].astype(np.float64)
         elif args.dataset == 'power':
             train_x = train_df[train_df.columns.difference(['power'])].astype(np.float64)
             valid_x = valid_df[train_df.columns.difference(['power'])].astype(np.float64)
@@ -501,9 +513,23 @@ class ShiftsDataset():
                                                                    shift_severity=args.mask_ratio,
                                                                    imputation_method="emd")
 
-        self.train_y = np.array(train_y).reshape(-1, 1)
-        self.valid_y = np.array(valid_y).reshape(-1, 1)
-        self.test_y = np.array(test_y).reshape(-1, 1)
+        if 'cls' in args.dataset:
+            self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+            self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0).reshape(-1, 1))
+            # self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y].reshape(-1, 1), axis=0))
+            self.train_y = self.output_one_hot_encoder.transform(np.array(train_y).reshape(-1, 1))
+            self.valid_y = self.output_one_hot_encoder.transform(np.array(valid_y).reshape(-1, 1))
+            self.test_y = self.output_one_hot_encoder.transform(np.array(test_y).reshape(-1, 1))
+
+            # self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+            # self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
+            # self.train_y = self.output_one_hot_encoder.transform(train_y)
+            # self.valid_y = self.output_one_hot_encoder.transform(valid_y)
+            # self.test_y = self.output_one_hot_encoder.transform(test_y)
+        else:
+            self.train_y = np.array(train_y).reshape(-1, 1)
+            self.valid_y = np.array(valid_y).reshape(-1, 1)
+            self.test_y = np.array(test_y).reshape(-1, 1)
 
         print('dataset preprocess done!')
 
