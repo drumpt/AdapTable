@@ -9,3 +9,5 @@ data/tableshift/tmp
 log
 exps
 outputs
+*.xml
+*.iml

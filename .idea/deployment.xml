@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="server36@server36.mli.kr:22 (8)" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
+  <component name="PublishConfigData" autoUpload="Always" serverName="server17@143.248.56.250:3301" remoteFilesAllowedToDisappearOnAutoupload="false" confirmBeforeUploading="false">
     <option name="confirmBeforeUploading" value="false" />
     <serverData>
+      <paths name="server17@143.248.56.250:3301">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/home/server17/hdd/taewon_workspace/tabtta" local="$PROJECT_DIR$" />
+          </mappings>
+        </serverdata>
+      </paths>
       <paths name="server36@server36.mli.kr:22 (8)">
         <serverdata>
           <mappings>
