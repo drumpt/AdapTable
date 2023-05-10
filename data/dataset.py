@@ -467,11 +467,11 @@ class ShiftsDataset():
 
         else:
             train_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{dataset_path_name}/train.csv"))
+                                                f"shifts/{dataset_path_name}/train.csv")).dropna()
             valid_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{dataset_path_name}/dev_in.csv"))
+                                                f"shifts/{dataset_path_name}/dev_in.csv")).dropna()
             test_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{dataset_path_name}/dev_out.csv"))
+                                                f"shifts/{dataset_path_name}/dev_out.csv")).dropna()
 
         if args.dataset == 'weather_reg':
             train_x = train_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float64)
@@ -498,9 +498,18 @@ class ShiftsDataset():
             test_y = test_df['power'].astype(np.float64)
         print('loading done!')
 
-        self.train_x = np.array(train_x[sorted(train_x.columns)])
-        self.valid_x = np.array(valid_x[sorted(valid_x.columns)])
-        self.test_x = np.array(test_x[sorted(test_x.columns)])
+        self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
+        self.input_scaler.fit(np.concatenate([train_x, valid_x], axis=0))
+
+        self.train_x = self.input_scaler.transform(train_x)
+        self.valid_x = self.input_scaler.transform(valid_x)
+        test_x = self.input_scaler.transform(test_x)
+        self.test_x, self.test_mask_x = get_corrupted_data(np.array(test_x),
+                                                      np.array(train_x),
+                                                      data_type="numerical", shift_type=args.shift_type,
+                                                      shift_severity=args.shift_severity,
+                                                      imputation_method=args.imputation_method)
+
 
         self.train_cor_x, self.train_cor_mask_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical",
                                                                      shift_type="random_drop",
@@ -518,20 +527,17 @@ class ShiftsDataset():
         if 'cls' in args.dataset:
             self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
             self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0).reshape(-1, 1))
-            # self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y].reshape(-1, 1), axis=0))
             self.train_y = self.output_one_hot_encoder.transform(np.array(train_y).reshape(-1, 1))
             self.valid_y = self.output_one_hot_encoder.transform(np.array(valid_y).reshape(-1, 1))
             self.test_y = self.output_one_hot_encoder.transform(np.array(test_y).reshape(-1, 1))
-
-            # self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-            # self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
-            # self.train_y = self.output_one_hot_encoder.transform(train_y)
-            # self.valid_y = self.output_one_hot_encoder.transform(valid_y)
-            # self.test_y = self.output_one_hot_encoder.transform(test_y)
         else:
             self.train_y = np.array(train_y).reshape(-1, 1)
             self.valid_y = np.array(valid_y).reshape(-1, 1)
             self.test_y = np.array(test_y).reshape(-1, 1)
+
+        self.train_cor_x = np.array(self.train_cor_x)
+        self.valid_cor_x = np.array(self.valid_cor_x)
+        self.test_cor_x = np.array(self.test_cor_x)
 
         print('dataset preprocess done!')
 
@@ -542,13 +548,13 @@ class ShiftsDataset():
             pd_list.append(pd.read_csv(path))
         train_pd = pd.concat(pd_list[:3])
         train_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{args.dataset}/train.csv"))
+                                                f"shifts/weather/train.csv"))
         eval_pd = pd.concat([pd_list[3]])
         eval_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{args.dataset}/dev_in.csv"))
+                                                f"shifts/weather/dev_in.csv"))
         test_pd = pd.concat(pd_list[4:])
         test_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/{args.dataset}/dev_out.csv"))
+                                                f"shifts/weather/dev_out.csv"))
         return (train_pd, eval_pd, test_pd)
 
 
