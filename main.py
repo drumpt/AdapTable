@@ -137,7 +137,7 @@ def pretrain(args, model, optimizer, dataset, logger):
     device = args.device
     best_model, best_loss = None, float('inf')
     mse_loss_fn = nn.MSELoss()
-    ce_loss_fn = nn.CrossEntropyLoss()
+    ce_loss_fn = nn.CrossEntropyLoss() # for categorical variables
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
         # model.train().to(device)
