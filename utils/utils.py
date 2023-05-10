@@ -12,12 +12,25 @@ def set_seed(seed):
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
+    np.random.default_rng(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+def set_seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2 ** 32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
+def get_generator(seed):
+    g = torch.Generator()
+    g.manual_seed(seed)
+    return g
 
 
 def get_logger(args):
@@ -38,6 +51,22 @@ def disable_logger(args):
         logger.propagate = False
 
 
+def send_message(message, token, channel):
+    client = WebClient(token=token)
+    response = client.chat_postMessage(channel="#"+channel, text=message)
+
+
+def safe_log(x, ver):
+    if ver == 1:
+        return torch.log(x + 1e-5)
+    elif ver == 2:
+        return torch.log(x + 1e-7)
+    elif ver == 3:
+        return torch.clamp(torch.log(x), min=-100)
+    else:
+        raise ValueError("safe_log version is not properly defined !!!")
+
+
 def softmax_entropy(x, dim=-1):
     return -(x.softmax(dim) * x.log_softmax(dim)).sum(dim)
 
@@ -53,6 +82,6 @@ def renyi_entropy(x, alpha, dim=-1):
     return torch.mean(entropy)
 
 
-def send_message(message, token, channel):
-    client = WebClient(token=token)
-    response = client.chat_postMessage(channel="#"+channel, text=message)
+def softmax_diversity_regularizer(x):
+    x2 = x.softmax(-1).mean(0)  # [b, c] -> [c]
+    return (x2 * safe_log(x2, ver=3)).sum()
