@@ -31,7 +31,7 @@ def forward_and_adapt(args, x, model, optimizer):
 
         optimizer.first_step()
 
-        new_outputs = model(x)
+        new_outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
         entropy_second = softmax_entropy(new_outputs)
         entropy_second = entropy_second[filter_id]
         filter_id = torch.where(entropy_second < 0.4 * np.log(outputs.shape[-1]))
@@ -189,7 +189,7 @@ def pretrain(args, model, optimizer, dataset, logger):
 def train(args, model, optimizer, dataset, logger):
     device = args.device
     best_model, best_loss = None, float('inf')
-    # mse_loss_fn = nn.MSELoss() # for regression
+    mse_loss_fn = nn.MSELoss() # for regression
     ce_loss_fn = nn.CrossEntropyLoss()
     for epoch in range(1, args.epochs + 1):
         train_loss, train_acc, train_len = 0, 0, 0
@@ -198,7 +198,7 @@ def train(args, model, optimizer, dataset, logger):
             train_x, train_y = train_x.to(device), train_y.to(device)
 
             estimated_y = model(train_x) if isinstance(model, MLP) else model(train_x)[-1]
-            loss = ce_loss_fn(estimated_y, train_y)
+            loss = ce_loss_fn(estimated_y, train_y) if isinstance(model, MLP) else mse_loss_fn(estimated_y, train_y)
 
             optimizer.zero_grad()
             loss.backward()
@@ -214,7 +214,7 @@ def train(args, model, optimizer, dataset, logger):
             for valid_x, valid_y in dataset.valid_loader:
                 valid_x, valid_y = valid_x.to(device), valid_y.to(device)
                 estimated_y = model(valid_x) if isinstance(model, MLP) else model(valid_x)[-1]
-                loss = ce_loss_fn(estimated_y, valid_y)
+                loss = ce_loss_fn(estimated_y, valid_y) if isinstance(model, MLP) else mse_loss_fn(estimated_y, valid_y)
 
                 valid_loss += loss.item() * valid_x.shape[0]
                 valid_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(valid_y, dim=-1)).sum().item()
@@ -282,7 +282,10 @@ def joint_train(args, model, optimizer, dataset, logger):
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     if 'mae' in args.method:
-        main_mae(args)
+        if len(args.method) > 1:
+            main_mae_method(args)
+        else:
+            main_mae(args)
     else:
         main_em(args)
 
@@ -446,6 +449,116 @@ def main_mae(args):
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
+
+
+def main_mae_method(args):
+    if hasattr(args, 'seed'):
+        utils.set_seed(args.seed)
+        print(f"set seed as {args.seed}")
+    if not os.path.exists(args.log_dir):
+        os.makedirs(args.log_dir)
+    utils.disable_logger(args)
+    logger = utils.get_logger(args)
+    logger.info(OmegaConf.to_yaml(args))
+    if not os.path.exists(args.out_dir):
+        os.makedirs(args.out_dir)
+
+    device = args.device
+    dataset = Dataset(args)
+
+    if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
+        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+        best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
+        best_model.load_state_dict(best_state_dict)
+        print(f"load pretrained model!")
+    else:
+        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=0)
+
+        # self-supervised learning (masking and reconstruction task)
+        optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
+        model = pretrain(args, model, optimizer, dataset, logger)
+
+        # supervised learning (main task)
+        optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(model, train_params="downstream")[0], lr=args.train_lr)
+        best_model = train(args, model, optimizer, dataset, logger)
+
+        # we can use either joint training
+        # optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
+        # best_model = joint_train(args, model, optimizer, dataset, logger)
+
+    test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
+    original_best_model = deepcopy(best_model)
+    # best_model.eval().requires_grad_(True).to(device)
+    best_model = best_model.train().requires_grad_(True).to(device)
+    original_best_model = original_best_model.eval().requires_grad_(False).to(device)
+
+
+    params, _ = collect_params(best_model, train_params=args.train_params)
+    if "sar" in args.method:
+        test_optimizer = SAM(params, base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
+    else:
+        test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
+    original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
+
+
+
+    loss_fn = nn.MSELoss() # for regression
+
+
+
+    global EMA
+    EMA = None
+    params, _ = collect_params(best_model, train_params="pretrain")
+    mae_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.pretrain_lr)
+    _, mae_original_optimizer_state, _ = copy_model_and_optimizer(best_model, mae_optimizer, scheduler=None)
+
+    for _, (test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y) in enumerate(dataset.mae_test_loader):
+        if args.episodic or (EMA != None and EMA < 0.2):
+            best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
+            best_model, mae_optimizer, _ = load_model_and_optimizer(best_model, mae_optimizer, None, original_model_state, mae_original_optimizer_state, None)
+            best_model = best_model.eval().requires_grad_(True).to(device)
+
+        test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y = test_cor_x.to(device), test_x.to(device), test_mask_x.to(device), test_cor_mask_x.to(device), test_y.to(device)
+        test_len += test_x.shape[0]
+
+        _, estimated_y = original_best_model(test_x)
+        loss = loss_fn(estimated_y, test_y)
+        test_loss_before += loss.item() * test_x.shape[0]
+        test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+
+        for _ in range(1, args.num_steps + 1):
+            mae_optimizer.zero_grad()
+
+            estimated_test_x, _ = best_model(test_cor_x)
+            # loss = loss_fn(estimated_test_x, test_x)
+            loss = loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss on non-missing values only
+            # loss = loss_fn(estimated_test_x * test_mask_x * test_cor_mask_x, test_x * test_mask_x * test_cor_mask_x)
+
+            # for bayesian masked autoencoder
+            # estimated_test_x, _ = best_model(test_cor_x)
+            # mean, std = estimated_test_x
+            # loss = (((mean - test_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
+
+            loss.backward()
+            mae_optimizer.step()
+
+        for _ in range(1, args.num_steps + 1):
+            forward_and_adapt(args, test_x, best_model, test_optimizer)
+
+
+        # TODO: remove (only for debugging)
+        # test_x = (test_x - torch.mean(test_x, dim=0, keepdim=True)) / torch.std(test_x, dim=0, keepdim=True)
+        # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
+
+        _, estimated_y = best_model(test_x)
+
+        loss = loss_fn(estimated_y, test_y)
+        test_loss_after += loss.item() * test_x.shape[0]
+        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+
+    logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
+    logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
+
 
 
 
