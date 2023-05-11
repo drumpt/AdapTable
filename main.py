@@ -432,7 +432,10 @@ def main_mae(args):
             test_optimizer.step()
 
         # TODO: remove (only for debugging)
+        # nan이 뜨는 이유? 깨달음
         # test_x = (test_x - torch.mean(test_x, dim=0, keepdim=True)) / torch.std(test_x, dim=0, keepdim=True)
+        # test_x = torch.nan_to_num(test_x, nan=0.0)
+        # print(f"test_x: {test_x}")
         # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
 
         _, estimated_y = best_model(test_x)
