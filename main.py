@@ -282,7 +282,7 @@ def joint_train(args, model, optimizer, dataset, logger):
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     if 'mae' in args.method:
-        if len(args.method > 1):
+        if len(args.method) > 1:
             main_mae_method(args)
         else:
             main_mae(args)
