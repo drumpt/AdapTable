@@ -4,13 +4,10 @@ warnings.filterwarnings("ignore")
 from copy import deepcopy
 import hydra
 from omegaconf import OmegaConf
-# from tqdm import tqdm
-# import wandb
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from matplotlib import pyplot as plt
 
 from data.dataset import *
 from model.mlp import MLP, MLP_MAE
@@ -20,8 +17,7 @@ from utils.utils import softmax_entropy, renyi_entropy
 
 
 def forward_and_adapt(args, x, model, optimizer):
-    global original_best_model
-    global EMA, ENTROPY_LIST, GRADIENT_NORM_LIST, ENTROPY_LIST_NEW, GRADIENT_NORM_LIST_NEW
+    global original_best_model, EMA
     optimizer.zero_grad()
 
     outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
@@ -56,15 +52,16 @@ def forward_and_adapt(args, x, model, optimizer):
         negative_loss += torch.mean(-torch.log(1 - torch.sum(negative_mask * torch.softmax(negative_outputs / args.temp, dim=-1), dim=-1)))
         if torch.is_tensor(negative_loss):
             negative_loss.backward(retain_graph=True)
+    if 'dm' in args.method: # diversity maximization
+        mean_probs = torch.mean(outputs, dim=-1, keepdim=True)
+        (- args.dm_weight * softmax_entropy(mean_probs / args.temp).mean()).backward(retain_graph=True)
     if 'kld' in args.method:
         original_outputs = original_best_model(x)
         probs = torch.softmax(outputs, dim=-1)
         original_probs = torch.softmax(original_outputs, dim=-1)
         kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
         (args.kld_weight * kl_div_loss).backward(retain_graph=True)
-    if 'dm' in args.method:
-        mean_probs = torch.mean(outputs, dim=-1, keepdim=True)
-        (- args.dm_weight * softmax_entropy(mean_probs / args.temp).mean()).backward(retain_graph=True)
+
     if 'sar' in args.method:
         optimizer.second_step()
     else:
@@ -80,7 +77,7 @@ def collect_params(model, train_params):
                 if not f"{nm}.{np}" in names:
                     params.append(p)
                     names.append(f"{nm}.{np}")
-        if 'LN' in train_params: # TODO: change this
+        if 'LN' in train_params: # TODO: change this (not working)
             if isinstance(m, nn.LayerNorm):
                 for np, p in m.named_parameters():
                     if np in ['weight', 'bias']:
@@ -140,22 +137,16 @@ def pretrain(args, model, optimizer, dataset, logger):
     ce_loss_fn = nn.CrossEntropyLoss() # for categorical variables
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
-        # model.train().to(device)
-        model.eval().to(device)
-        for batch_idx, (cor_x, train_x, train_cor_mask_x, train_y) in enumerate(dataset.mae_train_loader):
-            if epoch == 1 and batch_idx == 0:
-                print(f"cor_x: {cor_x}")
-                print(f"train_x: {train_x}")
-                print(f"train_cor_mask_x: {train_cor_mask_x}")
-                print(f"train_y: {train_y}")
-
-            # if hasattr(dataset.dataset, 'input_one_hot_encoder'):
-            #     print(f"dataset.dataset.input_one_hot_encoder.categories_: {dataset.dataset.input_one_hot_encoder.categories_}")
-
-            cor_x, train_x, train_cor_mask_x, train_y = cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
-            estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
+        model.train().to(device)
+        for train_cor_x, train_x, train_cor_mask_x, train_y in dataset.mae_train_loader:
+            train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
+            estimated_x = model(train_cor_x) if isinstance(model, MLP) else model(train_cor_x)[0]
             loss = mse_loss_fn(estimated_x, train_x)
             # loss = mse_loss_fn(estimated_x * train_cor_mask_x, train_x * train_cor_mask_x)
+
+            # TODO: implement cross-entropy for categorical variables
+            # if hasattr(dataset.dataset, 'input_one_hot_encoder'):
+            #     print(f"dataset.dataset.input_one_hot_encoder.categories_: {dataset.dataset.input_one_hot_encoder.categories_}")
 
             # for bayesian masked autoencoder
             # estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
@@ -166,15 +157,15 @@ def pretrain(args, model, optimizer, dataset, logger):
             loss.backward()
             optimizer.step()
 
-            train_loss += loss.item() * cor_x.shape[0]
-            train_len += cor_x.shape[0]
+            train_loss += loss.item() * train_cor_x.shape[0]
+            train_len += train_cor_x.shape[0]
 
         valid_loss, valid_len = 0, 0
         model.eval().to(device)
         with torch.no_grad():
-            for cor_x, valid_x, valid_cor_mask_x, valid_y in dataset.mae_valid_loader:
-                cor_x, valid_x, valid_cor_mask_x, valid_y = cor_x.to(device), valid_x.to(device), valid_cor_mask_x.to(device), valid_y.to(device)
-                estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
+            for valid_cor_x, valid_x, valid_cor_mask_x, valid_y in dataset.mae_valid_loader:
+                valid_cor_x, valid_x, valid_cor_mask_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_cor_mask_x.to(device), valid_y.to(device)
+                estimated_x = model(valid_cor_x) if isinstance(model, MLP) else model(valid_cor_x)[0]
                 loss = mse_loss_fn(estimated_x, valid_x)
                 # loss = mse_loss_fn(estimated_x * valid_cor_mask_x, valid_x * valid_cor_mask_x)
 
@@ -183,8 +174,8 @@ def pretrain(args, model, optimizer, dataset, logger):
                 # mean, std = estimated_x
                 # loss = (((mean - valid_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
 
-                valid_loss += loss.item() * cor_x.shape[0]
-                valid_len += cor_x.shape[0]
+                valid_loss += loss.item() * valid_cor_x.shape[0]
+                valid_len += valid_cor_x.shape[0]
 
         if valid_loss < best_loss:
             best_loss = valid_loss
@@ -248,11 +239,11 @@ def joint_train(args, model, optimizer, dataset, logger):
     for epoch in range(1, args.epochs + 1):
         train_loss, train_len = 0, 0
         model.train().to(device)
-        for cor_x, train_x, cor_mask_x, train_y in dataset.mae_train_loader:
+        for train_cor_x, train_x, train_cor_mask_x, train_y in dataset.mae_train_loader:
             optimizer.zero_grad()
 
-            cor_x, train_x, cor_mask_x, train_y = cor_x.to(device), train_x.to(device), cor_mask_x.to(device), train_y.to(device)
-            estimated_x, _ = model(cor_x)
+            train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
+            estimated_x, _ = model(train_cor_x)
             loss1 = mse_loss_fn(estimated_x, train_x)
             loss1.backward()
 
@@ -262,22 +253,22 @@ def joint_train(args, model, optimizer, dataset, logger):
 
             optimizer.step()
 
-            train_loss += (loss1.item() + loss2.item()) * cor_x.shape[0]
-            train_len += cor_x.shape[0]
+            train_loss += (loss1.item() + loss2.item()) * train_cor_x.shape[0]
+            train_len += train_cor_x.shape[0]
 
         valid_loss, valid_len = 0, 0
         model.eval().to(device)
         with torch.no_grad():
-            for cor_x, valid_x, cor_mask_x, valid_y in dataset.mae_valid_loader:
-                cor_x, valid_x, cor_mask_x, valid_y = cor_x.to(device), valid_x.to(device), cor_mask_x.to(device), valid_y.to(device)
-                estimated_x, _ = model(cor_x)
+            for valid_cor_x, valid_x, valid_cor_mask_x, valid_y in dataset.mae_valid_loader:
+                valid_cor_x, valid_x, valid_cor_mask_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_cor_mask_x.to(device), valid_y.to(device)
+                estimated_x, _ = model(valid_cor_x)
                 loss1 = mse_loss_fn(estimated_x, valid_x)
 
                 _, estimated_y = model(valid_x)
                 loss2 = ce_loss_fn(estimated_y, valid_y)
 
-                valid_loss += (loss1.item() + loss2.item()) * cor_x.shape[0]
-                valid_len += cor_x.shape[0]
+                valid_loss += (loss1.item() + loss2.item()) * valid_cor_x.shape[0]
+                valid_len += valid_cor_x.shape[0]
 
         if valid_loss < best_loss:
             best_loss = valid_loss
@@ -299,7 +290,6 @@ def main(args):
 def main_em(args):
     if hasattr(args, 'seed'):
         utils.set_seed(args.seed)
-        print(f"set seed as {args.seed}")
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
     logger = utils.get_logger(args)
@@ -311,11 +301,11 @@ def main_em(args):
     dataset = Dataset(args)
 
     global original_best_model
-
     model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
     optimizer = getattr(torch.optim, args.train_optimizer)(filter(lambda p: p.requires_grad, model.parameters()), lr=args.train_lr)
     loss_fn = nn.CrossEntropyLoss()
 
+    # use pretrained model
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
         best_model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
@@ -377,24 +367,27 @@ def main_mae(args):
 
     device = args.device
     dataset = Dataset(args)
+
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
-        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=100, n_layers=4)
+        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
         best_model.load_state_dict(best_state_dict)
         print(f"load pretrained model!")
     else:
-        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=100, n_layers=4, dropout=0)
+        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=0)
 
-        # self-supervised learning (with reconstruction)
+        # self-supervised learning (masking and reconstruction task)
         optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
         model = pretrain(args, model, optimizer, dataset, logger)
-        # best_state_dict = torch.load(os.path.join(args.out_dir, "best_pretrained_model.pth"))
-        # model.load_state_dict(best_state_dict)
 
-        # supervised learning
+        # supervised learning (main task)
         optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(model, train_params="downstream")[0], lr=args.train_lr)
         best_model = train(args, model, optimizer, dataset, logger)
+
+        # we can use either joint training
+        # optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
         # best_model = joint_train(args, model, optimizer, dataset, logger)
+
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
     # best_model.eval().requires_grad_(True).to(device)
@@ -413,7 +406,6 @@ def main_mae(args):
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
             best_model = best_model.eval().requires_grad_(True).to(device)
-            # best_model = best_model.train().requires_grad_(True).to(device)
 
         test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y = test_cor_x.to(device), test_x.to(device), test_mask_x.to(device), test_cor_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
@@ -428,7 +420,7 @@ def main_mae(args):
 
             estimated_test_x, _ = best_model(test_cor_x)
             # loss = loss_fn(estimated_test_x, test_x)
-            loss = loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x)
+            loss = loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss on non-missing values only
             # loss = loss_fn(estimated_test_x * test_mask_x * test_cor_mask_x, test_x * test_mask_x * test_cor_mask_x)
 
             # for bayesian masked autoencoder
@@ -439,7 +431,12 @@ def main_mae(args):
             loss.backward()
             test_optimizer.step()
 
+        # TODO: remove (only for debugging)
+        # test_x = (test_x - torch.mean(test_x, dim=0, keepdim=True)) / torch.std(test_x, dim=0, keepdim=True)
+        # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
+
         _, estimated_y = best_model(test_x)
+
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()

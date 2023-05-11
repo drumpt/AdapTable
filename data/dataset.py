@@ -6,7 +6,6 @@ from collections import Counter
 
 import openml
 from openml import tasks, runs
-import conf
 from data.utils.util_functions import load_opt
 from datasets import load_dataset
 from tableshift import get_dataset, get_iid_dataset
@@ -68,16 +67,13 @@ class OpenMLCC18Dataset():
         target_feature = benchmark_df[benchmark_df["name"] == args.dataset].iloc[0]["target_feature"]
 
         dataset = openml.datasets.get_dataset(args.dataset)
-        print(f"dataset: {dataset}")
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
+        # corr = pd.concat([x, y], axis=-1).corr() # TODO: for masked autoencoder
         y = np.array(y).reshape(-1, 1)
 
         # train/valid/test split
         train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
         valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
-
-        corr = pd.concat([train_x, train_y], axis=-1).corr()
-        print(f"corr: {corr}")
 
         # data preprocessing (normalization and one-hot encoding)
         cat_indices = np.argwhere(np.array(cat_indicator) == True).flatten()
@@ -88,7 +84,6 @@ class OpenMLCC18Dataset():
                 np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            
             # self.input_test_scaler = getattr(sklearn.preprocessing, args.normalizer)()
 
             test_cont_x, test_cont_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cont_indices]), np.array(train_x.iloc[:, cont_indices]), data_type="numerical", shift_type=args.shift_type, shift_severity=args.shift_severity, imputation_method=args.imputation_method)
@@ -225,12 +220,6 @@ class TableShiftDataset():
             test_x, test_y, _, _ = dataset.get_pandas("ood_test")
         else:
             test_x, test_y, _, _ = dataset.get_pandas("test")
-
-        # print(f"dir(dataset): {dir(dataset)}")
-        # print(f"dataset.features: {dataset.features}")
-        # print(f"dataset.feature_names: {dataset.feature_names}")
-        # print(f"dataset.cat_idxs: {dataset.cat_idxs}")
-        # print(f"dataset.get_domains")
 
         self.train_x = np.array(train_x[sorted(train_x.columns)])
         self.valid_x = np.array(valid_x[sorted(valid_x.columns)])

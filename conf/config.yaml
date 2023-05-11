@@ -8,21 +8,21 @@ meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression, shifts
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
-dataset: cmc
-shift_type: null # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
-shift_severity: 0
+dataset: semeion
+shift_type: random_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_severity: 0.8
 normalizer: StandardScaler
-imputation_method: emd # zero, mean, emd(empirical marginal distribution)
+imputation_method: zero # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for MAE pretraining
 pretrain_epochs: 20
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
-mask_ratio: 0.25
+mask_ratio: 0.75
 
 ### hyperparameters for training
-retrain: true
+retrain: false
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
