@@ -102,7 +102,8 @@ class OpenMLCC18Dataset():
             # test_cont_cor_x = self.input_test_scaler.fit_transform(test_cont_cor_x)
         else:
             train_cont_x, test_cont_mask_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([]), np.array([])
-            train_cont_cor_x, valid_cont_cor_x, test_cont_cor_x, train_cont_cor_mask_x, valid_cont_cor_mask_x, test_cont_cor_mask_x = np.array([]), np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
+            train_cont_cor_x, valid_cont_cor_x, test_cont_cor_x = np.array([]), np.array([]), np.array([])
+            train_cont_cor_mask_x, valid_cont_cor_mask_x, test_cont_cor_mask_x = np.array([]), np.array([]), np.array([])
         if len(cat_indices):
             self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
             self.input_one_hot_encoder.fit(
@@ -127,7 +128,8 @@ class OpenMLCC18Dataset():
             test_cat_cor_mask_x = np.concatenate([np.repeat(test_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=-1)
         else:
             train_cat_x, valid_cat_x, test_cat_x, test_cat_mask_x = np.array([]), np.array([]), np.array([]), np.array([])
-            train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x, train_cat_cor_mask_x, valid_cat_cor_mask_x, test_cat_cor_mask_x = np.array([]), np.array([]), np.array([]), np.array([]), np.array([]), np.array([])
+            train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])
+            train_cat_cor_mask_x, valid_cat_cor_mask_x, test_cat_cor_mask_x = np.array([]), np.array([]), np.array([])
 
         self.train_x = np.concatenate([
             train_cont_x if len(cont_indices) else train_cont_x.reshape(train_cat_x.shape[0], 0),
@@ -349,8 +351,9 @@ class OpenMLRegressionDataset():
                                                                        imputation_method="emd")
             test_cont_cor_x = self.input_scaler.transform(test_cont_cor_x)
         else:
-            train_cont_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([])
+            train_cont_x, test_cont_mask_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([]), np.array([])
             train_cont_cor_x, valid_cont_cor_x, test_cont_cor_x = np.array([]), np.array([]), np.array([])
+            train_cont_cor_mask_x, valid_cont_cor_mask_x, test_cont_cor_mask_x = np.array([]), np.array([]), np.array([])
         if len(cat_indices):
             self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
             self.input_one_hot_encoder.fit(
@@ -364,6 +367,7 @@ class OpenMLRegressionDataset():
                                                              shift_severity=args.shift_severity,
                                                              imputation_method=args.imputation_method)
             test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
+            test_cat_mask_x = np.concatenate([np.repeat(test_cat_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
 
             # for MAE
             train_cat_cor_x, train_cat_cor_mask_x = get_corrupted_data(np.array(train_x.iloc[:, cat_indices]),
@@ -373,6 +377,7 @@ class OpenMLRegressionDataset():
                                                                        shift_severity=args.mask_ratio,
                                                                        imputation_method="emd")
             train_cat_cor_x = self.input_one_hot_encoder.transform(train_cat_cor_x)
+            train_cat_cor_mask_x = np.concatenate([np.repeat(train_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
 
             valid_cat_cor_x, valid_cat_cor_mask_x = get_corrupted_data(np.array(valid_x.iloc[:, cat_indices]),
                                                                        np.array(train_x.iloc[:, cat_indices]),
@@ -381,15 +386,20 @@ class OpenMLRegressionDataset():
                                                                        shift_severity=args.mask_ratio,
                                                                        imputation_method="emd")
             valid_cat_cor_x = self.input_one_hot_encoder.transform(valid_cat_cor_x)
+            valid_cat_cor_mask_x = np.concatenate([np.repeat(valid_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
+
             test_cat_cor_x, test_cat_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]),
                                                                      np.array(train_x.iloc[:, cat_indices]),
                                                                      data_type="categorical", shift_type="random_drop",
                                                                      shift_severity=args.mask_ratio,
                                                                      imputation_method="emd")
             test_cat_cor_x = self.input_one_hot_encoder.transform(test_cat_cor_x)
+            test_cat_cor_mask_x = np.concatenate([np.repeat(test_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=-1)
         else:
-            train_cat_x, valid_cat_x, test_cat_x = np.array([]), np.array([]), np.array([])
+            train_cat_x, valid_cat_x, test_cat_x, test_cat_mask_x = np.array([]), np.array([]), np.array([]), np.array([])
             train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])
+            train_cat_cor_mask_x, valid_cat_cor_mask_x, test_cat_cor_mask_x = np.array([]), np.array([]), np.array([])
+
         self.train_x = np.concatenate([
             train_cont_x if len(cont_indices) else train_cont_x.reshape(train_cat_x.shape[0], 0),
             train_cat_x if len(cat_indices) else train_cat_x.reshape(train_cont_x.shape[0], 0)
@@ -421,6 +431,27 @@ class OpenMLRegressionDataset():
             test_cont_cor_x if len(cont_indices) else test_cont_cor_x.reshape(test_cat_cor_x.shape[0], 0),
             test_cat_cor_x if len(cat_indices) else test_cat_cor_x.reshape(test_cont_cor_x.shape[0], 0)
         ], axis=-1
+        )
+
+        self.test_mask_x = np.concatenate([
+            test_cont_mask_x if len(cont_indices) else test_cont_mask_x.reshape(test_cat_mask_x.shape[0], 0),
+            test_cat_mask_x if len(cat_indices) else test_cat_mask_x.reshape(test_cont_mask_x.shape[0], 0)
+            ], axis=-1            
+        )
+        self.train_cor_mask_x = np.concatenate([
+            train_cont_cor_mask_x if len(cont_indices) else train_cont_cor_mask_x.reshape(train_cat_cor_mask_x.shape[0], 0),
+            train_cat_cor_mask_x if len(cat_indices) else train_cat_cor_mask_x.reshape(train_cont_cor_mask_x.shape[0], 0)
+            ], axis=-1            
+        )
+        self.valid_cor_mask_x = np.concatenate([
+            valid_cont_cor_mask_x if len(cont_indices) else valid_cont_cor_mask_x.reshape(valid_cat_cor_mask_x.shape[0], 0),
+            valid_cat_cor_mask_x if len(cat_indices) else valid_cat_cor_mask_x.reshape(valid_cont_cor_mask_x.shape[0], 0)
+            ], axis=-1            
+        )
+        self.test_cor_mask_x = np.concatenate([
+            test_cont_cor_mask_x if len(cont_indices) else test_cont_cor_mask_x.reshape(test_cat_cor_mask_x.shape[0], 0),
+            test_cat_cor_mask_x if len(cat_indices) else test_cat_cor_mask_x.reshape(test_cont_cor_mask_x.shape[0], 0)
+            ], axis=-1            
         )
 
         self.train_y = np.array(train_y)

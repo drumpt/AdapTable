@@ -420,6 +420,7 @@ def main_mae(args):
 
             estimated_test_x, _ = best_model(test_cor_x)
             # loss = loss_fn(estimated_test_x, test_x)
+            print(estimated_test_x.shape, test_mask_x.shape, test_x.shape )
             loss = loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss on non-missing values only
             # loss = loss_fn(estimated_test_x * test_mask_x * test_cor_mask_x, test_x * test_mask_x * test_cor_mask_x)
 
