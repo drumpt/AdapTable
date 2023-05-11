@@ -133,25 +133,33 @@ def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer
 def pretrain(args, model, optimizer, dataset, logger):
     device = args.device
     best_model, best_loss = None, float('inf')
-    mse_loss_fn = nn.MSELoss()
-    ce_loss_fn = nn.CrossEntropyLoss() # for categorical variables
+    mse_loss_fn = nn.MSELoss(reduction='none')
+    ce_loss_fn = nn.CrossEntropyLoss(reduction='none')
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
         model.train().to(device)
         for train_cor_x, train_x, train_cor_mask_x, train_y in dataset.mae_train_loader:
             train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
             estimated_x = model(train_cor_x) if isinstance(model, MLP) else model(train_cor_x)[0]
-            loss = mse_loss_fn(estimated_x, train_x)
-            # loss = mse_loss_fn(estimated_x * train_cor_mask_x, train_x * train_cor_mask_x)
+            loss = mse_loss_fn(estimated_x, train_x).mean()
 
-            # TODO: implement cross-entropy for categorical variables
-            # if hasattr(dataset.dataset, 'input_one_hot_encoder'):
-            #     print(f"dataset.dataset.input_one_hot_encoder.categories_: {dataset.dataset.input_one_hot_encoder.categories_}")
+            # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
+            # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
+            #     categorical_weight = 0.5
+            # else:
+            #     categorical_weight = args.mae_cat_weight
 
-            # for bayesian masked autoencoder
-            # estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
-            # mean, std = estimated_x
-            # loss = (((mean - train_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
+            # mse_loss += mse_loss_fn(
+            #     estimated_x[:, :dataset.dataset.cont_dim],
+            #     train_x[:, :dataset.dataset.cont_dim]
+            # ).mean()
+            # for cum_cat_dim in utils.cumulative_sum(dataset.dataset.cat_dim_list):
+            #     ce_loss += ce_loss_fn(
+            #         estimated_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim],
+            #         train_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim]
+            #     ).mean()
+            #     prev_cum_cat_dim = cum_cat_dim
+            # loss = 2 * (1 - categorical_weight) * dataset.dataset.cont_dim / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * mse_loss + 2 * categorical_weight * len(dataset.dataset.cat_dim_list) / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * ce_loss
 
             optimizer.zero_grad()
             loss.backward()
@@ -166,13 +174,25 @@ def pretrain(args, model, optimizer, dataset, logger):
             for valid_cor_x, valid_x, valid_cor_mask_x, valid_y in dataset.mae_valid_loader:
                 valid_cor_x, valid_x, valid_cor_mask_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_cor_mask_x.to(device), valid_y.to(device)
                 estimated_x = model(valid_cor_x) if isinstance(model, MLP) else model(valid_cor_x)[0]
-                loss = mse_loss_fn(estimated_x, valid_x)
-                # loss = mse_loss_fn(estimated_x * valid_cor_mask_x, valid_x * valid_cor_mask_x)
+                loss = mse_loss_fn(estimated_x, valid_x).mean()
 
-                # for bayesian masked autoencoder
-                # estimated_x = model(cor_x) if isinstance(model, MLP) else model(cor_x)[0]
-                # mean, std = estimated_x
-                # loss = (((mean - valid_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
+                # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
+                # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
+                #     categorical_weight = 0.5
+                # else:
+                #     categorical_weight = args.mae_cat_weight
+
+                # mse_loss += mse_loss_fn(
+                #     estimated_x[:, :dataset.dataset.cont_dim],
+                #     valid_x[:, :dataset.dataset.cont_dim]
+                # ).mean()
+                # for cum_cat_dim in utils.cumulative_sum(dataset.dataset.cat_dim_list):
+                #     ce_loss += ce_loss_fn(
+                #         estimated_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim],
+                #         valid_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim]
+                #     ).mean()
+                #     prev_cum_cat_dim = cum_cat_dim
+                # loss = 2 * (1 - categorical_weight) * dataset.dataset.cont_dim / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * mse_loss + 2 * categorical_weight * len(dataset.dataset.cat_dim_list) / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * ce_loss
 
                 valid_loss += loss.item() * valid_cor_x.shape[0]
                 valid_len += valid_cor_x.shape[0]
@@ -244,16 +264,16 @@ def joint_train(args, model, optimizer, dataset, logger):
 
             train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
             estimated_x, _ = model(train_cor_x)
-            loss1 = mse_loss_fn(estimated_x, train_x)
-            loss1.backward()
+            recon_loss = mse_loss_fn(estimated_x, train_x)
+            recon_loss.backward()
 
             _, estimated_y = model(train_x)
-            loss2 = ce_loss_fn(estimated_y, train_y)
-            loss2.backward()
+            main_loss = ce_loss_fn(estimated_y, train_y)
+            main_loss.backward()
 
             optimizer.step()
 
-            train_loss += (loss1.item() + loss2.item()) * train_cor_x.shape[0]
+            train_loss += (recon_loss.item() + main_loss.item()) * train_cor_x.shape[0]
             train_len += train_cor_x.shape[0]
 
         valid_loss, valid_len = 0, 0
@@ -262,12 +282,12 @@ def joint_train(args, model, optimizer, dataset, logger):
             for valid_cor_x, valid_x, valid_cor_mask_x, valid_y in dataset.mae_valid_loader:
                 valid_cor_x, valid_x, valid_cor_mask_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_cor_mask_x.to(device), valid_y.to(device)
                 estimated_x, _ = model(valid_cor_x)
-                loss1 = mse_loss_fn(estimated_x, valid_x)
+                recon_loss = mse_loss_fn(estimated_x, valid_x)
 
                 _, estimated_y = model(valid_x)
-                loss2 = ce_loss_fn(estimated_y, valid_y)
+                main_loss = ce_loss_fn(estimated_y, valid_y)
 
-                valid_loss += (loss1.item() + loss2.item()) * valid_cor_x.shape[0]
+                valid_loss += (recon_loss.item() + main_loss.item()) * valid_cor_x.shape[0]
                 valid_len += valid_cor_x.shape[0]
 
         if valid_loss < best_loss:
@@ -397,7 +417,8 @@ def main_mae(args):
     best_model = best_model.train().requires_grad_(True).to(device)
     original_best_model = original_best_model.eval().requires_grad_(False).to(device)
 
-    loss_fn = nn.MSELoss() # for regression
+    mse_loss_fn = nn.MSELoss()
+    ce_loss_fn = nn.CrossEntropyLoss()
 
     global EMA
     EMA = None
@@ -414,36 +435,44 @@ def main_mae(args):
         test_len += test_x.shape[0]
 
         _, estimated_y = original_best_model(test_x)
-        loss = loss_fn(estimated_y, test_y)
+        loss = ce_loss_fn(estimated_y, test_y) # TODO: mse_loss implement for regression
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
-
             estimated_test_x, _ = best_model(test_cor_x)
-            # loss = loss_fn(estimated_test_x, test_x)
-            loss = loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss on non-missing values only
-            # loss = loss_fn(estimated_test_x * test_mask_x * test_cor_mask_x, test_x * test_mask_x * test_cor_mask_x)
+            
+            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
+            # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
+            #     categorical_weight = 0.5
+            # else:
+            #     categorical_weight = args.mae_cat_weight
 
-            # for bayesian masked autoencoder
-            # estimated_test_x, _ = best_model(test_cor_x)
-            # mean, std = estimated_test_x
-            # loss = (((mean - test_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
+            # mse_loss += mse_loss_fn(
+            #     estimated_test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim],
+            #     test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim]
+            # ).mean()
+            # for cum_cat_dim in utils.cumulative_sum(dataset.dataset.cat_dim_list):
+            #     ce_loss += ce_loss_fn(
+            #         estimated_test_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim] * test_mask_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim],
+            #         test_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim] * test_mask_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim]
+            #     ).mean()
+            #     prev_cum_cat_dim = cum_cat_dim
+            # loss = 2 * (1 - categorical_weight) * dataset.dataset.cont_dim / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * mse_loss + 2 * categorical_weight * len(dataset.dataset.cat_dim_list) / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * ce_loss
 
             loss.backward()
             test_optimizer.step()
 
         # TODO: remove (only for debugging)
-        # nan이 뜨는 이유? 깨달음
-        # test_x = (test_x - torch.mean(test_x, dim=0, keepdim=True)) / torch.std(test_x, dim=0, keepdim=True)
+        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
         # test_x = torch.nan_to_num(test_x, nan=0.0)
-        # print(f"test_x: {test_x}")
         # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
 
         _, estimated_y = best_model(test_x)
 
-        loss = loss_fn(estimated_y, test_y)
+        loss = ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
@@ -533,11 +562,6 @@ def main_mae_method(args):
             # loss = loss_fn(estimated_test_x, test_x)
             loss = loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss on non-missing values only
             # loss = loss_fn(estimated_test_x * test_mask_x * test_cor_mask_x, test_x * test_mask_x * test_cor_mask_x)
-
-            # for bayesian masked autoencoder
-            # estimated_test_x, _ = best_model(test_cor_x)
-            # mean, std = estimated_test_x
-            # loss = (((mean - test_x) ** 2) / (2 * (std ** 2)) + torch.log(std)).mean()
 
             loss.backward()
             mae_optimizer.step()

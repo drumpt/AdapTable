@@ -125,7 +125,7 @@ class OpenMLCC18Dataset():
 
             test_cat_cor_x, test_cat_cor_mask_x = get_corrupted_data(np.array(test_x.iloc[:, cat_indices]), np.array(train_x.iloc[:, cat_indices]), data_type="categorical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
             test_cat_cor_x = self.input_one_hot_encoder.transform(test_cat_cor_x)
-            test_cat_cor_mask_x = np.concatenate([np.repeat(test_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=-1)
+            test_cat_cor_mask_x = np.concatenate([np.repeat(test_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
         else:
             train_cat_x, valid_cat_x, test_cat_x, test_cat_mask_x = np.array([]), np.array([]), np.array([]), np.array([])
             train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])
@@ -205,9 +205,6 @@ class OpenMLCC18Dataset():
         self.cont_dim = train_cont_x.shape[-1]
         self.cat_dim_list = [] if not hasattr(self, 'input_one_hot_encoder') else [len(category) for category in self.input_one_hot_encoder.categories_]
 
-        print(f"self.cont_dim: {self.cont_dim}")
-        print(f"self.cat_dim_list: {self.cat_dim_list}")
-
         self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
         self.train_y = self.output_one_hot_encoder.transform(train_y)
@@ -241,6 +238,9 @@ class TableShiftDataset():
         train_y = np.array(train_y).reshape(-1, 1)
         valid_y = np.array(valid_y).reshape(-1, 1)
         test_y = np.array(test_y).reshape(-1, 1)
+
+        self.cont_dim = self.train_x.shape[-1]
+        self.cat_dim_list = []
 
         self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
@@ -400,7 +400,7 @@ class OpenMLRegressionDataset():
                                                                      shift_severity=args.mask_ratio,
                                                                      imputation_method="emd")
             test_cat_cor_x = self.input_one_hot_encoder.transform(test_cat_cor_x)
-            test_cat_cor_mask_x = np.concatenate([np.repeat(test_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=-1)
+            test_cat_cor_mask_x = np.concatenate([np.repeat(test_cat_cor_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
         else:
             train_cat_x, valid_cat_x, test_cat_x, test_cat_mask_x = np.array([]), np.array([]), np.array([]), np.array([])
             train_cat_cor_x, valid_cat_cor_x, test_cat_cor_x = np.array([]), np.array([]), np.array([])

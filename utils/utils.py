@@ -3,6 +3,7 @@ import logging
 import random
 from datetime import datetime
 from slack_sdk import WebClient
+from collections import Counter
 
 import numpy as np
 import torch
@@ -82,6 +83,15 @@ def renyi_entropy(x, alpha, dim=-1):
     return torch.mean(entropy)
 
 
-def softmax_diversity_regularizer(x):
-    x2 = x.softmax(-1).mean(0)  # [b, c] -> [c]
+def softmax_diversity_regularizer(x): # for shot
+    x2 = x.softmax(-1).mean(0)
     return (x2 * safe_log(x2, ver=3)).sum()
+
+
+def cumulative_sum(lst):
+    if len(lst) == 0:
+        return lst
+    cum_sum = [lst[0]]
+    for i in range(1, len(lst)):
+        cum_sum.append(cum_sum[i-1] + lst[i])
+    return cum_sum
