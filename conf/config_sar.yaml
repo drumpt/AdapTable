@@ -38,7 +38,7 @@ train_params: [all] # currently supported: all, LN, BN, GN
 
 ##################################################################
 ### methods & other hyperparameters
-method: [em, dm] # currently supported: sar, em, gem, ns, kld, dm
+method: [sar] # currently supported: sar, em, gem, ns, kld, dm
 temp: 2.5 # temperature scaling
 renyi_entropy_alpha: 1.5
 ns_threshold: 0.04 # negative sampling

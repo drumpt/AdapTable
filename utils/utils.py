@@ -57,6 +57,15 @@ def send_message(message, token, channel):
     response = client.chat_postMessage(channel="#"+channel, text=message)
 
 
+def cumulative_sum(lst):
+    if len(lst) == 0:
+        return lst
+    cum_sum = [lst[0]]
+    for i in range(1, len(lst)):
+        cum_sum.append(cum_sum[i-1] + lst[i])
+    return cum_sum
+
+
 def safe_log(x, ver):
     if ver == 1:
         return torch.log(x + 1e-5)
@@ -86,12 +95,3 @@ def renyi_entropy(x, alpha, dim=-1):
 def softmax_diversity_regularizer(x): # for shot
     x2 = x.softmax(-1).mean(0)
     return (x2 * safe_log(x2, ver=3)).sum()
-
-
-def cumulative_sum(lst):
-    if len(lst) == 0:
-        return lst
-    cum_sum = [lst[0]]
-    for i in range(1, len(lst)):
-        cum_sum.append(cum_sum[i-1] + lst[i])
-    return cum_sum

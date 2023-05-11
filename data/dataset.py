@@ -33,8 +33,8 @@ class Dataset():
             self.dataset = OpenMLRegressionDataset(args)
         elif args.meta_dataset == "shifts":
             self.dataset = ShiftsDataset(args)
-        elif args.meta_dataset == "uci":
-            self.dataset = UCIDataset(args, args.dataset, "data")
+        # elif args.meta_dataset == "uci":
+        #     self.dataset = UCIDataset(args, args.dataset, "data")
 
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.train_x), torch.FloatTensor(self.dataset.train_y))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.valid_x), torch.FloatTensor(self.dataset.valid_y))
@@ -572,108 +572,108 @@ class ShiftsDataset():
 
 
 
-class UCIDataset():
-    def __init__(self, args, name, data_path):
-        self.datasets = {
-            "wine": "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv", # classification
-            "adult": "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", # classification
-            "breast": "https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer/breast-cancer.data", # classification
+# class UCIDataset():
+#     def __init__(self, args, name, data_path):
+#         self.datasets = {
+#             "wine": "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv", # classification
+#             "adult": "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data", # classification
+#             "breast": "https://archive.ics.uci.edu/ml/machine-learning-databases/breast-cancer/breast-cancer.data", # classification
 
-            "concrete": "https://archive.ics.uci.edu/ml/machine-learning-databases/concrete/compressive/Concrete_Data.xls", # regression
-            "housing": "https://archive.ics.uci.edu/ml/machine-learning-databases/housing/housing.data", # regression
-            "energy": "http://archive.ics.uci.edu/ml/machine-learning-databases/00242/ENB2012_data.xlsx", # regression
-            "power": "https://archive.ics.uci.edu/ml/machine-learning-databases/00294/CCPP.zip", # regression
-            "yacht": "http://archive.ics.uci.edu/ml/machine-learning-databases/00243/yacht_hydrodynamics.data", # regression
-        }
-        self.args = args
-        self.name = name
-        self.data_path = data_path
-        self.load_dataset()
+#             "concrete": "https://archive.ics.uci.edu/ml/machine-learning-databases/concrete/compressive/Concrete_Data.xls", # regression
+#             "housing": "https://archive.ics.uci.edu/ml/machine-learning-databases/housing/housing.data", # regression
+#             "energy": "http://archive.ics.uci.edu/ml/machine-learning-databases/00242/ENB2012_data.xlsx", # regression
+#             "power": "https://archive.ics.uci.edu/ml/machine-learning-databases/00294/CCPP.zip", # regression
+#             "yacht": "http://archive.ics.uci.edu/ml/machine-learning-databases/00243/yacht_hydrodynamics.data", # regression
+#         }
+#         self.args = args
+#         self.name = name
+#         self.data_path = data_path
+#         self.load_dataset()
 
 
-    def load_dataset(self):
-        if self.name not in self.datasets:
-            raise Exception("Unknown dataset!")
-        if not path.exists(self.data_path + "UCI"):
-            os.mkdir(self.data_path + "UCI")
+#     def load_dataset(self):
+#         if self.name not in self.datasets:
+#             raise Exception("Unknown dataset!")
+#         if not path.exists(self.data_path + "UCI"):
+#             os.mkdir(self.data_path + "UCI")
 
-        url = self.datasets[self.name]
-        file_name = url.split('/')[-1]
-        if not path.exists(os.path.join(self.data_path, "UCI", file_name)):
-            urllib.request.urlretrieve(self.datasets[self.name], os.path.join(self.data_path, "UCI", file_name))
+#         url = self.datasets[self.name]
+#         file_name = url.split('/')[-1]
+#         if not path.exists(os.path.join(self.data_path, "UCI", file_name)):
+#             urllib.request.urlretrieve(self.datasets[self.name], os.path.join(self.data_path, "UCI", file_name))
 
-        # get dataset
-        if self.name == "wine":
-            data = pd.read_csv(os.path.join(self.data_path, 'UCI/winequality-red.csv'), header=1, delimiter=';').values
-            cat_indices = np.array([])
-            task = "classification"
-        elif self.name == "adult":
-            data = pd.read_csv(os.path.join(self.data_path, 'UCI/adult.data'), header=0, delimiter=", ").values
-            cat_indices = np.array([1, 3, 5, 6, 7, 8, 9, 13])
-            task = "classification"
-        elif self.name == "breast":
-            data = pd.read_csv(os.path.join(self.data_path, 'UCI/breast.data'), header=0, delimiter="\s+").values
-            task = "classification"
-        elif self.name == "concrete":
-            data = pd.read_excel(os.path.join(self.data_path, 'UCI/Concrete_Data.xls'), header=0).values
-            task = "regression"
-        elif self.name == "housing":
-            data = pd.read_csv(os.path.join(self.data_path, 'UCI/housing.data'), header=0, delimiter="\s+").values
-            task = "regression"
-        elif self.name == "energy":
-            data = pd.read_excel(os.path.join(self.data_path, 'UCI/ENB2012_data.xlsx'), header=0).values
-            task = "regression"
-        elif self.name == "power":
-            zipfile.ZipFile(os.path.join(self.data_path, "UCI/CCPP.zip")).extractall(os.path.join(self.data_path, "UCI/CCPP/"))
-            data = pd.read_excel(os.path.join(self.data_path, "UCI/CCPP.zip"), header=0).values
-            task = "regression"
-        elif self.name == "yacht":
-            data = pd.read_csv(os.path.join(self.data_path, 'UCI/yacht_hydrodynamics.data'), header=1, delimiter='\s+').values
-            task = "regression"
+#         # get dataset
+#         if self.name == "wine":
+#             data = pd.read_csv(os.path.join(self.data_path, 'UCI/winequality-red.csv'), header=1, delimiter=';').values
+#             cat_indices = np.array([])
+#             task = "classification"
+#         elif self.name == "adult":
+#             data = pd.read_csv(os.path.join(self.data_path, 'UCI/adult.data'), header=0, delimiter=", ").values
+#             cat_indices = np.array([1, 3, 5, 6, 7, 8, 9, 13])
+#             task = "classification"
+#         elif self.name == "breast":
+#             data = pd.read_csv(os.path.join(self.data_path, 'UCI/breast.data'), header=0, delimiter="\s+").values
+#             task = "classification"
+#         elif self.name == "concrete":
+#             data = pd.read_excel(os.path.join(self.data_path, 'UCI/Concrete_Data.xls'), header=0).values
+#             task = "regression"
+#         elif self.name == "housing":
+#             data = pd.read_csv(os.path.join(self.data_path, 'UCI/housing.data'), header=0, delimiter="\s+").values
+#             task = "regression"
+#         elif self.name == "energy":
+#             data = pd.read_excel(os.path.join(self.data_path, 'UCI/ENB2012_data.xlsx'), header=0).values
+#             task = "regression"
+#         elif self.name == "power":
+#             zipfile.ZipFile(os.path.join(self.data_path, "UCI/CCPP.zip")).extractall(os.path.join(self.data_path, "UCI/CCPP/"))
+#             data = pd.read_excel(os.path.join(self.data_path, "UCI/CCPP.zip"), header=0).values
+#             task = "regression"
+#         elif self.name == "yacht":
+#             data = pd.read_csv(os.path.join(self.data_path, 'UCI/yacht_hydrodynamics.data'), header=1, delimiter='\s+').values
+#             task = "regression"
 
-        if task == "classification":
-            self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='error')
-            output = self.output_one_hot_encoder.fit_transform(np.expand_dims(data[:, -1], axis=1))
-            train_x, valid_x, train_y, valid_y = train_test_split(data[:, :-1], output, test_size=0.2, random_state=42, shuffle=True)
-            valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.2, random_state=42, shuffle=True)
-        else:
-            # train/valid/test split
-            self.in_dim, self.out_dim = data.shape[1] - 1, 1
+#         if task == "classification":
+#             self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='error')
+#             output = self.output_one_hot_encoder.fit_transform(np.expand_dims(data[:, -1], axis=1))
+#             train_x, valid_x, train_y, valid_y = train_test_split(data[:, :-1], output, test_size=0.2, random_state=42, shuffle=True)
+#             valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.2, random_state=42, shuffle=True)
+#         else:
+#             # train/valid/test split
+#             self.in_dim, self.out_dim = data.shape[1] - 1, 1
 
-            train_data, valid_data = train_test_split(data, test_size=0.2, random_state=42, shuffle=True)
-            valid_data, test_data = train_test_split(data, test_size=0.5, random_state=42, shuffle=True)
-            train_x, valid_x, test_x = train_data[:, :self.in_dim], valid_data[:, :self.in_dim], test_data[:, :self.in_dim]
-            train_y, valid_y, test_y = train_data[:, self.in_dim:], valid_data[:, self.in_dim:], test_data[:, self.in_dim:]
+#             train_data, valid_data = train_test_split(data, test_size=0.2, random_state=42, shuffle=True)
+#             valid_data, test_data = train_test_split(data, test_size=0.5, random_state=42, shuffle=True)
+#             train_x, valid_x, test_x = train_data[:, :self.in_dim], valid_data[:, :self.in_dim], test_data[:, :self.in_dim]
+#             train_y, valid_y, test_y = train_data[:, self.in_dim:], valid_data[:, self.in_dim:], test_data[:, self.in_dim:]
 
-        # normalize w.r.t. train dataset
-        cont_indices = np.array(sorted(set(np.arange(data.shape[1] - 1)).difference(set(cat_indices))))
-        self.input_scaler = StandardScaler()
+#         # normalize w.r.t. train dataset
+#         cont_indices = np.array(sorted(set(np.arange(data.shape[1] - 1)).difference(set(cat_indices))))
+#         self.input_scaler = StandardScaler()
 
-        train_cont_x = self.input_scaler.fit_transform(train_x[:, cont_indices])
-        valid_cont_x = self.input_scaler.transform(valid_x[:, cont_indices])
-        test_cont_x = self.input_scaler.transform(test_x[:, cont_indices])
+#         train_cont_x = self.input_scaler.fit_transform(train_x[:, cont_indices])
+#         valid_cont_x = self.input_scaler.transform(valid_x[:, cont_indices])
+#         test_cont_x = self.input_scaler.transform(test_x[:, cont_indices])
 
-        if len(cat_indices):
-            self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-            train_x = np.concatenate([train_cont_x, self.input_one_hot_encoder.fit_transform(train_x[:, cat_indices])], axis=-1)
-            valid_x = np.concatenate([valid_cont_x, self.input_one_hot_encoder.transform(valid_x[:, cat_indices])], axis=-1)
-            test_x = np.concatenate([test_cont_x, self.input_one_hot_encoder.transform(test_x[:, cat_indices])], axis=-1)
+#         if len(cat_indices):
+#             self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+#             train_x = np.concatenate([train_cont_x, self.input_one_hot_encoder.fit_transform(train_x[:, cat_indices])], axis=-1)
+#             valid_x = np.concatenate([valid_cont_x, self.input_one_hot_encoder.transform(valid_x[:, cat_indices])], axis=-1)
+#             test_x = np.concatenate([test_cont_x, self.input_one_hot_encoder.transform(test_x[:, cat_indices])], axis=-1)
 
-        if task == "regression":
-            self.output_scaler = StandardScaler()
-            train_y = self.output_scaler.fit_transform(train_y)
-            valid_y = self.output_scaler.transform(valid_y)
-            test_y = self.output_scaler.transform(test_y)
+#         if task == "regression":
+#             self.output_scaler = StandardScaler()
+#             train_y = self.output_scaler.fit_transform(train_y)
+#             valid_y = self.output_scaler.transform(valid_y)
+#             test_y = self.output_scaler.transform(test_y)
 
-        train_data = torch.utils.data.TensorDataset(torch.from_numpy(train_x), torch.from_numpy(train_y))
-        valid_data = torch.utils.data.TensorDataset(torch.from_numpy(valid_x), torch.from_numpy(valid_y))
-        test_data = torch.utils.data.TensorDataset(torch.from_numpy(test_x), torch.from_numpy(test_y))
+#         train_data = torch.utils.data.TensorDataset(torch.from_numpy(train_x), torch.from_numpy(train_y))
+#         valid_data = torch.utils.data.TensorDataset(torch.from_numpy(valid_x), torch.from_numpy(valid_y))
+#         test_data = torch.utils.data.TensorDataset(torch.from_numpy(test_x), torch.from_numpy(test_y))
 
-        self.in_dim, self.out_dim = train_x.shape[-1], train_y.shape[-1]
+#         self.in_dim, self.out_dim = train_x.shape[-1], train_y.shape[-1]
 
-        self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
-        self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=64, shuffle=True)
-        self.test_loader =  torch.utils.data.DataLoader(test_data, batch_size=64, shuffle=True)
+#         self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=64, shuffle=True)
+#         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=64, shuffle=True)
+#         self.test_loader =  torch.utils.data.DataLoader(test_data, batch_size=64, shuffle=True)
 
 
 def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):

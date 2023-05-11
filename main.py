@@ -141,6 +141,8 @@ def pretrain(args, model, optimizer, dataset, logger):
         for train_cor_x, train_x, train_cor_mask_x, train_y in dataset.mae_train_loader:
             train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
             estimated_x = model(train_cor_x) if isinstance(model, MLP) else model(train_cor_x)[0]
+
+            # for saliency-based masked autoencoder
             loss = mse_loss_fn(estimated_x, train_x).mean()
 
             # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
@@ -354,7 +356,6 @@ def main_em(args):
     for batch_idx, (test_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
-            # print("reset model!")
 
         test_x, test_y = test_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
@@ -413,8 +414,7 @@ def main_mae(args):
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
-    # best_model.eval().requires_grad_(True).to(device)
-    best_model = best_model.train().requires_grad_(True).to(device)
+    best_model.eval().requires_grad_(True).to(device)
     original_best_model = original_best_model.eval().requires_grad_(False).to(device)
 
     mse_loss_fn = nn.MSELoss()
@@ -439,11 +439,13 @@ def main_mae(args):
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
+        # test_cor_x.requires_grad = True
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
             estimated_test_x, _ = best_model(test_cor_x)
             
             loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+
             # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
             # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
             #     categorical_weight = 0.5
@@ -470,6 +472,9 @@ def main_mae(args):
         # test_x = torch.nan_to_num(test_x, nan=0.0)
         # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
 
+        # imputation with masked autoencoder
+        estimated_x, _ = best_model(test_x)
+        test_x = test_x  * test_mask_x + estimated_x * (1 - test_mask_x)
         _, estimated_y = best_model(test_x)
 
         loss = ce_loss_fn(estimated_y, test_y)

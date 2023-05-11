@@ -23,7 +23,7 @@ mask_ratio: 0.75
 # mae_cat_weight: 0.25
 
 ### hyperparameters for training
-retrain: false
+retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
