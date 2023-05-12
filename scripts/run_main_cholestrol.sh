@@ -202,23 +202,23 @@ python main.py \
     out_dir=exps/heloc_main \
 
 
-python main.py \
-    meta_dataset=tableshift \
-    dataset=diabetes_readmission \
-    retrain=true \
-    seed=0 \
-    out_dir=exps/diabetes_main \
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=diabetes_readmission \
+#     retrain=true \
+#     seed=0 \
+#     out_dir=exps/diabetes_main \
 
-python main.py \
-    meta_dataset=tableshift \
-    dataset=diabetes_readmission \
-    retrain=false \
-    seed=1 \
-    out_dir=exps/diabetes_main \
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=diabetes_readmission \
+#     retrain=false \
+#     seed=1 \
+#     out_dir=exps/diabetes_main \
 
-python main.py \
-    meta_dataset=tableshift \
-    dataset=diabetes_readmission \
-    retrain=false \
-    seed=2 \
-    out_dir=exps/diabetes_main \
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=diabetes_readmission \
+#     retrain=false \
+#     seed=2 \
+#     out_dir=exps/diabetes_main \

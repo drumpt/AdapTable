@@ -4,19 +4,19 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 from collections import Counter
 
-import openml
-from openml import tasks, runs
-from data.utils.util_functions import load_opt
-from datasets import load_dataset
-from tableshift import get_dataset, get_iid_dataset
-
 import numpy as np
+from numpy.random import choice
 import pandas as pd
 import sklearn.preprocessing
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.model_selection import train_test_split
 import torch
 
+import openml
+from openml import tasks, runs
+from data.utils.util_functions import load_opt
+from datasets import load_dataset
+from tableshift import get_dataset, get_iid_dataset
 from utils import utils
 
 
@@ -68,7 +68,6 @@ class OpenMLCC18Dataset():
 
         dataset = openml.datasets.get_dataset(args.dataset)
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
-        # corr = pd.concat([x, y], axis=-1).corr() # TODO: for masked autoencoder
         y = np.array(y).reshape(-1, 1)
 
         # train/valid/test split
@@ -759,3 +758,13 @@ def get_imputed_data(test_data, train_data, data_type, imputation_method):
                 imputed_data.append(np.random.choice(train_col, len(test_data)))
             imputed_data = np.stack(imputed_data, axis=-1)
     return imputed_data
+
+
+def get_mask_by_feature_importance(args, test_data, importance):
+    mask = torch.ones_like(test_data, dtype=torch.float32)
+    selected_columns = choice(range(test_data.shape[-1]), size=int(len(test_data.flatten()) * args.mask_ratio), p=importance.cpu().numpy())
+    for col, count in Counter(selected_columns).items():
+        selected_rows = choice(range(test_data.shape[0]), size=max(count, len(test_data)))
+        for row in selected_rows:
+            mask[row][col] = 0
+    return mask

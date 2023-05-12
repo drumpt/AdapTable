@@ -13,121 +13,7 @@ from data.dataset import *
 from model.mlp import MLP, MLP_MAE
 from sam import SAM
 from utils import utils
-from utils.utils import softmax_entropy, renyi_entropy
-
-
-def forward_and_adapt(args, x, model, optimizer):
-    global original_best_model, EMA
-    optimizer.zero_grad()
-
-    outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
-
-    if 'sar' in args.method:
-        entropy_first = softmax_entropy(outputs)
-        filter_id = torch.where(entropy_first < 0.4 * np.log(outputs.shape[-1]))
-        entropy_first = softmax_entropy(outputs)
-        loss = entropy_first.mean()
-        loss.backward(retain_graph=True)
-
-        optimizer.first_step()
-
-        new_outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
-        entropy_second = softmax_entropy(new_outputs)
-        entropy_second = entropy_second[filter_id]
-        filter_id = torch.where(entropy_second < 0.4 * np.log(outputs.shape[-1]))
-        loss_second = entropy_second[filter_id].mean()
-        loss_second.backward(retain_graph=True)
-
-        EMA = 0.9 * EMA + (1 - 0.9) * loss_second.item() if EMA != None else loss_second.item()
-    if 'em' in args.method:
-        loss = softmax_entropy(outputs / args.temp).mean()
-        loss.backward(retain_graph=True)
-    if 'gem' in args.method:
-        e_loss = renyi_entropy(outputs / args.temp, alpha=args.renyi_entropy_alpha)
-        e_loss.backward(retain_graph=True)
-    if 'ns' in args.method:
-        negative_outputs = outputs.clone()
-        negative_loss = 0
-        negative_mask = torch.where(torch.softmax(negative_outputs, dim=-1) < args.ns_threshold * (10 / negative_outputs.shape[-1]), 1, 0)
-        negative_loss += torch.mean(-torch.log(1 - torch.sum(negative_mask * torch.softmax(negative_outputs / args.temp, dim=-1), dim=-1)))
-        if torch.is_tensor(negative_loss):
-            negative_loss.backward(retain_graph=True)
-    if 'dm' in args.method: # diversity maximization
-        mean_probs = torch.mean(outputs, dim=-1, keepdim=True)
-        (- args.dm_weight * softmax_entropy(mean_probs / args.temp).mean()).backward(retain_graph=True)
-    if 'kld' in args.method:
-        original_outputs = original_best_model(x)
-        probs = torch.softmax(outputs, dim=-1)
-        original_probs = torch.softmax(original_outputs, dim=-1)
-        kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
-        (args.kld_weight * kl_div_loss).backward(retain_graph=True)
-
-    if 'sar' in args.method:
-        optimizer.second_step()
-    else:
-        optimizer.step()
-
-
-def collect_params(model, train_params):
-    params, names = [], []
-    for nm, m in model.named_modules():
-        if 'all' in train_params:
-            for np, p in m.named_parameters():
-                p.requires_grad = True
-                if not f"{nm}.{np}" in names:
-                    params.append(p)
-                    names.append(f"{nm}.{np}")
-        if 'LN' in train_params: # TODO: change this (not working)
-            if isinstance(m, nn.LayerNorm):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if 'BN' in train_params:
-            if isinstance(m, nn.BatchNorm1d):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if 'GN' in train_params:
-            if isinstance(m, nn.GroupNorm):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if "pretrain" in train_params:
-            for np, p in m.named_parameters():
-                if 'main_head' in f"{nm}.{np}":
-                    continue
-                params.append(p)
-                names.append(f"{nm}.{np}")
-        if "downstream" in train_params:
-            for np, p in m.named_parameters():
-                if not 'main_head' in f"{nm}.{np}":
-                    continue
-                params.append(p)
-                names.append(f"{nm}.{np}")
-    return params, names
-
-
-def copy_model_and_optimizer(model, optimizer, scheduler):
-    model_state = deepcopy(model.state_dict())
-    optimizer_state = deepcopy(optimizer.state_dict())
-    if scheduler is not None:
-        scheduler_state = deepcopy(scheduler.state_dict())
-        return model_state, optimizer_state, scheduler_state
-    else:
-        return model_state, optimizer_state, None
-
-
-def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer_state, scheduler_state):
-    model.load_state_dict(model_state, strict=True)
-    optimizer.load_state_dict(optimizer_state)
-    if scheduler is not None:
-        scheduler.load_state_dict(scheduler_state)
-        return model, optimizer, scheduler
-    else: 
-        return model, optimizer, None
+from utils.utils import *
 
 
 def pretrain(args, model, optimizer, dataset, logger):
@@ -141,10 +27,9 @@ def pretrain(args, model, optimizer, dataset, logger):
         for train_cor_x, train_x, train_cor_mask_x, train_y in dataset.mae_train_loader:
             train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
             estimated_x = model(train_cor_x) if isinstance(model, MLP) else model(train_cor_x)[0]
-
-            # for saliency-based masked autoencoder
             loss = mse_loss_fn(estimated_x, train_x).mean()
 
+            # MAE reconstruction loss as cross-entropy loss for categorical variables
             # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
             # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
             #     categorical_weight = 0.5
@@ -178,6 +63,7 @@ def pretrain(args, model, optimizer, dataset, logger):
                 estimated_x = model(valid_cor_x) if isinstance(model, MLP) else model(valid_cor_x)[0]
                 loss = mse_loss_fn(estimated_x, valid_x).mean()
 
+                # MAE reconstruction loss as cross-entropy loss for categorical variables
                 # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
                 # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
                 #     categorical_weight = 0.5
@@ -299,6 +185,58 @@ def joint_train(args, model, optimizer, dataset, logger):
 
         logger.info(f"epoch {epoch}, train_loss {train_loss / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}")
     return best_model
+
+
+def forward_and_adapt(args, x, model, optimizer):
+    global original_best_model, EMA
+    optimizer.zero_grad()
+
+    outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
+
+    if 'sar' in args.method:
+        entropy_first = softmax_entropy(outputs)
+        filter_id = torch.where(entropy_first < 0.4 * np.log(outputs.shape[-1]))
+        entropy_first = softmax_entropy(outputs)
+        loss = entropy_first.mean()
+        loss.backward(retain_graph=True)
+
+        optimizer.first_step()
+
+        new_outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
+        entropy_second = softmax_entropy(new_outputs)
+        entropy_second = entropy_second[filter_id]
+        filter_id = torch.where(entropy_second < 0.4 * np.log(outputs.shape[-1]))
+        loss_second = entropy_second[filter_id].mean()
+        loss_second.backward(retain_graph=True)
+
+        EMA = 0.9 * EMA + (1 - 0.9) * loss_second.item() if EMA != None else loss_second.item()
+    if 'em' in args.method:
+        loss = softmax_entropy(outputs / args.temp).mean()
+        loss.backward(retain_graph=True)
+    if 'gem' in args.method:
+        e_loss = renyi_entropy(outputs / args.temp, alpha=args.renyi_entropy_alpha)
+        e_loss.backward(retain_graph=True)
+    if 'ns' in args.method:
+        negative_outputs = outputs.clone()
+        negative_loss = 0
+        negative_mask = torch.where(torch.softmax(negative_outputs, dim=-1) < args.ns_threshold * (10 / negative_outputs.shape[-1]), 1, 0)
+        negative_loss += torch.mean(-torch.log(1 - torch.sum(negative_mask * torch.softmax(negative_outputs / args.temp, dim=-1), dim=-1)))
+        if torch.is_tensor(negative_loss):
+            negative_loss.backward(retain_graph=True)
+    if 'dm' in args.method: # diversity maximization
+        mean_probs = torch.mean(outputs, dim=-1, keepdim=True)
+        (- args.dm_weight * softmax_entropy(mean_probs / args.temp).mean()).backward(retain_graph=True)
+    if 'kld' in args.method:
+        original_outputs = original_best_model(x)
+        probs = torch.softmax(outputs, dim=-1)
+        original_probs = torch.softmax(original_outputs, dim=-1)
+        kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
+        (args.kld_weight * kl_div_loss).backward(retain_graph=True)
+
+    if 'sar' in args.method:
+        optimizer.second_step()
+    else:
+        optimizer.step()
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
@@ -439,20 +377,19 @@ def main_mae(args):
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
-        test_cor_x.requires_grad = True # for acquisition
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
-            test_cor_x.grad = None
 
+            # normal autoencoder
             estimated_test_x, _ = best_model(test_cor_x)
             loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
+            # MAE reconstruction loss as cross-entropy loss for categorical variables
             # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
             # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
             #     categorical_weight = 0.5
             # else:
             #     categorical_weight = args.mae_cat_weight
-
             # mse_loss += mse_loss_fn(
             #     estimated_test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim],
             #     test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim]
@@ -465,24 +402,38 @@ def main_mae(args):
             #     prev_cum_cat_dim = cum_cat_dim
             # loss = 2 * (1 - categorical_weight) * dataset.dataset.cont_dim / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * mse_loss + 2 * categorical_weight * len(dataset.dataset.cat_dim_list) / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * ce_loss
 
+
+
+            # saliency-based masked autoencoder
+            # test_cor_x.requires_grad = True # for acquisition
+            # test_cor_x.grad = None
+            # estimated_test_x, _ = best_model(test_cor_x)
+            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            # loss.backward(retain_graph=True)
+
+            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
+            # feature_importance = torch.reciprocal(torch.abs(feature_grads))
+            # feature_importance = feature_importance / torch.sum(feature_importance)
+            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+
             loss.backward()
             test_optimizer.step()
 
-            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
-            # feature_importance = torch.abs(feature_grads)
-            # feature_importance = (feature_importance - feature_importance.min()) / (feature_importance.max() - feature_importance.min())
-            # feature_importance = torch.nan_to_num(feature_importance, nan=1)
-            # print(f"feature_importance: {feature_importance}")
-
-
-        # TODO: remove (only for debugging)
-        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
-        # test_x = torch.nan_to_num(test_x, nan=0)
-        # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
-
         # imputation with masked autoencoder
         estimated_x, _ = best_model(test_x)
-        test_x = test_x  * test_mask_x + estimated_x * (1 - test_mask_x)
+        test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
+
+        # naive input renormalization
+        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
+        # test_x = torch.nan_to_num(test_x, nan=0)
+
+        # # input renormalization with excluding missing ones (not working)
+        # column_mean = torch.sum(test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
+        # column_std = torch.sum((test_x[:, :dataset.dataset.cont_dim] - column_mean) ** 2 * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / (torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) - 1)
+        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - column_mean) / column_std
+        # test_x = torch.nan_to_num(test_x, nan=0)
+
         _, estimated_y = best_model(test_x)
 
         loss = ce_loss_fn(estimated_y, test_y)
