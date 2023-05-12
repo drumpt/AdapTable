@@ -24,8 +24,9 @@ def pretrain(args, model, optimizer, dataset, logger):
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
         model.train().to(device)
-        for train_cor_x, train_x, train_cor_mask_x, train_y in dataset.mae_train_loader:
-            train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
+        for train_x, _ in dataset.train_loader:
+            train_x = train_x.to(device)
+            train_cor_x, _ = get_corrupted_data(train_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
             estimated_x = model(train_cor_x) if isinstance(model, MLP) else model(train_cor_x)[0]
             loss = mse_loss_fn(estimated_x, train_x).mean()
 
@@ -58,8 +59,9 @@ def pretrain(args, model, optimizer, dataset, logger):
         valid_loss, valid_len = 0, 0
         model.eval().to(device)
         with torch.no_grad():
-            for valid_cor_x, valid_x, valid_cor_mask_x, valid_y in dataset.mae_valid_loader:
-                valid_cor_x, valid_x, valid_cor_mask_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_cor_mask_x.to(device), valid_y.to(device)
+            for valid_x, _ in dataset.valid_loader:
+                valid_x = valid_x.to(device)
+                valid_cor_x, _ = get_corrupted_data(valid_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
                 estimated_x = model(valid_cor_x) if isinstance(model, MLP) else model(valid_cor_x)[0]
                 loss = mse_loss_fn(estimated_x, valid_x).mean()
 
@@ -69,7 +71,6 @@ def pretrain(args, model, optimizer, dataset, logger):
                 #     categorical_weight = 0.5
                 # else:
                 #     categorical_weight = args.mae_cat_weight
-
                 # mse_loss += mse_loss_fn(
                 #     estimated_x[:, :dataset.dataset.cont_dim],
                 #     valid_x[:, :dataset.dataset.cont_dim]
@@ -147,10 +148,11 @@ def joint_train(args, model, optimizer, dataset, logger):
     for epoch in range(1, args.epochs + 1):
         train_loss, train_len = 0, 0
         model.train().to(device)
-        for train_cor_x, train_x, train_cor_mask_x, train_y in dataset.mae_train_loader:
+        for train_x, train_y in dataset.train_loader:
+            train_cor_x, _ = get_corrupted_data(train_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            train_cor_x, train_x, train_y = train_cor_x.to(device), train_x.to(device), train_y.to(device)
             optimizer.zero_grad()
 
-            train_cor_x, train_x, train_cor_mask_x, train_y = train_cor_x.to(device), train_x.to(device), train_cor_mask_x.to(device), train_y.to(device)
             estimated_x, _ = model(train_cor_x)
             recon_loss = mse_loss_fn(estimated_x, train_x)
             recon_loss.backward()
@@ -167,8 +169,10 @@ def joint_train(args, model, optimizer, dataset, logger):
         valid_loss, valid_len = 0, 0
         model.eval().to(device)
         with torch.no_grad():
-            for valid_cor_x, valid_x, valid_cor_mask_x, valid_y in dataset.mae_valid_loader:
-                valid_cor_x, valid_x, valid_cor_mask_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_cor_mask_x.to(device), valid_y.to(device)
+            for valid_x, valid_y in dataset.train_loader:
+                valid_cor_x, _ = get_corrupted_data(valid_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+                valid_cor_x, valid_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_y.to(device)
+
                 estimated_x, _ = model(valid_cor_x)
                 recon_loss = mse_loss_fn(estimated_x, valid_x)
 
@@ -210,6 +214,9 @@ def forward_and_adapt(args, x, model, optimizer):
         loss_second.backward(retain_graph=True)
 
         EMA = 0.9 * EMA + (1 - 0.9) * loss_second.item() if EMA != None else loss_second.item()
+
+        optimizer.second_step()
+        return
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
         loss.backward(retain_graph=True)
@@ -233,19 +240,15 @@ def forward_and_adapt(args, x, model, optimizer):
         kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
         (args.kld_weight * kl_div_loss).backward(retain_graph=True)
 
-    if 'sar' in args.method:
-        optimizer.second_step()
-    else:
-        optimizer.step()
+    optimizer.step()
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
+@hydra.main(version_base=None, config_path="conf", config_name="config_sar.yaml")
 def main(args):
-    if 'mae' in args.method:
-        if len(args.method) > 1:
-            main_mae_method(args)
-        else:
-            main_mae(args)
+    if 'mae' in args.method and len(args.method) > 1:
+        main_mae_method(args)
+    elif 'mae' in args.method:
+        main_mae(args)
     else:
         main_em(args)
 
@@ -291,7 +294,7 @@ def main_em(args):
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
-    for batch_idx, (test_x, test_y) in enumerate(dataset.test_loader):
+    for test_x, test_mask_x, test_y in dataset.test_loader:
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
 
@@ -364,45 +367,25 @@ def main_mae(args):
     test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
-    for _, (test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y) in enumerate(dataset.mae_test_loader):
+    for test_x, test_mask_x, test_y in dataset.test_loader:
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
             best_model = best_model.eval().requires_grad_(True).to(device)
 
-        test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y = test_cor_x.to(device), test_x.to(device), test_mask_x.to(device), test_cor_mask_x.to(device), test_y.to(device)
-        test_len += test_x.shape[0]
+        test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
+        test_cor_x, test_cor_mask_x = get_corrupted_data(test_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
 
         _, estimated_y = original_best_model(test_x)
-        loss = ce_loss_fn(estimated_y, test_y) # TODO: mse_loss implement for regression
+        loss = ce_loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        test_len += test_x.shape[0]
 
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
 
-            # normal autoencoder
             estimated_test_x, _ = best_model(test_cor_x)
             loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-
-            # MAE reconstruction loss as cross-entropy loss for categorical variables
-            # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
-            # if not len(dataset.dataset.cat_dim_list) or not dataset.dataset.cont_dim:
-            #     categorical_weight = 0.5
-            # else:
-            #     categorical_weight = args.mae_cat_weight
-            # mse_loss += mse_loss_fn(
-            #     estimated_test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim],
-            #     test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim]
-            # ).mean()
-            # for cum_cat_dim in utils.cumulative_sum(dataset.dataset.cat_dim_list):
-            #     ce_loss += ce_loss_fn(
-            #         estimated_test_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim] * test_mask_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim],
-            #         test_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim] * test_mask_x[:, dataset.dataset.cont_dim + prev_cum_cat_dim:dataset.dataset.cont_dim + cum_cat_dim]
-            #     ).mean()
-            #     prev_cum_cat_dim = cum_cat_dim
-            # loss = 2 * (1 - categorical_weight) * dataset.dataset.cont_dim / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * mse_loss + 2 * categorical_weight * len(dataset.dataset.cat_dim_list) / (dataset.dataset.cont_dim + len(dataset.dataset.cat_dim_list)) * ce_loss
-
-
 
             # saliency-based masked autoencoder
             # test_cor_x.requires_grad = True # for acquisition
@@ -424,7 +407,13 @@ def main_mae(args):
         estimated_x, _ = best_model(test_x)
         test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
-        # naive input renormalization
+        _, estimated_y = best_model(test_x)
+
+        loss = ce_loss_fn(estimated_y, test_y)
+        test_loss_after += loss.item() * test_x.shape[0]
+        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+
+        # naive input renormalization (not working)
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
         # test_x = torch.nan_to_num(test_x, nan=0)
 
@@ -433,12 +422,6 @@ def main_mae(args):
         # column_std = torch.sum((test_x[:, :dataset.dataset.cont_dim] - column_mean) ** 2 * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / (torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) - 1)
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - column_mean) / column_std
         # test_x = torch.nan_to_num(test_x, nan=0)
-
-        _, estimated_y = best_model(test_x)
-
-        loss = ce_loss_fn(estimated_y, test_y)
-        test_loss_after += loss.item() * test_x.shape[0]
-        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
@@ -496,19 +479,20 @@ def main_mae_method(args):
     mae_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.pretrain_lr)
     _, mae_original_optimizer_state, _ = copy_model_and_optimizer(best_model, mae_optimizer, scheduler=None)
 
-    for _, (test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y) in enumerate(dataset.mae_test_loader):
+    for test_x, test_y in dataset.test_loader:
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
             best_model, mae_optimizer, _ = load_model_and_optimizer(best_model, mae_optimizer, None, original_model_state, mae_original_optimizer_state, None)
             best_model = best_model.eval().requires_grad_(True).to(device)
 
+        test_cor_x, test_cor_mask_x = get_corrupted_data(test_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
         test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y = test_cor_x.to(device), test_x.to(device), test_mask_x.to(device), test_cor_mask_x.to(device), test_y.to(device)
-        test_len += test_x.shape[0]
 
         _, estimated_y = original_best_model(test_x)
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        test_len += test_x.shape[0]
 
         for _ in range(1, args.num_steps + 1):
             mae_optimizer.zero_grad()

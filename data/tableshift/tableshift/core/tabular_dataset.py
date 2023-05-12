@@ -157,7 +157,7 @@ class Dataset(ABC):
         y = df[self.target]
         G = df[self.group_feature_names]
         d = df[self.domain_label_colname] \
-            if self.domain_label_colname is not None else None
+            if self.domain_label_colname is not None and self.domain_label_colname not in ['course_id', 'VCF0112'] else None
         return X, y, G, d
 
     def get_pandas(self, split, domain=None) -> Tuple[
