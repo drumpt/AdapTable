@@ -439,11 +439,12 @@ def main_mae(args):
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
-        # test_cor_x.requires_grad = True
+        test_cor_x.requires_grad = True # for acquisition
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
+            test_cor_x.grad = None
+
             estimated_test_x, _ = best_model(test_cor_x)
-            
             loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
             # mse_loss, ce_loss, prev_cum_cat_dim = 0, 0, 0
@@ -467,9 +468,16 @@ def main_mae(args):
             loss.backward()
             test_optimizer.step()
 
+            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
+            # feature_importance = torch.abs(feature_grads)
+            # feature_importance = (feature_importance - feature_importance.min()) / (feature_importance.max() - feature_importance.min())
+            # feature_importance = torch.nan_to_num(feature_importance, nan=1)
+            # print(f"feature_importance: {feature_importance}")
+
+
         # TODO: remove (only for debugging)
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
-        # test_x = torch.nan_to_num(test_x, nan=0.0)
+        # test_x = torch.nan_to_num(test_x, nan=0)
         # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
 
         # imputation with masked autoencoder
@@ -516,14 +524,9 @@ def main_mae_method(args):
         optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(model, train_params="downstream")[0], lr=args.train_lr)
         best_model = train(args, model, optimizer, dataset, logger)
 
-        # we can use either joint training
-        # optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
-        # best_model = joint_train(args, model, optimizer, dataset, logger)
-
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
-    # best_model.eval().requires_grad_(True).to(device)
-    best_model = best_model.train().requires_grad_(True).to(device)
+    best_model.eval().requires_grad_(True).to(device)
     original_best_model = original_best_model.eval().requires_grad_(False).to(device)
 
 
@@ -534,11 +537,7 @@ def main_mae_method(args):
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
-
-
     loss_fn = nn.MSELoss() # for regression
-
-
 
     global EMA
     EMA = None
@@ -564,20 +563,13 @@ def main_mae_method(args):
             mae_optimizer.zero_grad()
 
             estimated_test_x, _ = best_model(test_cor_x)
-            # loss = loss_fn(estimated_test_x, test_x)
             loss = loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss on non-missing values only
-            # loss = loss_fn(estimated_test_x * test_mask_x * test_cor_mask_x, test_x * test_mask_x * test_cor_mask_x)
 
             loss.backward()
             mae_optimizer.step()
 
         for _ in range(1, args.num_steps + 1):
             forward_and_adapt(args, test_x, best_model, test_optimizer)
-
-
-        # TODO: remove (only for debugging)
-        # test_x = (test_x - torch.mean(test_x, dim=0, keepdim=True)) / torch.std(test_x, dim=0, keepdim=True)
-        # test_cor_x = (test_cor_x - torch.mean(test_cor_x, dim=0, keepdim=True)) / torch.std(test_cor_x, dim=0, keepdim=True)
 
         _, estimated_y = best_model(test_x)
 

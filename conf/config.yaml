@@ -9,7 +9,7 @@ meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression, shifts
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 dataset: cmc
-shift_type: mean_std_shift # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_type: column_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
 shift_severity: 1
 normalizer: StandardScaler
 imputation_method: zero # zero, mean, emd(empirical marginal distribution)
