@@ -34,8 +34,12 @@ class Dataset():
             self.dataset = OpenMLRegressionDataset(args)
         elif args.meta_dataset == "shifts":
             self.dataset = ShiftsDataset(args)
+        elif args.meta_dataset == "folktables":
+            self.dataset = FolkTablesDataset(args)
         elif args.meta_dataset == "uci":
             self.dataset = UCIDataset(args, args.dataset, "data")
+        else:
+            raise NotImplementedError
 
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.train_x), torch.FloatTensor(self.dataset.train_y))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.valid_x), torch.FloatTensor(self.dataset.valid_y))
@@ -251,7 +255,114 @@ class TableShiftDataset():
         self.valid_y = self.output_one_hot_encoder.transform(valid_y)
         self.test_y = self.output_one_hot_encoder.transform(test_y)
 
+class FolkTablesDataset():
+    def __init__(self, args):
+        from folktables import ACSDataSource, ACSIncome, ACSPublicCoverage
+        if args.dataset == 'state':
+            data_source = ACSDataSource(survey_year='2018', horizon='1-Year', survey='person')
+            ca_data = data_source.get_data(states=["CA"], download=True)
+            mi_data = data_source.get_data(states=["MI"], download=True)
+            train_x, train_y, _ = ACSIncome.df_to_numpy(ca_data)
+            test_x, test_y, _ = ACSIncome.df_to_numpy(mi_data)
+            train_y = np.int32(train_y).reshape(-1, 1)
+            test_y = np.int32(test_y).reshape(-1, 1)
+            train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.2, random_state=42)
 
+        elif args.dataset == 'time':
+            # for training
+            train_x_list = []
+            train_y_list = []
+            for year in [2014, 2015, 2016]:
+                data_source = ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
+                acs_data = data_source.get_data(states=["CA"], download=True)
+                features, labels, _ = ACSPublicCoverage.df_to_numpy(acs_data)
+                train_x_list.append(features)
+                train_y_list.append(labels)
+
+            test_x_list = []
+            test_y_list = []
+            # for testing
+            for year in [2017, 2018]:
+                data_source = ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
+                acs_data = data_source.get_data(states=["CA"], download=True)
+                features, labels, _ = ACSPublicCoverage.df_to_numpy(acs_data)
+                test_x_list.append(features)
+                test_y_list.append(labels)
+
+            train_x = np.concatenate(train_x_list, axis=0)
+            train_y = np.concatenate(train_y_list, axis=0)
+            test_x = np.concatenate(test_x_list, axis=0)
+            test_y = np.concatenate(test_y_list, axis=0)
+
+            # for one-hot encoding
+            train_y = np.int32(train_y).reshape(-1, 1)
+            test_y = np.int32(test_y).reshape(-1, 1)
+
+            train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.2, random_state=42)
+            # raise NotImplementedError
+
+        elif args.dataset == 'state_time' or args.dataset == 'time_state':
+            # for training
+            train_x_list = []
+            train_y_list = []
+            for year in [2014, 2015, 2016]:
+                data_source = ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
+                acs_data = data_source.get_data(states=["CA"], download=True)
+                features, labels, _ = ACSPublicCoverage.df_to_numpy(acs_data)
+                train_x_list.append(features)
+                train_y_list.append(labels)
+
+            test_x_list = []
+            test_y_list = []
+            # for testing
+            for year in [2017, 2018]:
+                data_source = ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
+                acs_data = data_source.get_data(states=["MI"], download=True)
+                features, labels, _ = ACSPublicCoverage.df_to_numpy(acs_data)
+                test_x_list.append(features)
+                test_y_list.append(labels)
+
+            train_x = np.concatenate(train_x_list, axis=0)
+            train_y = np.concatenate(train_y_list, axis=0)
+            test_x = np.concatenate(test_x_list, axis=0)
+            test_y = np.concatenate(test_y_list, axis=0)
+
+            # for one-hot encoding
+            train_y = np.int32(train_y).reshape(-1, 1)
+            test_y = np.int32(test_y).reshape(-1, 1)
+
+            train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.2, random_state=42)
+            # raise NotImplementedError
+
+        # normalize input
+        self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
+        self.input_scaler.fit(np.concatenate([train_x, valid_x], axis=0))
+        self.train_x = self.input_scaler.transform(train_x)
+        self.valid_x = self.input_scaler.transform(valid_x)
+        self.test_x = self.input_scaler.transform(test_x)
+
+        # create corruption
+        self.train_cor_x, self.train_cor_mask_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical",
+                                                                     shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+        self.valid_cor_x, self.valid_cor_mask_x = get_corrupted_data(self.valid_x, self.train_x, data_type="numerical",
+                                                                     shift_type="random_drop",
+                                                                     shift_severity=args.mask_ratio,
+                                                                     imputation_method="emd")
+        self.test_cor_x, self.test_cor_mask_x = get_corrupted_data(self.test_x, self.train_x, data_type="numerical",
+                                                                   shift_type="random_drop",
+                                                                   shift_severity=args.mask_ratio,
+                                                                   imputation_method="emd")
+        self.test_mask_x = np.ones_like(self.test_x)
+
+        # one-hot encode output
+        self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
+        print(train_y)
+        self.train_y = self.output_one_hot_encoder.transform(train_y)
+        self.valid_y = self.output_one_hot_encoder.transform(valid_y)
+        self.test_y = self.output_one_hot_encoder.transform(test_y)
 
 class OpenMLRegressionDataset():
     def __init__(self, args):
