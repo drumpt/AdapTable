@@ -243,7 +243,7 @@ def forward_and_adapt(args, x, model, optimizer):
     optimizer.step()
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config_sar.yaml")
+@hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     if 'mae' in args.method and len(args.method) > 1:
         main_mae_method(args)
