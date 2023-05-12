@@ -163,8 +163,10 @@ class Dataset(ABC):
         # print(y.head())
         # print(G.head())
         # print(self.domain_label_colname)
+        print('여기?')
         d = df[self.domain_label_colname] \
-            if self.domain_label_colname is not None and self.domain_label_colname != 'course_id' else None
+            if self.domain_label_colname is not None and self.domain_label_colname not in ['course_id', 'VCF0112'] else None
+        print('여기?')
         return X, y, G, d
 
     def get_pandas(self, split, domain=None) -> Tuple[
