@@ -149,6 +149,8 @@ class Dataset(ABC):
                 "support for domain is not implemented in this class.")
         for name in ("feature_names", "target", "group_feature_names"):
             assert getattr(self, name) is not None, f"{name} is None."
+        # print(split.head())
+        # print(split)
         df = self._get_split_df(split, domain=domain)
 
         # preserve ordering of columns in df
@@ -156,12 +158,18 @@ class Dataset(ABC):
         X = df[[c for c in df.columns if c in self.feature_names]]
         y = df[self.target]
         G = df[self.group_feature_names]
+        # print(df.head())
+        # print(X.head())
+        # print(y.head())
+        # print(G.head())
+        # print(self.domain_label_colname)
         d = df[self.domain_label_colname] \
-            if self.domain_label_colname is not None else None
+            if self.domain_label_colname is not None and self.domain_label_colname != 'course_id' else None
         return X, y, G, d
 
     def get_pandas(self, split, domain=None) -> Tuple[
         DataFrame, Series, DataFrame, Optional[Series]]:
+        # print('within get pandas')
         """Fetch the (data, labels, groups, domains) for this TabularDataset."""
         return self._get_split_xygd(split, domain)
 
@@ -377,16 +385,16 @@ class TabularDataset(Dataset):
         Conducts any processing required **after** splitting (e.g.
         normalization, drop features needed only for splitting)."""
         passthrough_columns = self.grouper_features
-
+        # print(f'passthrough columns = {passthrough_columns}')
         data = self.preprocessor.fit_transform(
             data,
             self.splits["train"],
             domain_label_colname=self.domain_label_colname,
             target_colname=self.target,
             passthrough_columns=passthrough_columns)
-
         # If necessary, cast targets to the default type.
         target_name = self._post_transform_target_name()
+        # print(f'target_name = {target_name}')
         if self.preprocessor_config.cast_targets_to_default_type:
             data[target_name] = data[target_name].astype(
                 self.preprocessor_config.default_targets_dtype)
@@ -401,11 +409,13 @@ class TabularDataset(Dataset):
         return idxs
 
     def _get_split_df(self, split, domain=None) -> pd.DataFrame:
-
+        # print("_get_split_df===========================1")
+        # print(self._df.head())
         split_idxs = self._get_split_idxs(split)
         split_df = self._df.iloc[split_idxs]
 
         if domain is None:
+            print('domain is none!')
             return split_df
 
         else:
@@ -680,13 +690,14 @@ class CachedDataset(Dataset):
         return split in os.listdir(self.base_dir)
 
     def _get_split_df(self, split, domain=None) -> pd.DataFrame:
+        # print("_get_split_df===========================2")
         self._check_split(split)
         files = self._get_split_files(split, domain=domain)
         dfs = []
         for f in files:
+            # print(f'reading from {f}')
             dfs.append(pd.read_csv(f))
         df = pd.concat(dfs)
-
         return df
 
     def get_ray(self, split, domain=None, num_partitions_per_file=16):

@@ -223,11 +223,21 @@ class TableShiftDataset():
             args.dataset,
             cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift/tmp"),
         )
+        if dataset.is_domain_split:
+            print(f'ood dataset')
+        else:
+            print(f'not ood')
+
         train_x, train_y, _, _ = dataset.get_pandas("train")
         valid_x, valid_y, _, _ = dataset.get_pandas("validation")
+
+        # TODO: require kaggle.json file!
         if dataset.is_domain_split:
+            print(f'ood dataset')
             test_x, test_y, _, _ = dataset.get_pandas("ood_test")
+            # print(test_y)
         else:
+            print(f'not® ood')
             test_x, test_y, _, _ = dataset.get_pandas("test")
 
         # print(f"dir(dataset): {dir(dataset)}")
@@ -359,7 +369,7 @@ class FolkTablesDataset():
         # one-hot encode output
         self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
-        print(train_y)
+        # print(train_y)
         self.train_y = self.output_one_hot_encoder.transform(train_y)
         self.valid_y = self.output_one_hot_encoder.transform(valid_y)
         self.test_y = self.output_one_hot_encoder.transform(test_y)
