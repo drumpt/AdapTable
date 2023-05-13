@@ -162,6 +162,7 @@ def pretrain(args, model, optimizer, dataset, logger):
 def train(args, model, optimizer, dataset, logger):
     device = args.device
     best_model, best_loss = None, float('inf')
+    regression = True if dataset.out_dim == 1 else False
     mse_loss_fn = nn.MSELoss() # for regression
     ce_loss_fn = nn.CrossEntropyLoss()
     for epoch in range(1, args.epochs + 1):
@@ -171,7 +172,7 @@ def train(args, model, optimizer, dataset, logger):
             train_x, train_y = train_x.to(device), train_y.to(device)
 
             estimated_y = model(train_x) if isinstance(model, MLP) else model(train_x)[-1]
-            loss = ce_loss_fn(estimated_y, train_y) if isinstance(model, MLP) else mse_loss_fn(estimated_y, train_y)
+            loss = mse_loss_fn(estimated_y, train_y) if regression else ce_loss_fn(estimated_y, train_y)
 
             optimizer.zero_grad()
             loss.backward()
@@ -187,7 +188,7 @@ def train(args, model, optimizer, dataset, logger):
             for valid_x, valid_y in dataset.valid_loader:
                 valid_x, valid_y = valid_x.to(device), valid_y.to(device)
                 estimated_y = model(valid_x) if isinstance(model, MLP) else model(valid_x)[-1]
-                loss = ce_loss_fn(estimated_y, valid_y) if isinstance(model, MLP) else mse_loss_fn(estimated_y, valid_y)
+                loss = mse_loss_fn(estimated_y, valid_y) if regression else ce_loss_fn(estimated_y, valid_y)
 
                 valid_loss += loss.item() * valid_x.shape[0]
                 valid_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(valid_y, dim=-1)).sum().item()
@@ -206,6 +207,7 @@ def train(args, model, optimizer, dataset, logger):
 def joint_train(args, model, optimizer, dataset, logger):
     device = args.device
     best_model, best_loss = None, float('inf')
+    regression = True if dataset.out_dim == 1 else False
     mse_loss_fn = nn.MSELoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
@@ -222,7 +224,7 @@ def joint_train(args, model, optimizer, dataset, logger):
             recon_loss.backward()
 
             _, estimated_y = model(train_x)
-            main_loss = ce_loss_fn(estimated_y, train_y)
+            main_loss = mse_loss_fn(estimated_x, train_x) if regression else ce_loss_fn(estimated_y, train_y)
             main_loss.backward()
 
             optimizer.step()
@@ -241,7 +243,7 @@ def joint_train(args, model, optimizer, dataset, logger):
                 recon_loss = mse_loss_fn(estimated_x, valid_x)
 
                 _, estimated_y = model(valid_x)
-                main_loss = ce_loss_fn(estimated_y, valid_y)
+                main_loss = mse_loss_fn(estimated_x, valid_x) if regression else ce_loss_fn(estimated_y, valid_y)
 
                 valid_loss += (recon_loss.item() + main_loss.item()) * valid_cor_x.shape[0]
                 valid_len += valid_cor_x.shape[0]
@@ -332,7 +334,8 @@ def main_em(args):
     global original_best_model
     model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
     optimizer = getattr(torch.optim, args.train_optimizer)(filter(lambda p: p.requires_grad, model.parameters()), lr=args.train_lr)
-    loss_fn = nn.CrossEntropyLoss()
+    regression = True if dataset.out_dim == 1 else False
+    loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
 
     # use pretrained model
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
@@ -421,12 +424,13 @@ def main_mae(args):
     best_model.eval().requires_grad_(True).to(device)
     original_best_model = original_best_model.eval().requires_grad_(False).to(device)
 
+    regression = True if dataset.out_dim == 1 else False
     mse_loss_fn = nn.MSELoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
     # TODO: remove(only for debugging) - decision tree
-    from sklearn.ensemble import RandomForestClassifier
-    forest = RandomForestClassifier(random_state=args.seed)
+    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+    forest = RandomForestRegressor(random_state=args.seed) if regression else RandomForestClassifier(random_state=args.seed)
     forest.fit(dataset.dataset.train_x, dataset.dataset.train_y)
     importances = forest.feature_importances_
 
@@ -447,7 +451,7 @@ def main_mae(args):
         test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
 
         _, estimated_y = original_best_model(test_x)
-        loss = ce_loss_fn(estimated_y, test_y)
+        loss = mse_loss_fn(estimated_y, test_y) if regression else ce_loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         test_len += test_x.shape[0]
@@ -486,7 +490,7 @@ def main_mae(args):
 
         _, estimated_y = best_model(test_x)
 
-        loss = ce_loss_fn(estimated_y, test_y)
+        loss = mse_loss_fn(estimated_y, test_y) if regression else ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
@@ -547,7 +551,9 @@ def main_mae_method(args):
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
-    loss_fn = nn.MSELoss() # for regression
+    regression = True if dataset.out_dim == 1 else False
+    mse_loss_fn = nn.MSELoss()
+    ce_loss_fn = nn.CrossEntropyLoss()
 
     global EMA
     EMA = None
@@ -565,7 +571,7 @@ def main_mae_method(args):
         test_cor_x, test_x, test_mask_x, test_cor_mask_x, test_y = test_cor_x.to(device), test_x.to(device), test_mask_x.to(device), test_cor_mask_x.to(device), test_y.to(device)
 
         _, estimated_y = original_best_model(test_x)
-        loss = loss_fn(estimated_y, test_y)
+        loss = mse_loss_fn(estimated_y, test_y) if regresion else ce_loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         test_len += test_x.shape[0]
@@ -584,7 +590,7 @@ def main_mae_method(args):
 
         _, estimated_y = best_model(test_x)
 
-        loss = loss_fn(estimated_y, test_y)
+        loss = mse_loss_fn(estimated_y, test_y) if regresion else ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
