@@ -645,8 +645,7 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
         if shift_type == "random_drop":
             mask = (np.random.rand(*test_data.shape) >= shift_severity).astype(np.int64)
         elif shift_type == "column_drop":
-            mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :],
-                             test_data.shape[0], axis=0)
+            mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :], test_data.shape[0], axis=0)
         else:
             mask = np.ones_like(test_data, dtype=np.int64)            
         imputed_data = get_imputed_data(test_data, train_data, data_type, imputation_method)
@@ -664,19 +663,22 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
 
     elif shift_type in ["mean_shift", "std_shift", "mean_std_shift"] and data_type == "numerical":
         assert 0 <= shift_severity <= 1
+        mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :], test_data.shape[0], axis=0)
+        severity_const = 0.1
 
         scaler = StandardScaler()
         scaler.fit(train_data)
         if shift_type == "mean_shift":
-            mean_noise = shift_severity * np.random.randn(*scaler.var_.shape)
-            test_data = test_data + mean_noise * np.random.randn(*scaler.var_.shape)
+            mean_noise = severity_const * np.random.randn(*scaler.var_.shape)
+            test_data = mask * test_data + (1 - mask) * (test_data + mean_noise * np.sqrt(scaler.var_))
         elif shift_type == "std_shift":
-            std_noise = shift_severity * np.exp(np.random.randn(*scaler.var_.shape))
-            test_data = std_noise * test_data + scaler.mean_ * (1 - std_noise)
+            std_noise = severity_const * np.exp(np.random.randn(*scaler.var_.shape))
+            test_data = mask * test_data + (1 - mask) * (std_noise * test_data + scaler.mean_ * (1 - std_noise))
         elif shift_type == "mean_std_shift":
-            mean_noise = shift_severity * np.random.randn(*scaler.mean_.shape)
-            std_noise = shift_severity * np.exp(np.random.randn(*scaler.var_.shape))
-            test_data = std_noise * test_data + mean_noise * np.sqrt(scaler.var_) + (1 - std_noise) * scaler.mean_
+            mean_noise = severity_const * np.random.randn(*scaler.mean_.shape)
+            std_noise = severity_const * np.exp(np.random.randn(*scaler.var_.shape))
+            test_data = mask * test_data + (1 - mask) * (std_noise * test_data + mean_noise * np.sqrt(scaler.var_) + (1 - std_noise) * scaler.mean_)
+        mask = np.ones_like(test_data, dtype=np.int64)
 
     if mask is None:
         mask = np.ones_like(test_data, dtype=np.int64)

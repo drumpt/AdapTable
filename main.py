@@ -307,7 +307,7 @@ def forward_and_adapt(args, x, model, optimizer):
     optimizer.step()
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
+@hydra.main(version_base=None, config_path="conf", config_name="config_sar.yaml")
 def main(args):
     if 'mae' in args.method and len(args.method) > 1:
         main_mae_method(args)
@@ -424,6 +424,9 @@ def main_mae(args):
     mse_loss_fn = nn.MSELoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
+    # TODO: remove(only for debugging) - decision tree
+
+
     global EMA
     EMA = None
     params, _ = collect_params(best_model, train_params="pretrain")
@@ -440,7 +443,6 @@ def main_mae(args):
 
         test_cor_x = torch.tensor(test_cor_x).to(args.device).to(torch.float32)
         test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
-
 
         _, estimated_y = original_best_model(test_x)
         loss = ce_loss_fn(estimated_y, test_y)
@@ -478,6 +480,7 @@ def main_mae(args):
         loss = ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+
         # naive input renormalization (not working)
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
         # test_x = torch.nan_to_num(test_x, nan=0)
