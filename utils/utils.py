@@ -9,7 +9,6 @@ import torch
 
 
 def set_seed(seed):
-    print(f'setting seed as : {seed}')
     seed = int(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
@@ -107,12 +106,7 @@ def softmax_diversity_regularizer(x):
 
 
 def mixup(data, targets, args, alpha=0.5):
-
-    final_data = []
-    final_data2 = []
-    final_target = []
-    final_target2 = []
-
+    final_data, final_data2, final_target, final_target2 = [], [], [], []
     for _ in range(args.mixup_scale):
         indices = torch.randperm(data.size(0))
         data2 = data[indices]

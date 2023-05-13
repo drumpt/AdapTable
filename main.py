@@ -429,6 +429,9 @@ def main_mae(args):
     forest = RandomForestClassifier(random_state=args.seed)
     forest.fit(dataset.dataset.train_x, dataset.dataset.train_y)
     importances = forest.feature_importances_
+    feature_importance = torch.tensor(importances)
+    # feature_importance = torch.reciprocal(torch.tensor(importances))
+    # feature_importance = feature_importance / torch.sum(feature_importance)
 
     global EMA
     EMA = None
@@ -446,6 +449,9 @@ def main_mae(args):
         test_cor_x = torch.tensor(test_cor_x).to(torch.float32).to(args.device)
         test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
 
+        # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+        # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+
         _, estimated_y = original_best_model(test_x)
         loss = ce_loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
@@ -454,25 +460,44 @@ def main_mae(args):
 
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
-            estimated_test_x, _ = best_model(test_cor_x)
-            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            test_cor_x, test_cor_mask_x = get_corrupted_data(test_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+            test_cor_x = torch.tensor(test_cor_x).to(torch.float32).to(args.device)
+            test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
+
+            if args.mixup == "feature":
+                print(f"feature mixup!")
+                encoded_cor_x = best_model.encoder(test_cor_x)
+                mixup_x, mixup_y = mixup(encoded_cor_x, test_x, args)
+
+                tot_x = torch.cat((encoded_cor_x, mixup_x))
+                tot_y = torch.cat((test_x, mixup_y))
+                tmp_test_mask = test_mask_x.repeat(1+args.mixup_scale, 1)
+
+                loss = mse_loss_fn(best_model.recon_head(tot_x) * tmp_test_mask, tot_y * tmp_test_mask)
+            elif args.mixup == "input":
+                mixup_x, mixup_y = mixup(test_cor_x, test_x, args)
+
+                tot_x = torch.cat((test_cor_x, mixup_x))
+                tot_y = torch.cat((test_x, mixup_y))
+                tmp_test_mask = test_mask_x.repeat(1+args.mixup_scale, 1)
+
+                loss = mse_loss_fn(best_model(tot_x)[0] * tmp_test_mask, tot_y * tmp_test_mask)
+            else:
+                estimated_test_x, _ = best_model(test_cor_x)
+                loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values                
 
             # saliency-based masked autoencoder (다시 테스트)
-            test_cor_x.requires_grad = True # for acquisition
-            test_cor_x.grad = None
-            estimated_test_x, _ = best_model(test_cor_x)
-            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-            loss.backward(retain_graph=True)
+            # test_cor_x.requires_grad = True # for acquisition
+            # test_cor_x.grad = None
+            # estimated_test_x, _ = best_model(test_cor_x)
+            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            # loss.backward(retain_graph=True)
 
-            feature_grads = torch.mean(test_cor_x.grad, dim=0)
-            feature_importance = torch.reciprocal(torch.abs(feature_grads))
-            feature_importance = feature_importance / torch.sum(feature_importance)
-            test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-            test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
-
-            # feature_importance = torch.tensor(importances)
-            # feature_importance = torch.reciprocal(torch.tensor(importances))
+            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
+            # feature_importance = torch.reciprocal(torch.abs(feature_grads))
             # feature_importance = feature_importance / torch.sum(feature_importance)
+            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
 
             # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
             # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
