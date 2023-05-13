@@ -307,7 +307,7 @@ def forward_and_adapt(args, x, model, optimizer):
     optimizer.step()
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config_sar.yaml")
+@hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     if 'mae' in args.method and len(args.method) > 1:
         main_mae_method(args)
@@ -425,7 +425,10 @@ def main_mae(args):
     ce_loss_fn = nn.CrossEntropyLoss()
 
     # TODO: remove(only for debugging) - decision tree
-
+    from sklearn.ensemble import RandomForestClassifier
+    forest = RandomForestClassifier(random_state=args.seed)
+    forest.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+    importances = forest.feature_importances_
 
     global EMA
     EMA = None
@@ -440,8 +443,7 @@ def main_mae(args):
 
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_cor_x, test_cor_mask_x = get_corrupted_data(test_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-
-        test_cor_x = torch.tensor(test_cor_x).to(args.device).to(torch.float32)
+        test_cor_x = torch.tensor(test_cor_x).to(torch.float32).to(args.device)
         test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
 
         _, estimated_y = original_best_model(test_x)
@@ -456,17 +458,21 @@ def main_mae(args):
             loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
             # saliency-based masked autoencoder (다시 테스트)
-            test_cor_x.requires_grad = True # for acquisition
-            test_cor_x.grad = None
-            estimated_test_x, _ = best_model(test_cor_x)
-            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-            loss.backward(retain_graph=True)
+            # test_cor_x.requires_grad = True # for acquisition
+            # test_cor_x.grad = None
+            # estimated_test_x, _ = best_model(test_cor_x)
+            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            # loss.backward(retain_graph=True)
 
-            feature_grads = torch.mean(test_cor_x.grad, dim=0)
-            feature_importance = torch.reciprocal(torch.abs(feature_grads))
-            feature_importance = feature_importance / torch.sum(feature_importance)
-            test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-            test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
+            # feature_importance = torch.reciprocal(torch.abs(feature_grads))
+            # feature_importance = feature_importance / torch.sum(feature_importance)
+            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+
+            # feature_importance = torch.tensor(importances)
+            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
 
             loss.backward()
             test_optimizer.step()
@@ -485,7 +491,7 @@ def main_mae(args):
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
         # test_x = torch.nan_to_num(test_x, nan=0)
 
-        # # input renormalization with excluding missing ones (not working)
+        # input renormalization with excluding missing ones (not working)
         # column_mean = torch.sum(test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
         # column_std = torch.sum((test_x[:, :dataset.dataset.cont_dim] - column_mean) ** 2 * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / (torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) - 1)
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - column_mean) / column_std

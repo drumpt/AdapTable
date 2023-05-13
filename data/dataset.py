@@ -478,20 +478,6 @@ class ShiftsDataset():
                                                       shift_severity=args.shift_severity,
                                                       imputation_method=args.imputation_method)
 
-
-        # self.train_cor_x, self.train_cor_mask_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical",
-        #                                                              shift_type="random_drop",
-        #                                                              shift_severity=args.mask_ratio,
-        #                                                              imputation_method="emd")
-        # self.valid_cor_x, self.valid_cor_mask_x = get_corrupted_data(self.valid_x, self.train_x, data_type="numerical",
-        #                                                              shift_type="random_drop",
-        #                                                              shift_severity=args.mask_ratio,
-        #                                                              imputation_method="emd")
-        # self.test_cor_x, self.test_cor_mask_x = get_corrupted_data(self.test_x, self.train_x, data_type="numerical",
-        #                                                            shift_type="random_drop",
-        #                                                            shift_severity=args.mask_ratio,
-        #                                                            imputation_method="emd")
-
         if 'cls' in args.dataset:
             self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
             self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0).reshape(-1, 1))
