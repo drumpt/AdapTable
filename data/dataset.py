@@ -115,8 +115,8 @@ class OpenMLCC18Dataset():
             test_cat_mask_x if len(cat_indices) else test_cat_mask_x.reshape(test_cont_mask_x.shape[0], 0)
         ], axis=-1)
 
-        self.cont_dim = train_cont_x.shape[-1]
-        self.cat_dim_list = [] if not hasattr(self, 'input_one_hot_encoder') else [len(category) for category in self.input_one_hot_encoder.categories_]
+        # self.cont_dim = train_cont_x.shape[-1]
+        # self.cat_dim_list = [] if not hasattr(self, 'input_one_hot_encoder') else [len(category) for category in self.input_one_hot_encoder.categories_]
 
         self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
@@ -142,11 +142,9 @@ class TableShiftDataset():
 
         # TODO: require kaggle.json file!
         if dataset.is_domain_split:
-            print(f'ood dataset')
             test_x, test_y, _, _ = dataset.get_pandas("ood_test")
             # print(test_y)
         else:
-            print(f'not® ood')
             test_x, test_y, _, _ = dataset.get_pandas("test")
 
         self.train_x = np.array(train_x[sorted(train_x.columns)])
@@ -160,8 +158,8 @@ class TableShiftDataset():
 
         # TODO: fix this
         # print(f"dataset.preprocessor.output_indices_: {dataset.preprocessor.feature_transformer.output_indices_}")
-        self.cont_dim = self.train_x.shape[-1]
-        self.cat_dim_list = []
+        # self.cont_dim = self.train_x.shape[-1]
+        # self.cat_dim_list = []
 
         self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
         self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))

@@ -458,19 +458,22 @@ def main_mae(args):
             loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
             # saliency-based masked autoencoder (다시 테스트)
-            # test_cor_x.requires_grad = True # for acquisition
-            # test_cor_x.grad = None
-            # estimated_test_x, _ = best_model(test_cor_x)
-            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-            # loss.backward(retain_graph=True)
+            test_cor_x.requires_grad = True # for acquisition
+            test_cor_x.grad = None
+            estimated_test_x, _ = best_model(test_cor_x)
+            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            loss.backward(retain_graph=True)
 
-            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
-            # feature_importance = torch.reciprocal(torch.abs(feature_grads))
-            # feature_importance = feature_importance / torch.sum(feature_importance)
-            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+            feature_grads = torch.mean(test_cor_x.grad, dim=0)
+            feature_importance = torch.reciprocal(torch.abs(feature_grads))
+            feature_importance = feature_importance / torch.sum(feature_importance)
+            test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
 
             # feature_importance = torch.tensor(importances)
+            # feature_importance = torch.reciprocal(torch.tensor(importances))
+            # feature_importance = feature_importance / torch.sum(feature_importance)
+
             # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
             # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
 
