@@ -1,0 +1,71 @@
+### model
+model: MLP # currently supported: MLP # TODO: implement transformer, etc
+## currently dim, n_layers are not applied automatically
+hidden_dim: 64
+n_layers: 4
+
+### dataset
+meta_dataset: openml-regression # openml-cc18, tableshift, openml-regression, shifts
+## currently available dataset list
+# openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
+# tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
+# openml-regression: abalone, cholestrol
+# shifts: weather_reg, weather_cls, power
+dataset: cholestrol
+shift_type: null # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_severity: 0.8
+normalizer: MinMaxScaler
+imputation_method: emd # zero, mean, emd(empirical marginal distribution)
+
+### hyperparameters for MAE pretraining
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 1e-3
+mask_ratio: 0.75
+
+### hyperparameters for training
+retrain: false
+epochs: 300
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.03
+
+### hyperparameters for test-time adaptation
+episodic: true # reset model to the pretrained one for each batch if true
+num_steps: 10 # optimization steps for each batch
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 1e-4
+train_params: [all] # currently supported: all, LN, BN, GN
+# TODO: implement learning rate scheduler
+
+##################################################################
+### methods & other hyperparameters
+method: [mae] # currently supported: mae, sar, em, gem, ns, kld
+temp: 2.5 # temperature scaling
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04 # negative sampling
+kld_weight: 0.1
+##################################################################
+
+### device
+device: cuda
+
+### seed for reproduciblity
+seed: 0
+
+##################################################################
+### log dir for logging
+log_dir: log
+
+### output dir for saving model
+out_dir: exps/test_mae
+
+### wandb
+wandb_user: drumpt
+
+### slack_notification
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+##################################################################
