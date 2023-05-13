@@ -12,7 +12,7 @@ dataset: heloc
 shift_type: column_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
 shift_severity: 0.6
 normalizer: StandardScaler
-imputation_method: zero # zero, mean, emd(empirical marginal distribution)
+imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for MAE pretraining
 pretrain_epochs: 50

@@ -2,7 +2,6 @@ import os
 import logging
 import random
 from datetime import datetime
-from copy import deepcopy
 from slack_sdk import WebClient
 
 import numpy as np
@@ -10,6 +9,8 @@ import torch
 
 
 def set_seed(seed):
+    print(f'setting seed as : {seed}')
+    seed = int(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
@@ -21,6 +22,23 @@ def set_seed(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
+
+# def set_seed(seed):
+#     random_seed = int(seed)
+#     os.environ["PYTHONHASHSEED"] = str(seed)
+#     torch.manual_seed(random_seed)
+#     torch.cuda.manual_seed(random_seed)
+#     torch.cuda.manual_seed_all(random_seed)  # if use multi-GPU
+#     torch.backends.cudnn.deterministic = True
+#     torch.backends.cudnn.benchmark = False
+#     # torch.use_deterministic_algorithms(True)
+#     np.random.seed(random_seed)
+#     random.seed(random_seed)
+#
+#     print('random output')
+#     print(random.random())
+#     # 8444218515250481
+#     # 8444218515250481
 
 def set_seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2 ** 32
@@ -57,15 +75,6 @@ def send_message(message, token, channel):
     response = client.chat_postMessage(channel="#"+channel, text=message)
 
 
-def cumulative_sum(lst):
-    if len(lst) == 0:
-        return lst
-    cum_sum = [lst[0]]
-    for i in range(1, len(lst)):
-        cum_sum.append(cum_sum[i-1] + lst[i])
-    return cum_sum
-
-
 def safe_log(x, ver):
     if ver == 1:
         return torch.log(x + 1e-5)
@@ -92,68 +101,35 @@ def renyi_entropy(x, alpha, dim=-1):
     return torch.mean(entropy)
 
 
-def softmax_diversity_regularizer(x): # for shot
-    x2 = x.softmax(-1).mean(0)
+def softmax_diversity_regularizer(x):
+    x2 = x.softmax(-1).mean(0)  # [b, c] -> [c]
     return (x2 * safe_log(x2, ver=3)).sum()
 
 
-def collect_params(model, train_params):
-    params, names = [], []
-    for nm, m in model.named_modules():
-        if 'all' in train_params:
-            for np, p in m.named_parameters():
-                p.requires_grad = True
-                if not f"{nm}.{np}" in names:
-                    params.append(p)
-                    names.append(f"{nm}.{np}")
-        if 'LN' in train_params: # TODO: change this (not working)
-            if isinstance(m, nn.LayerNorm):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if 'BN' in train_params:
-            if isinstance(m, nn.BatchNorm1d):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if 'GN' in train_params:
-            if isinstance(m, nn.GroupNorm):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if "pretrain" in train_params:
-            for np, p in m.named_parameters():
-                if 'main_head' in f"{nm}.{np}":
-                    continue
-                params.append(p)
-                names.append(f"{nm}.{np}")
-        if "downstream" in train_params:
-            for np, p in m.named_parameters():
-                if not 'main_head' in f"{nm}.{np}":
-                    continue
-                params.append(p)
-                names.append(f"{nm}.{np}")
-    return params, names
+def mixup(data, targets, args, alpha=0.5):
 
+    final_data = []
+    final_data2 = []
+    final_target = []
+    final_target2 = []
 
-def copy_model_and_optimizer(model, optimizer, scheduler):
-    model_state = deepcopy(model.state_dict())
-    optimizer_state = deepcopy(optimizer.state_dict())
-    if scheduler is not None:
-        scheduler_state = deepcopy(scheduler.state_dict())
-        return model_state, optimizer_state, scheduler_state
-    else:
-        return model_state, optimizer_state, None
+    for _ in range(args.mixup_scale):
+        indices = torch.randperm(data.size(0))
+        data2 = data[indices]
+        targets2 = targets[indices]
 
+        final_data.append(data)
+        final_data2.append(data2)
+        final_target.append(targets)
+        final_target2.append(targets2)
 
-def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer_state, scheduler_state):
-    model.load_state_dict(model_state, strict=True)
-    optimizer.load_state_dict(optimizer_state)
-    if scheduler is not None:
-        scheduler.load_state_dict(scheduler_state)
-        return model, optimizer, scheduler
-    else: 
-        return model, optimizer, None
+    final_data = torch.cat(final_data)
+    final_data2 = torch.cat(final_data2)
+    final_target = torch.cat(final_target)
+    final_target2 = torch.cat(final_target2)
+
+    lam = torch.FloatTensor([np.random.beta(alpha, alpha)]).to(args.device)
+    data = final_data * lam + final_data2 * (1 - lam)
+    targets = final_target * lam + final_target2 * (1 - lam)
+
+    return data, targets

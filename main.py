@@ -15,6 +15,65 @@ from sam import SAM
 from utils import utils
 from utils.utils import *
 
+def copy_model_and_optimizer(model, optimizer, scheduler):
+    model_state = deepcopy(model.state_dict())
+    optimizer_state = deepcopy(optimizer.state_dict())
+    if scheduler is not None:
+        scheduler_state = deepcopy(scheduler.state_dict())
+        return model_state, optimizer_state, scheduler_state
+    else:
+        return model_state, optimizer_state, None
+
+
+def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer_state, scheduler_state):
+    model.load_state_dict(model_state, strict=True)
+    optimizer.load_state_dict(optimizer_state)
+    if scheduler is not None:
+        scheduler.load_state_dict(scheduler_state)
+        return model, optimizer, scheduler
+    else:
+        return model, optimizer, None
+
+def collect_params(model, train_params):
+    params, names = [], []
+    for nm, m in model.named_modules():
+        if 'all' in train_params:
+            for np, p in m.named_parameters():
+                p.requires_grad = True
+                if not f"{nm}.{np}" in names:
+                    params.append(p)
+                    names.append(f"{nm}.{np}")
+        if 'LN' in train_params: # TODO: change this (not working)
+            if isinstance(m, nn.LayerNorm):
+                for np, p in m.named_parameters():
+                    if np in ['weight', 'bias']:
+                        params.append(p)
+                        names.append(f"{nm}.{np}")
+        if 'BN' in train_params:
+            if isinstance(m, nn.BatchNorm1d):
+                for np, p in m.named_parameters():
+                    if np in ['weight', 'bias']:
+                        params.append(p)
+                        names.append(f"{nm}.{np}")
+        if 'GN' in train_params:
+            if isinstance(m, nn.GroupNorm):
+                for np, p in m.named_parameters():
+                    if np in ['weight', 'bias']:
+                        params.append(p)
+                        names.append(f"{nm}.{np}")
+        if "pretrain" in train_params:
+            for np, p in m.named_parameters():
+                if 'main_head' in f"{nm}.{np}":
+                    continue
+                params.append(p)
+                names.append(f"{nm}.{np}")
+        if "downstream" in train_params:
+            for np, p in m.named_parameters():
+                if not 'main_head' in f"{nm}.{np}":
+                    continue
+                params.append(p)
+                names.append(f"{nm}.{np}")
+    return params, names
 
 def pretrain(args, model, optimizer, dataset, logger):
     device = args.device
@@ -27,6 +86,8 @@ def pretrain(args, model, optimizer, dataset, logger):
         for train_x, _ in dataset.train_loader:
             train_x = train_x.to(device)
             train_cor_x, _ = get_corrupted_data(train_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+
+            train_cor_x = torch.Tensor(train_cor_x).to(args.device)
             estimated_x = model(train_cor_x) if isinstance(model, MLP) else model(train_cor_x)[0]
             loss = mse_loss_fn(estimated_x, train_x).mean()
 
@@ -62,6 +123,9 @@ def pretrain(args, model, optimizer, dataset, logger):
             for valid_x, _ in dataset.valid_loader:
                 valid_x = valid_x.to(device)
                 valid_cor_x, _ = get_corrupted_data(valid_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
+
+                valid_cor_x = torch.tensor(valid_cor_x).to(args.device).to(torch.float32)
+
                 estimated_x = model(valid_cor_x) if isinstance(model, MLP) else model(valid_cor_x)[0]
                 loss = mse_loss_fn(estimated_x, valid_x).mean()
 
@@ -252,7 +316,6 @@ def main(args):
     else:
         main_em(args)
 
-
 def main_em(args):
     if hasattr(args, 'seed'):
         utils.set_seed(args.seed)
@@ -375,6 +438,10 @@ def main_mae(args):
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_cor_x, test_cor_mask_x = get_corrupted_data(test_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
 
+        test_cor_x = torch.tensor(test_cor_x).to(args.device).to(torch.float32)
+        test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
+
+
         _, estimated_y = original_best_model(test_x)
         loss = ce_loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
@@ -383,22 +450,21 @@ def main_mae(args):
 
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
-
             estimated_test_x, _ = best_model(test_cor_x)
             loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
-            # saliency-based masked autoencoder
-            # test_cor_x.requires_grad = True # for acquisition
-            # test_cor_x.grad = None
-            # estimated_test_x, _ = best_model(test_cor_x)
-            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-            # loss.backward(retain_graph=True)
+            # saliency-based masked autoencoder (다시 테스트)
+            test_cor_x.requires_grad = True # for acquisition
+            test_cor_x.grad = None
+            estimated_test_x, _ = best_model(test_cor_x)
+            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            loss.backward(retain_graph=True)
 
-            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
-            # feature_importance = torch.reciprocal(torch.abs(feature_grads))
-            # feature_importance = feature_importance / torch.sum(feature_importance)
-            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+            feature_grads = torch.mean(test_cor_x.grad, dim=0)
+            feature_importance = torch.reciprocal(torch.abs(feature_grads))
+            feature_importance = feature_importance / torch.sum(feature_importance)
+            test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
 
             loss.backward()
             test_optimizer.step()
@@ -412,7 +478,6 @@ def main_mae(args):
         loss = ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
         # naive input renormalization (not working)
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
         # test_x = torch.nan_to_num(test_x, nan=0)
@@ -462,7 +527,6 @@ def main_mae_method(args):
     original_best_model = deepcopy(best_model)
     best_model.eval().requires_grad_(True).to(device)
     original_best_model = original_best_model.eval().requires_grad_(False).to(device)
-
 
     params, _ = collect_params(best_model, train_params=args.train_params)
     if "sar" in args.method:

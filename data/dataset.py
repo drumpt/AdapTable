@@ -47,7 +47,7 @@ class Dataset():
         self.in_dim, self.out_dim = self.dataset.train_x.shape[-1], self.dataset.train_y.shape[-1]
         self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
-        self.test_loader =  torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+        self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
 
 
 
@@ -60,6 +60,7 @@ class OpenMLCC18Dataset():
             benchmark_df.to_csv(benchmark_list_path)
         else:
             benchmark_df = pd.read_csv(benchmark_list_path)
+
         target_feature = benchmark_df[benchmark_df["name"] == args.dataset].iloc[0]["target_feature"]
 
         dataset = openml.datasets.get_dataset(args.dataset)
@@ -256,19 +257,19 @@ class FolkTablesDataset():
         self.valid_x = self.input_scaler.transform(valid_x)
         self.test_x = self.input_scaler.transform(test_x)
 
-        # create corruption
-        self.train_cor_x, self.train_cor_mask_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical",
-                                                                     shift_type="random_drop",
-                                                                     shift_severity=args.mask_ratio,
-                                                                     imputation_method="emd")
-        self.valid_cor_x, self.valid_cor_mask_x = get_corrupted_data(self.valid_x, self.train_x, data_type="numerical",
-                                                                     shift_type="random_drop",
-                                                                     shift_severity=args.mask_ratio,
-                                                                     imputation_method="emd")
-        self.test_cor_x, self.test_cor_mask_x = get_corrupted_data(self.test_x, self.train_x, data_type="numerical",
-                                                                   shift_type="random_drop",
-                                                                   shift_severity=args.mask_ratio,
-                                                                   imputation_method="emd")
+        # # create corruption
+        # self.train_cor_x, self.train_cor_mask_x = get_corrupted_data(self.train_x, self.train_x, data_type="numerical",
+        #                                                              shift_type="random_drop",
+        #                                                              shift_severity=args.mask_ratio,
+        #                                                              imputation_method="emd")
+        # self.valid_cor_x, self.valid_cor_mask_x = get_corrupted_data(self.valid_x, self.train_x, data_type="numerical",
+        #                                                              shift_type="random_drop",
+        #                                                              shift_severity=args.mask_ratio,
+        #                                                              imputation_method="emd")
+        # self.test_cor_x, self.test_cor_mask_x = get_corrupted_data(self.test_x, self.train_x, data_type="numerical",
+        #                                                            shift_type="random_drop",
+        #                                                            shift_severity=args.mask_ratio,
+        #                                                            imputation_method="emd")
         self.test_mask_x = np.ones_like(self.test_x)
 
         # one-hot encode output
@@ -630,14 +631,7 @@ class UCIDataset():
 
 
 def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
-    # assert shift_type in ["Gaussian", "random_drop", "column_drop", "column_block_drop", "mean_shift", "std_shift", "mean_std_shift"]
-    mask, is_tensor, device = None, False, None
-    if torch.is_tensor(test_data):
-        is_tensor = True
-        device = test_data.device
-        test_data = test_data.cpu().numpy()
-    if torch.is_tensor(train_data):
-        train_data = train_data.cpu().numpy()
+    mask = None
 
     if shift_type == "Gaussian" and data_type == "numerical":
         scaler = StandardScaler()
@@ -645,7 +639,7 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
         test_data = test_data.astype(np.float64) + shift_severity * np.random.randn(*test_data.shape) * np.sqrt(
             scaler.var_)
 
-    elif shift_type in ["random_drop", "column_drop", "column_block_drop"]:
+    elif shift_type in ["random_drop", "column_drop", "random_replacement", "column_replacement"]:
         assert 0 <= shift_severity <= 1
 
         if shift_type == "random_drop":
@@ -653,13 +647,12 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
         elif shift_type == "column_drop":
             mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :],
                              test_data.shape[0], axis=0)
-        elif shift_type == "column_block_drop":
-            start_idx = np.random.randint(0, int(test_data.shape[-1] * (1 - shift_severity)) + 1)
-            end_idx = start_idx + int(test_data.shape[-1] * shift_severity)
-            mask = np.repeat(
-                np.array([0 if start_idx <= idx <= end_idx else 1 for idx in range(len(test_data[0]))])[None, :],
-                test_data.shape[0], axis=0)
+        else:
+            mask = np.ones_like(test_data, dtype=np.int64)            
         imputed_data = get_imputed_data(test_data, train_data, data_type, imputation_method)
+
+        if not isinstance(test_data, np.ndarray):
+            test_data = test_data.detach().cpu().numpy()
 
         if data_type == "numerical":
             test_data = mask * test_data + (1 - mask) * imputed_data
@@ -670,6 +663,8 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
                         test_data[row_idx][col_idx] = imputed_data[row_idx][col_idx]
 
     elif shift_type in ["mean_shift", "std_shift", "mean_std_shift"] and data_type == "numerical":
+        assert 0 <= shift_severity <= 1
+
         scaler = StandardScaler()
         scaler.fit(train_data)
         if shift_type == "mean_shift":
@@ -685,9 +680,6 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
 
     if mask is None:
         mask = np.ones_like(test_data, dtype=np.int64)
-    if is_tensor:
-        test_data = torch.FloatTensor(test_data).to(device)
-        mask = torch.FloatTensor(mask).to(device)
     return test_data, mask
 
 
