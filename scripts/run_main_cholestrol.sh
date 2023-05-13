@@ -5,6 +5,7 @@ python main.py \
     retrain=true \
     seed=0 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -13,6 +14,7 @@ python main.py \
     retrain=false \
     seed=1 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -21,6 +23,7 @@ python main.py \
     retrain=false \
     seed=2 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 
 
@@ -31,6 +34,7 @@ python main.py \
     shift_severity=1 \
     seed=0 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -39,6 +43,7 @@ python main.py \
     shift_severity=1 \
     seed=1 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -47,6 +52,7 @@ python main.py \
     shift_severity=1 \
     seed=2 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 
 
@@ -57,6 +63,7 @@ python main.py \
     shift_severity=0.6 \
     seed=0 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -65,6 +72,7 @@ python main.py \
     shift_severity=0.6 \
     seed=1 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -73,6 +81,7 @@ python main.py \
     shift_severity=0.6 \
     seed=2 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 
 
@@ -83,6 +92,7 @@ python main.py \
     shift_severity=0.6 \
     seed=0 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -91,6 +101,7 @@ python main.py \
     shift_severity=0.6 \
     seed=1 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -99,6 +110,7 @@ python main.py \
     shift_severity=0.6 \
     seed=2 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 
 
@@ -109,6 +121,7 @@ python main.py \
     shift_severity=1 \
     seed=0 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -117,6 +130,7 @@ python main.py \
     shift_severity=1 \
     seed=1 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -125,6 +139,7 @@ python main.py \
     shift_severity=1 \
     seed=2 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 
 
@@ -135,6 +150,7 @@ python main.py \
     shift_severity=1 \
     seed=0 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -143,6 +159,7 @@ python main.py \
     shift_severity=1 \
     seed=1 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
     meta_dataset=openml-regression \
@@ -151,6 +168,7 @@ python main.py \
     shift_severity=1 \
     seed=2 \
     out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 
 
@@ -159,66 +177,76 @@ python main.py \
     dataset=cholestrol \
     shift_type=mean_std_shift \
     shift_severity=1 \
-    seed=0\
-    out_dir=exps/cholestrol \
-
-python main.py \
-    meta_dataset=openml-regression \
-    dataset=cholestrol \
-    shift_type=mean_std_shift \
-    shift_severity=1 \
-    seed=1 \
-    out_dir=exps/cholestrol \
-
-python main.py \
-    meta_dataset=openml-regression \
-    dataset=cholestrol \
-    shift_type=mean_std_shift \
-    shift_severity=1 \
-    seed=2 \
-    out_dir=exps/cholestrol \
-
-
-
-python main.py \
-    meta_dataset=tableshift \
-    dataset=heloc \
-    retrain=true \
     seed=0 \
-    out_dir=exps/heloc_main \
+    out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
-    meta_dataset=tableshift \
-    dataset=heloc \
-    retrain=false \
+    meta_dataset=openml-regression \
+    dataset=cholestrol \
+    shift_type=mean_std_shift \
+    shift_severity=1 \
     seed=1 \
-    out_dir=exps/heloc_main \
+    out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 python main.py \
-    meta_dataset=tableshift \
-    dataset=heloc \
-    retrain=false \
+    meta_dataset=openml-regression \
+    dataset=cholestrol \
+    shift_type=mean_std_shift \
+    shift_severity=1 \
     seed=2 \
-    out_dir=exps/heloc_main \
+    out_dir=exps/cholestrol \
+    --config-name config_cholestrol.yaml \
 
 
-python main.py \
-    meta_dataset=tableshift \
-    dataset=diabetes_readmission \
-    retrain=true \
-    seed=0 \
-    out_dir=exps/diabetes_main \
 
-python main.py \
-    meta_dataset=tableshift \
-    dataset=diabetes_readmission \
-    retrain=false \
-    seed=1 \
-    out_dir=exps/diabetes_main \
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=heloc \
+#     retrain=true \
+#     seed=0 \
+#     out_dir=exps/heloc_main \
+#     --config-name config_cholestrol.yaml \
 
-python main.py \
-    meta_dataset=tableshift \
-    dataset=diabetes_readmission \
-    retrain=false \
-    seed=2 \
-    out_dir=exps/diabetes_main \
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=heloc \
+#     retrain=false \
+#     seed=1 \
+#     out_dir=exps/heloc_main \
+#     --config-name config_cholestrol.yaml \
+
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=heloc \
+#     retrain=false \
+#     seed=2 \
+#     out_dir=exps/heloc_main \
+#     --config-name config_cholestrol.yaml \
+
+
+
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=diabetes_readmission \
+#     retrain=true \
+#     seed=0 \
+#     out_dir=exps/diabetes_main \
+#     --config-name config_cholestrol.yaml \
+
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=diabetes_readmission \
+#     retrain=false \
+#     seed=1 \
+#     out_dir=exps/diabetes_main \
+#     --config-name config_cholestrol.yaml \
+
+# python main.py \
+#     meta_dataset=tableshift \
+#     dataset=diabetes_readmission \
+#     retrain=false \
+#     seed=2 \
+#     out_dir=exps/diabetes_main \
+#     --config-name config_cholestrol.yaml \
