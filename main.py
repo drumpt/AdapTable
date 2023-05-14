@@ -15,6 +15,11 @@ from sam import SAM
 from utils import utils
 from utils.utils import *
 
+
+# for TSNE logging purpose
+tsne_before_adaptation = [[], []] # feature_list, cls_list
+tsne_after_adaptation = [[], []] # feature_list, cls_list
+
 def copy_model_and_optimizer(model, optimizer, scheduler):
     model_state = deepcopy(model.state_dict())
     optimizer_state = deepcopy(optimizer.state_dict())
@@ -441,6 +446,7 @@ def main_mae(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
     for test_x, test_mask_x, test_y in dataset.test_loader:
+
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
             best_model = best_model.eval().requires_grad_(True).to(device)
@@ -459,13 +465,38 @@ def main_mae(args):
         for _ in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
             estimated_test_x, _ = best_model(test_cor_x)
-            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
-            # saliency-based masked autoencoder (다시 테스트)
             test_cor_x.requires_grad = True # for acquisition
             test_cor_x.grad = None
-            estimated_test_x, _ = best_model(test_cor_x)
-            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+
+            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+            if args.feature_mixup:
+                encoded_cor_x = best_model.encoder(test_cor_x)
+                mixup_x, mixup_y = mixup(encoded_cor_x, test_x, args)
+
+                tot_x = torch.cat((encoded_cor_x, mixup_x))
+                tot_y = torch.cat((test_x, mixup_y))
+                tmp_test_mask = test_mask_x.repeat(1+args.mixup_scale, 1)
+
+                loss = mse_loss_fn(best_model.recon_head(tot_x) * tmp_test_mask, tot_y * tmp_test_mask)
+            elif args.mixup:
+                mixup_x, mixup_y = mixup(test_cor_x, test_x, args)
+
+                tot_x = torch.cat((test_cor_x, mixup_x))
+                tot_y = torch.cat((test_x, mixup_y))
+                tmp_test_mask = test_mask_x.repeat(1+args.mixup_scale, 1)
+
+                # print((best_model(tot_x)[0] * tmp_test_mask).shape)
+                # print((tot_y * tmp_test_mask).shape)
+                loss = mse_loss_fn(best_model(tot_x)[0] * tmp_test_mask, tot_y * tmp_test_mask)
+            else:
+                estimated_test_x, _ = best_model(test_cor_x)
+                loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss on non-missing values only
+
+            # saliency-based masked autoencoder (다시 테스트)
+
+            # estimated_test_x, _ = best_model(test_cor_x)
+            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
             loss.backward(retain_graph=True)
 
             feature_grads = torch.mean(test_cor_x.grad, dim=0)
@@ -483,6 +514,18 @@ def main_mae(args):
 
             loss.backward()
             test_optimizer.step()
+
+        if args.tsne:
+            with torch.no_grad():
+                assert regression is False
+                feature_original_model = original_best_model.encoder(test_x).tolist()
+                feature_best_model = best_model.encoder(test_x).tolist()
+
+                tsne_before_adaptation[0] += feature_original_model
+                tsne_before_adaptation[1] += test_y.tolist()
+                tsne_after_adaptation[0] += feature_best_model
+                tsne_after_adaptation[1] += test_y.tolist()
+
 
         # imputation with masked autoencoder
         estimated_x, _ = best_model(test_x)
@@ -503,6 +546,11 @@ def main_mae(args):
         # column_std = torch.sum((test_x[:, :dataset.dataset.cont_dim] - column_mean) ** 2 * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / (torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) - 1)
         # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - column_mean) / column_std
         # test_x = torch.nan_to_num(test_x, nan=0)
+
+    if args.tsne:
+        from utils.utils import draw_tsne
+        draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
+        draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")

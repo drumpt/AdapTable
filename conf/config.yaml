@@ -35,6 +35,9 @@ num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 test_lr: 1e-4
+feature_mixup: false
+mixup: false
+mixup_scale: 1
 train_params: [all] # currently supported: all, LN, BN, GN
 # TODO: implement learning rate scheduler
 
@@ -49,6 +52,7 @@ kld_weight: 0.1
 
 ### device
 device: cuda
+gpu_idx: 0
 
 ### seed for reproduciblity
 seed: 0
@@ -59,6 +63,9 @@ log_dir: log
 
 ### output dir for saving model
 out_dir: exps/test_mae
+
+### tsne
+tsne: false
 
 ### wandb
 wandb_user: drumpt
