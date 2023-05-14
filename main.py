@@ -16,6 +16,70 @@ from utils import utils
 from utils.utils import *
 
 
+# for TSNE logging purpose
+tsne_before_adaptation = [[], []] # feature_list, cls_list
+tsne_after_adaptation = [[], []] # feature_list, cls_list
+
+def copy_model_and_optimizer(model, optimizer, scheduler):
+    model_state = deepcopy(model.state_dict())
+    optimizer_state = deepcopy(optimizer.state_dict())
+    if scheduler is not None:
+        scheduler_state = deepcopy(scheduler.state_dict())
+        return model_state, optimizer_state, scheduler_state
+    else:
+        return model_state, optimizer_state, None
+
+
+def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer_state, scheduler_state):
+    model.load_state_dict(model_state, strict=True)
+    optimizer.load_state_dict(optimizer_state)
+    if scheduler is not None:
+        scheduler.load_state_dict(scheduler_state)
+        return model, optimizer, scheduler
+    else:
+        return model, optimizer, None
+
+def collect_params(model, train_params):
+    params, names = [], []
+    for nm, m in model.named_modules():
+        if 'all' in train_params:
+            for np, p in m.named_parameters():
+                p.requires_grad = True
+                if not f"{nm}.{np}" in names:
+                    params.append(p)
+                    names.append(f"{nm}.{np}")
+        if 'LN' in train_params: # TODO: change this (not working)
+            if isinstance(m, nn.LayerNorm):
+                for np, p in m.named_parameters():
+                    if np in ['weight', 'bias']:
+                        params.append(p)
+                        names.append(f"{nm}.{np}")
+        if 'BN' in train_params:
+            if isinstance(m, nn.BatchNorm1d):
+                for np, p in m.named_parameters():
+                    if np in ['weight', 'bias']:
+                        params.append(p)
+                        names.append(f"{nm}.{np}")
+        if 'GN' in train_params:
+            if isinstance(m, nn.GroupNorm):
+                for np, p in m.named_parameters():
+                    if np in ['weight', 'bias']:
+                        params.append(p)
+                        names.append(f"{nm}.{np}")
+        if "pretrain" in train_params:
+            for np, p in m.named_parameters():
+                if 'main_head' in f"{nm}.{np}":
+                    continue
+                params.append(p)
+                names.append(f"{nm}.{np}")
+        if "downstream" in train_params:
+            for np, p in m.named_parameters():
+                if not 'main_head' in f"{nm}.{np}":
+                    continue
+                params.append(p)
+                names.append(f"{nm}.{np}")
+    return params, names
+
 def pretrain(args, model, optimizer, dataset, logger):
     device = args.device
     best_model, best_loss = None, float('inf')
@@ -131,6 +195,13 @@ def forward_and_adapt(args, x, model, optimizer):
 
         optimizer.second_step()
         return
+    if 'memo' in args.method:
+        from utils.memo_utils import generate_augmentation
+        assert args.test_batch_size == 1
+        x = generate_augmentation(x, args)
+        outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
+        loss = softmax_entropy(outputs / args.temp).mean()
+        loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
         loss.backward(retain_graph=True)
@@ -220,6 +291,24 @@ def main_em(args):
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
+        if args.tsne:
+            with torch.no_grad():
+                assert regression is False
+                feature_original_model = original_best_model.get_feature(test_x).tolist()
+                feature_best_model = best_model.get_feature(test_x).tolist()
+
+                tsne_before_adaptation[0] += feature_original_model
+                tsne_before_adaptation[1] += test_y.tolist()
+                tsne_after_adaptation[0] += feature_best_model
+                tsne_after_adaptation[1] += test_y.tolist()
+
+    if args.tsne:
+        from utils.utils import draw_tsne, save_pickle
+        save_pickle(tsne_before_adaptation, 'before_adaptation', args)
+        save_pickle(tsne_after_adaptation, 'after_adaptation', args)
+        draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
+        draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
+
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
@@ -271,6 +360,7 @@ def main_mae(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
     for test_x, test_mask_x, test_y in dataset.test_loader:
+
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
             best_model = best_model.eval().requires_grad_(True).to(device)
@@ -306,6 +396,18 @@ def main_mae(args):
             loss.backward()
             test_optimizer.step()
 
+        if args.tsne:
+            with torch.no_grad():
+                assert regression is False
+                feature_original_model = original_best_model.get_feature(test_x).tolist()
+                feature_best_model = best_model.get_feature(test_x).tolist()
+
+                tsne_before_adaptation[0] += feature_original_model
+                tsne_before_adaptation[1] += test_y.tolist()
+                tsne_after_adaptation[0] += feature_best_model
+                tsne_after_adaptation[1] += test_y.tolist()
+
+
         # imputation with masked autoencoder
         estimated_x, _ = best_model(test_x)
         test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
@@ -315,6 +417,21 @@ def main_mae(args):
         loss = mse_loss_fn(estimated_y, test_y) if regression else ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+
+        # naive input renormalization (not working)
+        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
+        # test_x = torch.nan_to_num(test_x, nan=0)
+
+        # input renormalization with excluding missing ones (not working)
+        # column_mean = torch.sum(test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
+        # column_std = torch.sum((test_x[:, :dataset.dataset.cont_dim] - column_mean) ** 2 * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / (torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) - 1)
+        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - column_mean) / column_std
+        # test_x = torch.nan_to_num(test_x, nan=0)
+
+    if args.tsne:
+        from utils.utils import draw_tsne
+        draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
+        draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
@@ -410,12 +527,80 @@ def main_mae_with_em(args):
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
 
+def main_no_adapt(args):
+    if hasattr(args, 'seed'):
+        utils.set_seed(args.seed)
+        print(f"set seed as {args.seed}")
+    if not os.path.exists(args.log_dir):
+        os.makedirs(args.log_dir)
+    utils.disable_logger(args)
+    logger = utils.get_logger(args)
+    logger.info(OmegaConf.to_yaml(args))
+    if not os.path.exists(args.out_dir):
+        os.makedirs(args.out_dir)
+
+    dataset = Dataset(args)
+    test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
+
+    regression = True if dataset.out_dim == 1 else False
+    mse_loss_fn = nn.MSELoss()
+    ce_loss_fn = nn.CrossEntropyLoss()
+
+
+    if args.model == 'lr':
+        from sklearn.linear_model import LogisticRegression
+        best_model = LogisticRegression()
+        best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+    elif args.model == 'knn':
+        from sklearn.neighbors import KNeighborsClassifier
+        best_model = KNeighborsClassifier(n_neighbors=3)
+        best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+    elif args.model == 'xgboost':
+        if regression:
+            objective = "reg:linear"
+        elif dataset.dataset.train_y.argmax(1).max() == 1:
+            objective = "binary:logistic"
+        else:
+            objective = "multi:softprob"
+
+        import xgboost as xgb
+
+        if regression:
+            best_model = xgb.XGBRegressor(objective=objective, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+        else:
+            best_model = xgb.XGBClassifier(n_estimators=args.num_estimators, learning_rate=args.test_lr, max_depth=args.max_depth, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+    elif args.model == 'rf':
+        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+
+        if regression:
+            best_model = RandomForestRegressor(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+        else:
+            best_model = RandomForestClassifier(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+
+    else:
+        raise NotImplementedError
+
+    for test_x, test_mask_x, test_y in dataset.test_loader:
+        test_len += test_x.shape[0]
+        estimated_y = best_model.predict(test_x)
+        test_acc_after += (np.array(estimated_y)==np.argmax(np.array(test_y), axis=-1)).sum()
+
+    logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
+    logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
+
+
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     if 'mae' in args.method and len(args.method) > 1:
         main_mae_with_em(args)
     elif 'mae' in args.method:
         main_mae(args)
+    elif 'no_adapt' in args.method:
+        main_no_adapt(args)
     else:
         main_em(args)
 

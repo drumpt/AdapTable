@@ -4,9 +4,13 @@ import random
 from datetime import datetime
 from copy import deepcopy
 from slack_sdk import WebClient
-
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
 import numpy as np
 import torch
+import pickle
 
 
 def set_seed(seed):
@@ -173,3 +177,29 @@ def mixup(data, targets, args, alpha=0.5):
     targets = final_target * lam + final_target2 * (1 - lam)
 
     return data, targets
+
+
+def draw_tsne(feats, cls, title, args):
+    tsne = TSNE(n_components=2, verbose=1, random_state=args.seed)
+
+    cls = np.array(cls).argmax(1)
+    feats = np.array(feats)
+    z = tsne.fit_transform(feats)
+
+    df = pd.DataFrame()
+    df["y"] = cls
+    df["d1"] = z[:, 0]
+    df["d2"] = z[:, 1]
+    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(),
+                    palette=sns.color_palette("hls", cls.max() + 1),
+                    data=df)
+    plt.title(title)
+    plt.show()
+
+def save_pickle(saving_object, title,args):
+    if not os.path.exists(args.tsne_dir):
+        os.makedirs(args.tsne_dir)
+
+    file_name = f'{title}_model{args.model}_dataset{args.dataset}_shift_type{args.shift_type}_method{args.method}.pkl'
+    with open(os.path.join(args.tsne_dir, file_name), 'wb') as f:
+        pickle.dump(saving_object, f, pickle.HIGHEST_PROTOCOL)

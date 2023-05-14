@@ -46,10 +46,15 @@ temp: 2.5 # temperature scaling
 renyi_entropy_alpha: 1.5
 ns_threshold: 0.04 # negative sampling
 kld_weight: 0.1
+
+# for xgboost classifier
+num_estimators: 500
+max_depth: 4
 ##################################################################
 
 ### device
 device: cuda
+gpu_idx: 0
 
 ### seed for reproduciblity
 seed: 0
@@ -61,8 +66,15 @@ log_dir: log
 ### output dir for saving model
 out_dir: exps/test_mae
 
+### tsne
+tsne: false
+tsne_dir: tsne
+
 ### wandb
 wandb_user: drumpt
+
+### memo
+memo_aug_num: 64
 
 ### slack_notification
 slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
