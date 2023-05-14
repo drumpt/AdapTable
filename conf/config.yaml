@@ -36,9 +36,6 @@ num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 test_lr: 1e-4
-feature_mixup: false
-mixup: false
-mixup_scale: 1
 train_params: [all] # currently supported: all, LN, BN, GN
 # TODO: implement learning rate scheduler
 
@@ -67,9 +64,13 @@ out_dir: exps/test_mae
 
 ### tsne
 tsne: false
+tsne_dir: tsne
 
 ### wandb
 wandb_user: drumpt
+
+### memo
+memo_aug_num: 64
 
 ### slack_notification
 slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd

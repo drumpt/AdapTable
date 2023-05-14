@@ -10,6 +10,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import torch
+import pickle
 
 
 def set_seed(seed):
@@ -194,3 +195,11 @@ def draw_tsne(feats, cls, title, args):
                     data=df)
     plt.title(title)
     plt.show()
+
+def save_pickle(saving_object, title,args):
+    if not os.path.exists(args.tsne_dir):
+        os.makedirs(args.tsne_dir)
+
+    file_name = f'{title}_model{args.model}_dataset{args.dataset}_shift_type{args.shift_type}_method{args.method}.pkl'
+    with open(os.path.join(args.tsne_dir, file_name), 'wb') as f:
+        pickle.dump(saving_object, f, pickle.HIGHEST_PROTOCOL)

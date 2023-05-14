@@ -248,6 +248,13 @@ def forward_and_adapt(args, x, model, optimizer):
 
         optimizer.second_step()
         return
+    if 'memo' in args.method:
+        from utils.memo_utils import generate_augmentation
+        assert args.test_batch_size == 1
+        x = generate_augmentation(x, args)
+        outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
+        loss = softmax_entropy(outputs / args.temp).mean()
+        loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
         loss.backward(retain_graph=True)
@@ -336,6 +343,24 @@ def main_em(args):
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+
+        if args.tsne:
+            with torch.no_grad():
+                assert regression is False
+                feature_original_model = original_best_model.get_feature(test_x).tolist()
+                feature_best_model = best_model.get_feature(test_x).tolist()
+
+                tsne_before_adaptation[0] += feature_original_model
+                tsne_before_adaptation[1] += test_y.tolist()
+                tsne_after_adaptation[0] += feature_best_model
+                tsne_after_adaptation[1] += test_y.tolist()
+
+    if args.tsne:
+        from utils.utils import draw_tsne, save_pickle
+        save_pickle(tsne_before_adaptation, 'before_adaptation', args)
+        save_pickle(tsne_after_adaptation, 'after_adaptation', args)
+        draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
+        draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
@@ -465,8 +490,8 @@ def main_mae(args):
         if args.tsne:
             with torch.no_grad():
                 assert regression is False
-                feature_original_model = original_best_model.encoder(test_x).tolist()
-                feature_best_model = best_model.encoder(test_x).tolist()
+                feature_original_model = original_best_model.get_feature(test_x).tolist()
+                feature_best_model = best_model.get_feature(test_x).tolist()
 
                 tsne_before_adaptation[0] += feature_original_model
                 tsne_before_adaptation[1] += test_y.tolist()
