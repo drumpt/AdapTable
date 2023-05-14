@@ -1,8 +1,8 @@
 ### model
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 ## currently dim, n_layers are not applied automatically
-hidden_dim: 64
-n_layers: 4
+# hidden_dim: 64
+# n_layers: 4
 
 ### dataset
 meta_dataset: openml-regression # openml-cc18, tableshift, openml-regression, shifts
@@ -23,6 +23,8 @@ pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-3
 mask_ratio: 0.75
+mixup: null # input, feature, null
+mixup_scale: 3
 
 ### hyperparameters for training
 retrain: false

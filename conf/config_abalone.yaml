@@ -1,8 +1,8 @@
 ### model
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 ## currently dim, n_layers are not applied automatically
-hidden_dim: 32
-n_layers: 6
+# hidden_dim: 32
+# n_layers: 6
 
 ### dataset
 meta_dataset: openml-regression # openml-cc18, tableshift, openml-regression, shifts

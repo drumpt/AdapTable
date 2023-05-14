@@ -20,7 +20,8 @@ pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
 mask_ratio: 0.75
-# mae_cat_weight: 0.25
+mixup: null # input, feature, null
+mixup_scale: 3
 
 ### hyperparameters for training
 retrain: true
