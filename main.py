@@ -106,59 +106,6 @@ def train(args, model, optimizer, dataset, logger):
     return best_model
 
 
-def joint_train(args, model, optimizer, dataset, logger):
-    device = args.device
-    best_model, best_loss = None, float('inf')
-    regression = True if dataset.out_dim == 1 else False
-    mse_loss_fn = nn.MSELoss()
-    ce_loss_fn = nn.CrossEntropyLoss()
-
-    for epoch in range(1, args.epochs + 1):
-        train_loss, train_len = 0, 0
-        model.train().to(device)
-        for train_x, train_y in dataset.train_loader:
-            train_cor_x, _ = get_corrupted_data(train_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            train_cor_x, train_x, train_y = train_cor_x.to(device), train_x.to(device), train_y.to(device)
-            optimizer.zero_grad()
-
-            estimated_x, _ = model(train_cor_x)
-            recon_loss = mse_loss_fn(estimated_x, train_x)
-            recon_loss.backward()
-
-            _, estimated_y = model(train_x)
-            main_loss = mse_loss_fn(estimated_x, train_x) if regression else ce_loss_fn(estimated_y, train_y)
-            main_loss.backward()
-
-            optimizer.step()
-
-            train_loss += (recon_loss.item() + main_loss.item()) * train_cor_x.shape[0]
-            train_len += train_cor_x.shape[0]
-
-        valid_loss, valid_len = 0, 0
-        model.eval().to(device)
-        with torch.no_grad():
-            for valid_x, valid_y in dataset.train_loader:
-                valid_cor_x, _ = get_corrupted_data(valid_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-                valid_cor_x, valid_x, valid_y = valid_cor_x.to(device), valid_x.to(device), valid_y.to(device)
-
-                estimated_x, _ = model(valid_cor_x)
-                recon_loss = mse_loss_fn(estimated_x, valid_x)
-
-                _, estimated_y = model(valid_x)
-                main_loss = mse_loss_fn(estimated_x, valid_x) if regression else ce_loss_fn(estimated_y, valid_y)
-
-                valid_loss += (recon_loss.item() + main_loss.item()) * valid_cor_x.shape[0]
-                valid_len += valid_cor_x.shape[0]
-
-        if valid_loss < best_loss:
-            best_loss = valid_loss
-            best_model = deepcopy(model)
-            torch.save(best_model.state_dict(), os.path.join(args.out_dir, "best_model.pth"))
-
-        logger.info(f"epoch {epoch}, train_loss {train_loss / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}")
-    return best_model
-
-
 def forward_and_adapt(args, x, model, optimizer):
     global original_best_model, EMA
     optimizer.zero_grad()
@@ -317,15 +264,6 @@ def main_mae(args):
     mse_loss_fn = nn.MSELoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
-    # TODO: remove(only for debugging) - decision tree
-    from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-    forest = RandomForestRegressor(random_state=args.seed) if regression else RandomForestClassifier(random_state=args.seed)
-    forest.fit(dataset.dataset.train_x, dataset.dataset.train_y)
-    importances = forest.feature_importances_
-    feature_importance = torch.tensor(importances)
-    # feature_importance = torch.reciprocal(torch.tensor(importances))
-    # feature_importance = feature_importance / torch.sum(feature_importance)
-
     global EMA
     EMA = None
     params, _ = collect_params(best_model, train_params="pretrain")
@@ -342,58 +280,29 @@ def main_mae(args):
         test_cor_x = torch.tensor(test_cor_x).to(torch.float32).to(args.device)
         test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
 
-        # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-        # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
-
         _, estimated_y = original_best_model(test_x)
         loss = mse_loss_fn(estimated_y, test_y) if regression else ce_loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         test_len += test_x.shape[0]
 
+        # saliency-based masked autoencoder (다시 테스트)
+        test_cor_x.requires_grad = True # for acquisition
+        test_cor_x.grad = None
+        estimated_test_x, _ = best_model(test_cor_x)
+        loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+        loss.backward(retain_graph=True)
+        feature_grads = torch.mean(test_cor_x.grad, dim=0)
+        feature_importance = torch.reciprocal(torch.abs(feature_grads))
+        feature_importance = feature_importance / torch.sum(feature_importance)
+
         for _ in range(1, args.num_steps + 1):
+            test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+            estimated_test_x, _ = best_model(test_cor_x)
+            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+
             test_optimizer.zero_grad()
-            test_cor_x, test_cor_mask_x = get_corrupted_data(test_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.mask_ratio, imputation_method="emd")
-            test_cor_x = torch.tensor(test_cor_x).to(torch.float32).to(args.device)
-            test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
-
-            # saliency-based masked autoencoder (다시 테스트)
-            # test_cor_x.requires_grad = True # for acquisition
-            # test_cor_x.grad = None
-            # estimated_test_x, _ = best_model(test_cor_x)
-            # loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-            # loss.backward(retain_graph=True)
-
-            # feature_grads = torch.mean(test_cor_x.grad, dim=0)
-            # feature_importance = torch.reciprocal(torch.abs(feature_grads))
-            # feature_importance = feature_importance / torch.sum(feature_importance)
-            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
-
-            # test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-            # test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
-
-            if args.mixup == "feature":
-                encoded_cor_x = best_model.encoder(test_cor_x)
-                mixup_x, mixup_y = mixup(encoded_cor_x, test_x, args)
-
-                tot_x = torch.cat((encoded_cor_x, mixup_x))
-                tot_y = torch.cat((test_x, mixup_y))
-                tmp_test_mask = test_mask_x.repeat(1+args.mixup_scale, 1)
-
-                loss = mse_loss_fn(best_model.recon_head(tot_x) * tmp_test_mask, tot_y * tmp_test_mask)
-            elif args.mixup == "input":
-                mixup_x, mixup_y = mixup(test_cor_x, test_x, args)
-
-                tot_x = torch.cat((test_cor_x, mixup_x))
-                tot_y = torch.cat((test_x, mixup_y))
-                tmp_test_mask = test_mask_x.repeat(1+args.mixup_scale, 1)
-
-                loss = mse_loss_fn(best_model(tot_x)[0] * tmp_test_mask, tot_y * tmp_test_mask)
-            else:
-                estimated_test_x, _ = best_model(test_cor_x)
-                loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-
             loss.backward()
             test_optimizer.step()
 

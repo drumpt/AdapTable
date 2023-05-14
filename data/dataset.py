@@ -518,20 +518,23 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
 
     elif shift_type in ["mean_shift", "std_shift", "mean_std_shift"] and data_type == "numerical":
         assert 0 <= shift_severity <= 1
+        mask = np.ones_like(test_data, dtype=np.int64)
+        # mask[:, int(np.random.choice(test_data.shape[1], 1))] = 0 # select only one column
         mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int64)[None, :], test_data.shape[0], axis=0)
-        severity_const = 0.1
+        mean_severity_const = 0.01
+        std_severity_const = 0.001
 
         scaler = StandardScaler()
         scaler.fit(train_data)
         if shift_type == "mean_shift":
-            mean_noise = severity_const * np.random.randn(*scaler.var_.shape)
+            mean_noise = mean_severity_const * np.random.randn(*scaler.var_.shape)
             test_data = mask * test_data + (1 - mask) * (test_data + mean_noise * np.sqrt(scaler.var_))
         elif shift_type == "std_shift":
-            std_noise = severity_const * np.exp(np.random.randn(*scaler.var_.shape))
+            std_noise = np.exp(std_severity_const * np.random.randn(*scaler.var_.shape))
             test_data = mask * test_data + (1 - mask) * (std_noise * test_data + scaler.mean_ * (1 - std_noise))
         elif shift_type == "mean_std_shift":
-            mean_noise = severity_const * np.random.randn(*scaler.mean_.shape)
-            std_noise = severity_const * np.exp(np.random.randn(*scaler.var_.shape))
+            mean_noise = mean_severity_const * np.random.randn(*scaler.mean_.shape)
+            std_noise = np.exp(std_severity_const * np.random.randn(*scaler.var_.shape))
             test_data = mask * test_data + (1 - mask) * (std_noise * test_data + mean_noise * np.sqrt(scaler.var_) + (1 - std_noise) * scaler.mean_)
         mask = np.ones_like(test_data, dtype=np.int64)
 
@@ -574,9 +577,7 @@ def get_imputed_data(test_data, train_data, data_type, imputation_method):
 
 def get_mask_by_feature_importance(args, test_data, importance):
     mask = torch.ones_like(test_data, dtype=torch.float32)
-    selected_columns = choice(range(test_data.shape[-1]), size=int(len(test_data.flatten()) * args.mask_ratio), p=importance.cpu().numpy())
-    for col, count in Counter(selected_columns).items():
-        selected_rows = choice(range(test_data.shape[0]), size=max(count, len(test_data)))
-        for row in selected_rows:
-            mask[row][col] = 0
+    selected_rows = choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.mask_ratio))
+    selected_columns = choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.mask_ratio), p=importance.cpu().numpy())
+    mask[selected_rows, selected_columns] = 0
     return mask
