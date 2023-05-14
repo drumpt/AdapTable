@@ -618,12 +618,80 @@ def main_mae_with_em(args):
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
 
+def main_no_adapt(args):
+    if hasattr(args, 'seed'):
+        utils.set_seed(args.seed)
+        print(f"set seed as {args.seed}")
+    if not os.path.exists(args.log_dir):
+        os.makedirs(args.log_dir)
+    utils.disable_logger(args)
+    logger = utils.get_logger(args)
+    logger.info(OmegaConf.to_yaml(args))
+    if not os.path.exists(args.out_dir):
+        os.makedirs(args.out_dir)
+
+    dataset = Dataset(args)
+    test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
+
+    regression = True if dataset.out_dim == 1 else False
+    mse_loss_fn = nn.MSELoss()
+    ce_loss_fn = nn.CrossEntropyLoss()
+
+
+    if args.model == 'lr':
+        from sklearn.linear_model import LogisticRegression
+        best_model = LogisticRegression()
+        best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+    elif args.model == 'knn':
+        from sklearn.neighbors import KNeighborsClassifier
+        best_model = KNeighborsClassifier(n_neighbors=3)
+        best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+    elif args.model == 'xgboost':
+        if regression:
+            objective = "reg:linear"
+        elif dataset.dataset.train_y.argmax(1).max() == 1:
+            objective = "binary:logistic"
+        else:
+            objective = "multi:softprob"
+
+        import xgboost as xgb
+
+        if regression:
+            best_model = xgb.XGBRegressor(objective=objective, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+        else:
+            best_model = xgb.XGBClassifier(n_estimators=args.num_estimators, learning_rate=args.test_lr, max_depth=args.max_depth, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+    elif args.model == 'rf':
+        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+
+        if regression:
+            best_model = RandomForestRegressor(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+        else:
+            best_model = RandomForestClassifier(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
+            best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+
+    else:
+        raise NotImplementedError
+
+    for test_x, test_mask_x, test_y in dataset.test_loader:
+        test_len += test_x.shape[0]
+        estimated_y = best_model.predict(test_x)
+        test_acc_after += (np.array(estimated_y)==np.argmax(np.array(test_y), axis=-1)).sum()
+
+    logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
+    logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
+
+
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     if 'mae' in args.method and len(args.method) > 1:
         main_mae_with_em(args)
     elif 'mae' in args.method:
         main_mae(args)
+    elif 'no_adapt' in args.method:
+        main_no_adapt(args)
     else:
         main_em(args)
 

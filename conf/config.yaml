@@ -46,6 +46,10 @@ temp: 2.5 # temperature scaling
 renyi_entropy_alpha: 1.5
 ns_threshold: 0.04 # negative sampling
 kld_weight: 0.1
+
+# for xgboost classifier
+num_estimators: 500
+max_depth: 4
 ##################################################################
 
 ### device
