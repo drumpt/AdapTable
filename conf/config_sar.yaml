@@ -19,6 +19,8 @@ pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
 mask_ratio: 0.75
+mixup: null # input, feature, null
+mixup_scale: 3
 
 ### hyperparameters for training
 retrain: true
@@ -28,7 +30,7 @@ train_optimizer: AdamW
 train_lr: 1e-4
 
 ### hyperparameters for test-time adaptation
-episodic: true # reset model to the pretrained one for each batch if true
+episodic: false # reset model to the pretrained one for each batch if true
 num_steps: 10 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
@@ -39,7 +41,7 @@ train_params: [all] # currently supported: all, LN, BN, GN
 ##################################################################
 ### methods & other hyperparameters
 method: [sar] # currently supported: sar, em, gem, ns, kld, dm
-temp: 2.5 # temperature scaling
+temp: 1 # temperature scaling
 renyi_entropy_alpha: 1.5
 ns_threshold: 0.04 # negative sampling
 kld_weight: 0.1
@@ -54,13 +56,22 @@ seed: 3
 
 ##################################################################
 ### log dir for logging
-log_dir: log
+log_dir: log_final_wepisodic
 
 ### output dir for saving model
-out_dir: exps/test_em
+out_dir: exps/test_mae
+
+### tsne
+tsne: false
+tsne_dir: tsne
 
 ### wandb
 wandb_user: drumpt
+
+### memo
+memo_aug_num: 64
+
+log_prefix: log_final
 
 ### slack_notification
 slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd

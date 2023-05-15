@@ -42,7 +42,7 @@ train_params: [all] # currently supported: all, LN, BN, GN
 ##################################################################
 ### methods & other hyperparameters
 method: [mae] # currently supported: mae, sar, em, gem, ns, kld
-temp: 2.5 # temperature scaling
+temp: 1 # temperature scaling
 renyi_entropy_alpha: 1.5
 ns_threshold: 0.04 # negative sampling
 kld_weight: 0.1
@@ -61,7 +61,7 @@ seed: 0
 
 ##################################################################
 ### log dir for logging
-log_dir: log
+log_dir: log_final_wepisodic
 
 ### output dir for saving model
 out_dir: exps/test_mae
@@ -75,6 +75,8 @@ wandb_user: drumpt
 
 ### memo
 memo_aug_num: 64
+
+log_prefix: log_final
 
 ### slack_notification
 slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd

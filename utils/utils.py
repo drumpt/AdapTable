@@ -3,6 +3,8 @@ import logging
 import random
 from datetime import datetime
 from copy import deepcopy
+
+import omegaconf.listconfig
 from slack_sdk import WebClient
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
@@ -45,10 +47,28 @@ def get_logger(args):
     formatter = logging.Formatter('%(message)s')
 
     time_string = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    file_handler = logging.FileHandler(os.path.join(args.log_dir, f"log_{time_string}.txt"))
+
+    if isinstance(args.method, omegaconf.listconfig.ListConfig):
+        method = args.method[0]
+    else:
+        method = args.method
+    log_path = f'{args.meta_dataset}_{args.dataset}/{method}/{args.model}/shift_type_{args.shift_type}_shift_severity_{args.shift_severity}/'
+
+    # log path exists
+    if not os.path.exists(os.path.join(args.log_dir, log_path)):
+        os.makedirs(os.path.join(args.log_dir, log_path))
+
+    # seed and dataset
+    log_path += f'{args.log_prefix}_seed{args.seed}_dataset{args.dataset}'
+
+    # txt addition
+    json_path = log_path + '.json'
+    log_path += '.txt'
+
+    file_handler = logging.FileHandler(os.path.join(args.log_dir, log_path))
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    return logger
+    return logger, os.path.join(args.log_dir, json_path)
 
 
 def disable_logger(args):

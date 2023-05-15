@@ -234,7 +234,7 @@ def main_em(args):
         print(f"set seed as {args.seed}")
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
-    logger = utils.get_logger(args)
+    logger, json_path = utils.get_logger(args)
     logger.info(OmegaConf.to_yaml(args))
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
@@ -311,7 +311,16 @@ def main_em(args):
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
-
+    json_saving = {
+        'test_acc_before': test_acc_before / test_len,
+        'test_acc_after': test_acc_after / test_len
+    }
+    import json
+    # Serializing json
+    json_object = json.dumps(json_saving, indent=4)
+    # Writing to sample.json
+    with open(json_path, "w") as outfile:
+        outfile.write(json_object)
 
 def main_mae(args):
     if hasattr(args, 'seed'):
@@ -320,7 +329,7 @@ def main_mae(args):
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
     utils.disable_logger(args)
-    logger = utils.get_logger(args)
+    logger, json_path = utils.get_logger(args)
     logger.info(OmegaConf.to_yaml(args))
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
@@ -383,7 +392,12 @@ def main_mae(args):
         loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
         loss.backward(retain_graph=True)
         feature_grads = torch.mean(test_cor_x.grad, dim=0)
-        feature_importance = torch.reciprocal(torch.abs(feature_grads))
+
+        if 'random_mask' in args.method:
+            feature_importance = torch.ones_like(torch.abs(feature_grads))
+        else:
+            feature_importance = torch.reciprocal(torch.abs(feature_grads))
+
         feature_importance = feature_importance / torch.sum(feature_importance)
 
         for _ in range(1, args.num_steps + 1):
@@ -436,6 +450,14 @@ def main_mae(args):
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
+    json_saving = {
+        'test_acc_before': test_acc_before / test_len,
+        'test_acc_after': test_acc_after / test_len
+    }
+    import json
+    # Writing to sample.json
+    with open(json_path, "w") as outfile:
+        json.dump(json_saving, outfile)
 
 def main_mae_with_em(args):
     if hasattr(args, 'seed'):
@@ -444,7 +466,7 @@ def main_mae_with_em(args):
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
     utils.disable_logger(args)
-    logger = utils.get_logger(args)
+    logger, json_path = utils.get_logger(args)
     logger.info(OmegaConf.to_yaml(args))
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
@@ -526,6 +548,17 @@ def main_mae_with_em(args):
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
+    json_saving = {
+        'test_acc_before': test_acc_before / test_len,
+        'test_acc_after': test_acc_after / test_len
+    }
+    import json
+    # Serializing json
+    json_object = json.dumps(json_saving, indent=4)
+    # Writing to sample.json
+    with open(json_path, "w") as outfile:
+        outfile.write(json_object)
+
 
 def main_no_adapt(args):
     if hasattr(args, 'seed'):
@@ -534,7 +567,7 @@ def main_no_adapt(args):
     if not os.path.exists(args.log_dir):
         os.makedirs(args.log_dir)
     utils.disable_logger(args)
-    logger = utils.get_logger(args)
+    logger, json_path = utils.get_logger(args)
     logger.info(OmegaConf.to_yaml(args))
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
@@ -592,12 +625,25 @@ def main_no_adapt(args):
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
 
+    json_saving = {
+        'test_acc_before': test_acc_after / test_len,
+        'test_acc_after': test_acc_after / test_len
+    }
+    import json
+    # Serializing json
+    json_object = json.dumps(json_saving, indent=4)
+    # Writing to sample.json
+    with open(json_path, "w") as outfile:
+        outfile.write(json_object)
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
-    if 'mae' in args.method and len(args.method) > 1:
-        main_mae_with_em(args)
-    elif 'mae' in args.method:
+    if 'memo' in args.method:
+        args.test_batch_size = 1
+
+    # if 'mae' in args.method and len(args.method) > 1:
+    #     main_mae_with_em(args)
+    if 'mae' in args.method:
         main_mae(args)
     elif 'no_adapt' in args.method:
         main_no_adapt(args)
