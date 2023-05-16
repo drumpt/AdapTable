@@ -61,6 +61,9 @@ def get_logger(args):
     # seed and dataset
     log_path += f'{args.log_prefix}_seed{args.seed}_dataset{args.dataset}'
 
+    if float(args.train_ratio) != 1:
+        log_path += f'_train_ratio_{args.train_ratio}'
+
     # txt addition
     json_path = log_path + '.json'
     log_path += '.txt'

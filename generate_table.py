@@ -52,11 +52,11 @@ def main(args):
         ret = list(tqdm(p.imap(mp_work, path_list, chunksize=1), total=len(path_list)))
         for d in ret:
             all_dict.update(d)
-    # all_dict contains dictionary of all corruptions
 
+    print(all_dict)
     different_path = all_dict.keys()
 
-    for method in ['em', 'memo', 'sar', 'mae_random_mask', 'mae']:
+    for method in ['mae_random_mask', 'mae']:
         # print(method)
         filtered_dict = {}
         for path in different_path:

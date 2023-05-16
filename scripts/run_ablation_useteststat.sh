@@ -1,11 +1,11 @@
 
 ############# run in single GPU ##############
-GPUS=(0 1 2 3 4)
+GPUS=(0 1 2 3)
 NUM_GPUS=4
 ##############################################
 i=0
 
-LOG_POSTFIX="lr_tune_table"
+LOG_POSTFIX="main_table_use_test_stats"
 
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
@@ -19,11 +19,15 @@ wait_n() {
 }
 
 openml_mlpbase(){
-  SEED="0 1 2 3 4"
+#  SEED="0"
 #  DATASET="cmc"
+#  METHOD="mae"
 
+  SEED="0 1 2 3 4"
   DATASET="cmc semeion mfeat-karhunen optdigits diabetes mfeat-pixel dna"
   METHOD="mae mae_random_mask"
+
+#  METHOD="mae sar em memo mae_random_mask"
 
   if [ $method = "mae" ] || [ $method = "mae_random_mask" ] || [ $method = "memo" ]; then
     episodic="true"
@@ -357,14 +361,9 @@ openml_conventional(){
 }
 
 tableshift_mlpbase(){
-
-#  SEED="0"
-#  DATASET="anes"
-#  METHOD="mae"
-
   SEED="0 1 2 3 4"
-  DATASET="heloc anes"
-  METHOD="mae mae_random_mask"
+  DATASET="heloc mooc anes"
+  METHOD="mae sar em memo mae_random_mask"
 
   if [ $method = "mae" ] || [ $method = "mae_random_mask" ] || [ $method = "memo" ]; then
     episodic="true"
@@ -372,21 +371,9 @@ tableshift_mlpbase(){
     episodic="false"
   fi
 
-
   for dataset in $DATASET; do
     for method in $METHOD; do
       for seed in $SEED; do
-
-        if [ $dataset = "heloc" ]; then
-          mask_ratio="0.3"
-          test_lr="1e-3"
-          num_steps="20"
-        elif [ $dataset = "anes" ]; then
-          mask_ratio="0.3"
-          test_lr="1e-5"
-          num_steps="10"
-        fi
-
         if [ $method = "sar" ]; then
           python main.py \
             method=$method \
@@ -398,23 +385,6 @@ tableshift_mlpbase(){
             log_prefix=${LOG_POSTFIX} \
             device=cuda:${GPUS[i % ${NUM_GPUS}]} \
             --config-name config_sar.yaml \
-            2>&1 &
-          wait_n
-          i=$((i + 1))
-        elif [ $method = "mae" ] || [ $method = "mae_random_mask" ]; then
-          python main.py \
-            method=$method \
-            episodic=$episodic \
-            meta_dataset=tableshift \
-            dataset="${dataset}" \
-            retrain=true \
-            seed=${seed} \
-            log_prefix=${LOG_POSTFIX} \
-            device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-            mask_ratio=${mask_ratio} \
-            test_lr=${test_lr} \
-            num_steps=${num_steps} \
-            temp=2.5 \
             2>&1 &
           wait_n
           i=$((i + 1))
@@ -541,11 +511,11 @@ folktables_conventional(){
   done
 }
 # mlp base
-openml_mlpbase
-wait
-tableshift_mlpbase
+#openml_mlpbase
 #wait
-#folktables_mlpbase
+tableshift_mlpbase
+wait
+folktables_mlpbase
 
 # conventional algorithms
 #openml_conventional

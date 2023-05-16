@@ -22,6 +22,7 @@ pretrain_lr: 1e-4
 mask_ratio: 0.75
 mixup: null # input, feature, null
 mixup_scale: 3
+train_ratio: 1.0
 
 ### hyperparameters for training
 retrain: true
@@ -29,6 +30,7 @@ epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
+test_mask_ratio: 0.2
 
 ### hyperparameters for test-time adaptation
 episodic: true # reset model to the pretrained one for each batch if true
@@ -36,6 +38,9 @@ num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 test_lr: 1e-4
+no_mask: false
+tt_imputation_method: emd
+
 train_params: [all] # currently supported: all, LN, BN, GN
 # TODO: implement learning rate scheduler
 

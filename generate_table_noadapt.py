@@ -32,7 +32,7 @@ def mp_work(path):
 def main(args):
     is_valid=True
     pattern_of_path = args.regex
-    root = './log_ablation_vary_severity/' + args.directory
+    root = './log_final_wepisodic/' + args.directory
 
     path_list = []
 
@@ -52,26 +52,24 @@ def main(args):
         ret = list(tqdm(p.imap(mp_work, path_list, chunksize=1), total=len(path_list)))
         for d in ret:
             all_dict.update(d)
-    # all_dict contains dictionary of all corruptions
 
+    print(all_dict)
     different_path = all_dict.keys()
 
-    for method in ['mae']:
+    for model in ['knn', 'lr', 'rf', 'xgboost']:
         # print(method)
-        for percentage in [0.2, 0.4, 0.6, 0.8]:
-            # print(percentage)
-            filtered_dict = {}
-            for path in different_path:
-                split_path = path.split('/')
-                # print(path)
-                if args.dataset in split_path[2] and method == split_path[3] and str(percentage) in split_path[5] and 'random_drop' in split_path[5]:
-                    filtered_dict[path] = all_dict[path]
-            if args.debug:
-                print(method)
-                print(filtered_dict)
-            len_path = format_print(filtered_dict, args)
-            if len_path >= 5:
-                is_valid = False
+        filtered_dict = {}
+        for path in different_path:
+            split_path = path.split('/')
+            # print(path)
+            if args.dataset in split_path[2] and 'no_adapt' == split_path[3] and model in split_path[4]:
+                filtered_dict[path] = all_dict[path]
+        if args.debug:
+            print(model)
+            print(filtered_dict)
+        len_path = format_print(filtered_dict, args)
+        if len_path != 40:
+            is_valid = False
 
     if is_valid:
         print("Finished!")

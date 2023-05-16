@@ -337,6 +337,8 @@ def main_mae(args):
     device = args.device
     dataset = Dataset(args)
 
+    logger.info(f'lenght of train dataset : {len(dataset.dataset.train_x)}')
+
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
         best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
@@ -389,6 +391,7 @@ def main_mae(args):
         test_cor_x.requires_grad = True # for acquisition
         test_cor_x.grad = None
         estimated_test_x, _ = best_model(test_cor_x)
+        # loss = mse_loss_fn(estimated_test_x, test_x) # l2 loss only on non-missing values
         loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
         loss.backward(retain_graph=True)
         feature_grads = torch.mean(test_cor_x.grad, dim=0)
@@ -396,16 +399,38 @@ def main_mae(args):
         if 'random_mask' in args.method:
             feature_importance = torch.ones_like(torch.abs(feature_grads))
         else:
+            # feature_importance = torch.abs(feature_grads)
+            print('grad of feature')
+            print(feature_grads)
+            # feature_grads = feature_grads()
+            # feature_grads = torch.relu(feature_grads)
+            feature_grads = feature_grads - torch.min(feature_grads) + 1e-4
+            # bias = feature_grads.mean()
+            # feature_grads += bias
+            # feature_grads = feature_grads - torch.min(feature_grads)
+            # bias = feature_grads.mean()
+            # feature_grads += bias
+            # feature_importance = torch.reciprocal((torch.abs(feature_grads)/args.temp).softmax(-1))
+            # feature_importance = (torch.reciprocal(torch.abs(feature_grads))/args.temp).softmax(-1)
             feature_importance = torch.reciprocal(torch.abs(feature_grads))
 
+
         feature_importance = feature_importance / torch.sum(feature_importance)
+        print(feature_importance)
 
         for _ in range(1, args.num_steps + 1):
             test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+
             test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
             estimated_test_x, _ = best_model(test_cor_x)
-            loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
+            if args.no_mask:
+                loss = mse_loss_fn(estimated_test_x, test_x)  # l2 loss only on non-missing values
+
+            else:
+                loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+
+            # print(f'test loss is : {loss}')
             test_optimizer.zero_grad()
             loss.backward()
             test_optimizer.step()

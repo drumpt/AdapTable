@@ -38,6 +38,11 @@ class Dataset():
         else:
             raise NotImplementedError
 
+        if float(args.train_ratio) != 1:
+            len_of_train = len(self.dataset.train_x)
+            self.dataset.train_x = self.dataset.train_x[:int(len_of_train * float(args.train_ratio))]
+            self.dataset.train_y = self.dataset.train_y[:int(len_of_train * float(args.train_ratio))]
+
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.train_x), torch.FloatTensor(self.dataset.train_y))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.valid_x), torch.FloatTensor(self.dataset.valid_y))
         test_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.test_x), torch.FloatTensor(self.dataset.test_mask_x), torch.FloatTensor(self.dataset.test_y))
@@ -546,11 +551,17 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
 def get_imputed_data(test_data, train_data, data_type, imputation_method):
     if data_type == "numerical":
         if imputation_method == "zero":
+            if isinstance(test_data, torch.Tensor):
+                test_data = test_data.cpu()
             imputed_data = np.zeros_like(test_data)
         elif imputation_method == "mean":
             imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], len(test_data), axis=0)
         elif imputation_method == "emd":
             imputed_data = []
+            if isinstance(test_data, torch.Tensor):
+                test_data = test_data.cpu()
+            # for test_col in test_data.T:
+            #     imputed_data.append(np.random.choice(test_col, len(test_data)))
             for train_col in train_data.T:
                 imputed_data.append(np.random.choice(train_col, len(test_data)))
             imputed_data = np.stack(imputed_data, axis=-1)
