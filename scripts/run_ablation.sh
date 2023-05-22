@@ -5,8 +5,8 @@ NUM_GPUS=4
 ##############################################
 i=0
 
-LOG_POSTFIX="log_ablation_vary_severity"
-LOG_DIR="log_ablation_vary_severity"
+LOG_POSTFIX="log_ablation_vary_severity_debugging"
+LOG_DIR="log_ablation_vary_severity_debugging"
 
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
@@ -23,9 +23,9 @@ openml_mlpbase(){
   SEED="0 1 2 3 4"
 #  DATASET="cmc"
 
-#  DATASET="cmc"
-  DATASET="cmc semeion mfeat-karhunen optdigits diabetes mfeat-pixel dna"
-  METHOD="mae"
+#  DATASET="cmc"/ru
+  DATASET="cmc semeion"
+  METHOD="sar mae"
   SHIFT_SEVERITY="0.2 0.4 0.6 0.8"
 
   if [ $method = "mae" ] || [ $method = "mae_random_mask" ] || [ $method = "memo" ]; then

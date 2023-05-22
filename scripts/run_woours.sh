@@ -5,10 +5,8 @@ NUM_GPUS=4
 ##############################################
 i=0
 
-LOG_POSTFIX="debug_gradcumul"
-LOG_DIR="debug_gradcumul"
-SEED="0 1 2 3 4 5 6 7 8 9"
-
+LOG_POSTFIX="debug_tune"
+LOG_DIR="debug_tune"
 
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
@@ -22,10 +20,11 @@ wait_n() {
 }
 
 openml_mlpbase(){
+  SEED="0 1 2 3 4"
 #  DATASET="cmc"
 
-  DATASET="cmc semeion mfeat-karhunen optdigits diabetes mfeat-pixel dna"
-  METHOD="sar mae mae_random_mask"
+  DATASET="mfeat-karhunen optdigits diabetes"
+  METHOD="em sar memo"
 
   if [ $method = "mae" ] || [ $method = "mae_random_mask" ] || [ $method = "memo" ]; then
     episodic="true"
@@ -261,7 +260,7 @@ openml_mlpbase(){
 }
 
 openml_conventional(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="cmc semeion mfeat-karhunen optdigits diabetes mfeat-pixel dna"
   MODEL="lr knn xgboost rf"
   METHOD="no_adapt"
@@ -378,7 +377,7 @@ tableshift_mlpbase(){
 #  DATASET="anes"
 #  METHOD="mae"
 
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="heloc anes"
   METHOD="mae mae_random_mask"
 
@@ -458,7 +457,7 @@ tableshift_mlpbase(){
 }
 
 tableshift_conventional(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="heloc mooc anes"
   MODEL="lr knn xgboost rf"
   METHOD="no_adapt"
@@ -485,7 +484,7 @@ tableshift_conventional(){
 }
 
 folktables_mlpbase(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="time state time_state"
   METHOD="mae mae_random_mask"
 
@@ -541,7 +540,7 @@ folktables_mlpbase(){
 }
 
 folktables_conventional(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="time state time_state"
   MODEL="lr knn xgboost rf"
   METHOD="no_adapt"
@@ -569,10 +568,10 @@ folktables_conventional(){
 }
 # mlp base
 openml_mlpbase
-#wait
-tableshift_mlpbase
 wait
-folktables_mlpbase
+#tableshift_mlpbase
+#wait
+#folktables_mlpbase
 
 # conventional algorithms
 #openml_conventional

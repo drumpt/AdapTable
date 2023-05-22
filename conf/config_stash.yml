@@ -37,7 +37,7 @@ episodic: true # reset model to the pretrained one for each batch if true
 num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
-test_lr: 1e-4
+test_lr: 3e-4
 no_mask: false
 tt_imputation_method: emd
 
@@ -61,7 +61,7 @@ max_depth: 4
 device: cuda
 gpu_idx: 0
 no_mae_based_imputation: false
-cumul_steps: 1
+cumul_steps: 10
 ### seed for reproduciblity
 seed: 0
 

@@ -32,7 +32,8 @@ def mp_work(path):
 def main(args):
     is_valid=True
     pattern_of_path = args.regex
-    root = './debug_gradcumul/' + args.directory
+    root = './debug_tune/' + args.directory
+    # root = './deb/' + args.directory
 
     path_list = []
 
@@ -53,21 +54,24 @@ def main(args):
         for d in ret:
             all_dict.update(d)
 
-    print(all_dict)
+    # print(all_dict)
     different_path = all_dict.keys()
 
-    for method in ['em','memo','sar', 'mae_random_mask', 'mae']:
+    for method in ['em', 'memo', 'sar', 'mae']:
         # print(method)
-        filtered_dict = {}
-        for path in different_path:
-            split_path = path.split('/')
-            # print(path)
-            if args.dataset in split_path[2] and method == split_path[3]:
-                filtered_dict[path] = all_dict[path]
-        if args.debug:
-            print(method)
-            print(filtered_dict)
-        len_path = format_print(filtered_dict, args)
+        for corruption_type in ['None', 'Gaussian', 'mean_shift', 'std_shift', 'mean_std_shift', 'random_drop', 'column_drop']:
+            filtered_dict = {}
+            for path in different_path:
+                split_path = path.split('/')
+                # print(path)
+                if args.dataset in split_path[2] and method == split_path[3] and ('shift_type_' + corruption_type) in split_path[5]:
+                    filtered_dict[path] = all_dict[path]
+            if args.debug:
+                print(method)
+                print(filtered_dict)
+            len_path = format_print(filtered_dict, args)
+
+        print('')
         if len_path != 40:
             is_valid = False
 
@@ -95,7 +99,7 @@ def format_print(filtered_dict, args):
             for path in filtered_dict.keys():
                 if corruption in path.split('/')[5]:
                     list_acc.append(filtered_dict[path])
-            print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=' ')
+            print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=',')
         print('')
 
     else:
@@ -116,9 +120,9 @@ def format_print(filtered_dict, args):
         # print(list_path)
         if args.debug:
             print(len(list_path))
-        print("%.1f ± %.1f" % (np.average(list_acc_before) * 100, np.std(list_acc_before) / np.sqrt(np.size(list_acc_before)) * 100))
-        print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=' ')
-        print('')
+        # print("%.1f ± %.1f" % (np.average(list_acc_before) * 100, np.std(list_acc_before) / np.sqrt(np.size(list_acc_before)) * 100), end=', ')
+        print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=',')
+        # print('')
 
         return len(list_path)
 

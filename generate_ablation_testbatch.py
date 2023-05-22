@@ -32,7 +32,7 @@ def mp_work(path):
 def main(args):
     is_valid=True
     pattern_of_path = args.regex
-    root = './debug_gradcumul/' + args.directory
+    root = './log_ablation_vary_batchsize/' + args.directory
 
     path_list = []
 
@@ -52,24 +52,30 @@ def main(args):
         ret = list(tqdm(p.imap(mp_work, path_list, chunksize=1), total=len(path_list)))
         for d in ret:
             all_dict.update(d)
+    # all_dict contains dictionary of all corruptions
 
-    print(all_dict)
     different_path = all_dict.keys()
 
-    for method in ['em','memo','sar', 'mae_random_mask', 'mae']:
-        # print(method)
-        filtered_dict = {}
-        for path in different_path:
-            split_path = path.split('/')
-            # print(path)
-            if args.dataset in split_path[2] and method == split_path[3]:
-                filtered_dict[path] = all_dict[path]
-        if args.debug:
-            print(method)
-            print(filtered_dict)
-        len_path = format_print(filtered_dict, args)
-        if len_path != 40:
-            is_valid = False
+    for method in ['sar', 'mae']:
+        print(method)
+        for batchsize in [1, 4, 8, 16, 32, 64]:
+            # print(percentage)
+            filtered_dict = {}
+            for path in different_path:
+                split_path = path.split('/')
+                # print(path)
+                if batchsize != 64:
+                    if args.dataset in split_path[2] and method == split_path[3] and '_test_batch_size' + str(batchsize) + '.' in split_path[6]:
+                        filtered_dict[path] = all_dict[path]
+                else:
+                    if args.dataset in split_path[2] and method == split_path[3] and '_test_batch_size' not in split_path[6]:
+                        filtered_dict[path] = all_dict[path]
+            if args.debug:
+                print(method)
+                print(filtered_dict)
+            len_path = format_print(filtered_dict, args)
+            if len_path >= 5:
+                is_valid = False
 
     if is_valid:
         print("Finished!")

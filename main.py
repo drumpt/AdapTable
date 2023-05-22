@@ -175,6 +175,10 @@ def forward_and_adapt(args, x, model, optimizer):
     optimizer.zero_grad()
     outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
 
+    print('before adapt, prediction becomes:')
+    with torch.no_grad():
+        print(model(x).argmax(1))
+
     if 'sar' in args.method:
         entropy_first = softmax_entropy(outputs)
         filter_id = torch.where(entropy_first < 0.4 * np.log(outputs.shape[-1]))
@@ -225,6 +229,12 @@ def forward_and_adapt(args, x, model, optimizer):
         kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
         (args.kld_weight * kl_div_loss).backward(retain_graph=True)
 
+
+    print(loss)
+    print('after adapt, prediction becomes:')
+    with torch.no_grad():
+        print(model(x).argmax(1))
+        print()
     optimizer.step()
 
 
@@ -388,68 +398,89 @@ def main_mae(args):
         test_len += test_x.shape[0]
 
         # saliency-based masked autoencoder (다시 테스트)
-        test_cor_x.requires_grad = True # for acquisition
-        test_cor_x.grad = None
-        estimated_test_x, _ = best_model(test_cor_x)
-        # loss = mse_loss_fn(estimated_test_x, test_x) # l2 loss only on non-missing values
-        loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-        loss.backward(retain_graph=True)
-        feature_grads = torch.mean(test_cor_x.grad, dim=0)
+
+
 
         if 'random_mask' in args.method:
-            feature_importance = torch.ones_like(torch.abs(feature_grads))
+            feature_importance = torch.ones_like(test_x[0])
         else:
+
+            for _ in range(1, args.cumul_steps + 1):
+                test_cor_x, test_cor_mask_x = get_corrupted_data(test_x, dataset.dataset.train_x, data_type="numerical",
+                                                                 shift_type="random_drop",
+                                                                 shift_severity=args.mask_ratio,
+                                                                 imputation_method="emd")
+                test_cor_x = torch.tensor(test_cor_x).to(torch.float32).to(args.device)
+                test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
+                test_cor_x.requires_grad = True  # for acquisition
+                test_cor_x.grad = None
+
+
+                estimated_test_x, _ = best_model(test_cor_x)
+                loss = mse_loss_fn(estimated_test_x, test_x) # l2 loss only on all values
+                # loss = mse_loss_fn(estimated_test_x * test_mask_x,
+                #                    test_x * test_mask_x)  # l2 loss only on non-missing values
+                loss = loss / args.cumul_steps
+                loss.backward(retain_graph=True)
+
+            feature_grads = torch.mean(test_cor_x.grad, dim=0)
+
             # feature_importance = torch.abs(feature_grads)
             print('grad of feature')
             print(feature_grads)
             # feature_grads = feature_grads()
             # feature_grads = torch.relu(feature_grads)
-            feature_grads = feature_grads - torch.min(feature_grads) + 1e-4
-            # bias = feature_grads.mean()
-            # feature_grads += bias
-            # feature_grads = feature_grads - torch.min(feature_grads)
-            # bias = feature_grads.mean()
-            # feature_grads += bias
-            # feature_importance = torch.reciprocal((torch.abs(feature_grads)/args.temp).softmax(-1))
-            # feature_importance = (torch.reciprocal(torch.abs(feature_grads))/args.temp).softmax(-1)
-            feature_importance = torch.reciprocal(torch.abs(feature_grads))
+            # feature_grads = feature_grads - torch.min(feature_grads) + 1e-4
+            feature_importance = torch.reciprocal(torch.abs(feature_grads) + torch.tensor(1e-6))
 
 
         feature_importance = feature_importance / torch.sum(feature_importance)
         print(feature_importance)
 
         for _ in range(1, args.num_steps + 1):
-            test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+            test_optimizer.zero_grad()
+            for _ in range(1, args.cumul_steps + 1):
+                test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
 
-            test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
-            estimated_test_x, _ = best_model(test_cor_x)
+                test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+                estimated_test_x, _ = best_model(test_cor_x)
 
-            if args.no_mask:
-                loss = mse_loss_fn(estimated_test_x, test_x)  # l2 loss only on non-missing values
+                if args.no_mask:
+                    loss = mse_loss_fn(estimated_test_x, test_x)  # l2 loss only on non-missing values
 
-            else:
-                loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+                else:
+                    loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+                loss = loss / args.cumul_steps
+                loss.backward()
+            test_optimizer.step()
 
             # print(f'test loss is : {loss}')
-            test_optimizer.zero_grad()
-            loss.backward()
-            test_optimizer.step()
+            # loss.backward()
+            # test_optimizer.step()
 
         if args.tsne:
             with torch.no_grad():
                 assert regression is False
-                feature_original_model = original_best_model.get_feature(test_x).tolist()
-                feature_best_model = best_model.get_feature(test_x).tolist()
 
-                tsne_before_adaptation[0] += feature_original_model
+                # input-level
+                tsne_before_adaptation[0] += test_x.tolist()
                 tsne_before_adaptation[1] += test_y.tolist()
-                tsne_after_adaptation[0] += feature_best_model
+                tsne_after_adaptation[0] +=  test_x.tolist()
                 tsne_after_adaptation[1] += test_y.tolist()
+
+                # feature_original_model = original_best_model.get_feature(test_x).tolist()
+                # feature_best_model = best_model.get_feature(test_x).tolist()
+                #
+                # tsne_before_adaptation[0] += feature_original_model
+                # tsne_before_adaptation[1] += test_y.tolist()
+                # tsne_after_adaptation[0] += feature_best_model
+                # tsne_after_adaptation[1] += test_y.tolist()
 
 
         # imputation with masked autoencoder
-        estimated_x, _ = best_model(test_x)
-        test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
+        if not args.no_mae_based_imputation:
+            estimated_x, _ = best_model(test_x)
+            test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
         _, estimated_y = best_model(test_x)
 

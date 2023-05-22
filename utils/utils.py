@@ -59,10 +59,18 @@ def get_logger(args):
         os.makedirs(os.path.join(args.log_dir, log_path))
 
     # seed and dataset
-    log_path += f'{args.log_prefix}_seed{args.seed}_dataset{args.dataset}'
+    log_path += f'{args.log_prefix}_seed{args.seed}_dataset{args.dataset}_testlr{args.test_lr}_numstep{args.num_steps}'
 
     if float(args.train_ratio) != 1:
         log_path += f'_train_ratio_{args.train_ratio}'
+
+    if args.test_batch_size != 64:
+        log_path += f'_test_batch_size{args.test_batch_size}'
+
+    if args.no_mae_based_imputation:
+        log_path += f'_no_mae_based_imputation'
+        log_path += f'_imputation_method_{args.imputation_method}'
+
 
     # txt addition
     json_path = log_path + '.json'

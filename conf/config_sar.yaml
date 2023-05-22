@@ -76,6 +76,7 @@ wandb_user: drumpt
 
 ### memo
 memo_aug_num: 64
+no_mae_based_imputation: false
 
 log_prefix: log_final
 
