@@ -171,6 +171,16 @@ def forward_and_adapt(args, x, model, optimizer):
         original_probs = torch.softmax(original_outputs, dim=-1)
         kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
         (args.kld_weight * kl_div_loss).backward(retain_graph=True)
+    if 'dem' in args.method:
+        model.train()
+        prediction_list = []
+        for _ in range(args.dropout_steps):
+            outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
+            prediction_list.append(outputs)
+        prediction_std = torch.std(torch.cat(prediction_list, dim=-1), dim=-1).mean()
+        differential_entropy = - torch.log(2 * np.pi * np.e * prediction_std)
+        differential_entropy.backward(retain_graph=True)
+        model.eval()
 
     optimizer.step()
 
@@ -193,6 +203,11 @@ def main_em(args):
         print(f"load pretrained model!")
     else:
         best_model = train(args, model, optimizer, dataset)
+        best_state_dict = best_model.state_dict()
+
+    if args.dropout_rate > 0:
+        best_model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=args.dropout_rate)
+        best_model.load_state_dict(best_state_dict)
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
@@ -308,6 +323,9 @@ def main_mae(args):
     mse_loss_fn = nn.MSELoss()
     ce_loss_fn = nn.CrossEntropyLoss()
 
+    # from collections import defaultdict
+    # step_acc_dict = defaultdict(int)
+
     global EMA
     EMA = None
     params, _ = collect_params(best_model, train_params="pretrain")
@@ -360,7 +378,6 @@ def main_mae(args):
 
                 if args.no_mask:
                     loss = mse_loss_fn(estimated_test_x, test_x)  # l2 loss only on non-missing values
-
                 else:
                     loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
                 loss = loss / args.cumul_steps
@@ -371,7 +388,8 @@ def main_mae(args):
             with torch.no_grad():
                 _, estim_y = best_model(test_x)
                 acc = (torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-                test_acc_log = acc / len(test_x)
+                test_acc_log = acc / len(test_x)                
+                # step_acc_dict[step_idx] += acc
                 # print(f'after adaptation, step : ({step_idx}), acc is : {test_acc_log - bef_acc_log}')
 
         if args.tsne:
@@ -383,6 +401,20 @@ def main_mae(args):
                 tsne_before_adaptation[1] += test_y.tolist()
                 tsne_after_adaptation[0] +=  test_x.tolist()
                 tsne_after_adaptation[1] += test_y.tolist()
+
+        # print(f"test_x before: {dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1))}")
+        print("test_x before")
+        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1))]))
+        print(f"test_x before.shape: {dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1)).shape}")
+        print(f"mask")
+        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in test_cor_mask_x.cpu().numpy()]))
+
+        # print(f"test_x after: {dataset.dataset.input_scaler.inverse_transform(estimated_test_x.detach().cpu().numpy().reshape(len(test_x), -1))}")
+        # print(f"test_x before.shape: {dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1)).shape}")
+        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in dataset.dataset.input_scaler.inverse_transform(estimated_test_x.detach().cpu().numpy().reshape(len(test_x), -1))]))
+        print(f"test_x after.shape: {dataset.dataset.input_scaler.inverse_transform(estimated_test_x.detach().cpu().numpy().reshape(len(test_x), -1)).shape}")
+        # print(f"test_x after: {test_x}")
+
 
         # imputation with masked autoencoder
         if not args.no_mae_based_imputation:
@@ -406,6 +438,9 @@ def main_mae(args):
     }
     with open(json_path, "w") as outfile:
         json.dump(json_saving, outfile)
+
+    # for step_idx in range(1, args.num_steps + 1):
+    #     print(f"adaptation {step_idx}-step: {step_acc_dict[step_idx] / test_len}")
 
 
 def main_mae_with_em(args):
@@ -557,6 +592,11 @@ def main_no_adapt(args):
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
     global logger, json_path
+    # TODO: fix this!
+    if hasattr(args, 'extra_config') and args.extra_config:
+        extra_config = OmegaConf.load(args.extra_config)
+        args = OmegaConf.merge(args, extra_config)
+
     if hasattr(args, 'seed'):
         utils.set_seed(args.seed)
         print(f"set seed as {args.seed}")

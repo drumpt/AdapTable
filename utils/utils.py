@@ -227,6 +227,7 @@ def draw_tsne(feats, cls, title, args):
     plt.title(title)
     plt.show()
 
+
 def draw_calibration(pred, gt, args):
     from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay
     from matplotlib.gridspec import GridSpec
@@ -246,6 +247,7 @@ def draw_calibration(pred, gt, args):
     ax_calibration_curve.grid()
     ax_calibration_curve.set_title("Calibration plots")
     plt.show()
+
 
 def ece_score(py, y_test, n_bins=10):
     py = np.array(py)
@@ -274,6 +276,7 @@ def ece_score(py, y_test, n_bins=10):
     for m in range(n_bins):
         ece += Bm[m] * np.abs((acc[m] - conf[m]))
     return (ece / sum(Bm), acc)
+
 
 def save_pickle(saving_object, title,args):
     if not os.path.exists(args.tsne_dir):

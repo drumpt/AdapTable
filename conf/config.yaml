@@ -2,14 +2,15 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
-meta_dataset: tableshift # openml-cc18, tableshift, openml-regression, shifts
+meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression, shifts
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
-dataset: heloc
-shift_type: column_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+dataset: diabetes
+train_ratio: 1.0
+shift_type: null # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
 shift_severity: 0.6
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
@@ -20,9 +21,9 @@ pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
 mask_ratio: 0.75
+
 mixup: null # input, feature, null
 mixup_scale: 3
-train_ratio: 1.0
 
 ### hyperparameters for training
 retrain: true
@@ -30,48 +31,56 @@ epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
-test_mask_ratio: 0.2
-
-### hyperparameters for test-time adaptation
-episodic: true # reset model to the pretrained one for each batch if true
-num_steps: 30 # optimization steps for each batch
-test_batch_size: 64
-test_optimizer: AdamW
-test_lr: 1e-4
-no_mask: false
-tt_imputation_method: emd
-
-train_params: [all] # currently supported: all, LN, BN, GN
-# TODO: implement learning rate scheduler
-
-##################################################################
-### methods & other hyperparameters
-method: [mae] # currently supported: mae, sar, em, gem, ns, kld
-temp: 1 # temperature scaling
-delta: 1e-4
-renyi_entropy_alpha: 1.5
-ns_threshold: 0.04 # negative sampling
-kld_weight: 0.1
 
 # for xgboost classifier
 num_estimators: 500
 max_depth: 4
+
+### hyperparameters for test-time adaptation
+episodic: true # reset model to the pretrained one for each batch if true
+num_steps: 30 # optimization steps for each batch
+cumul_steps: 1
+test_batch_size: 4
+test_optimizer: AdamW
+train_params: [all] # currently supported: all, LN, BN, GN
+test_lr: 1e-5
+tt_imputation_method: emd
+
 ##################################################################
+### methods & other hyperparameters
+method: [mae] # currently supported: mae, sar, em, gem, ns, kld, dem
+
+# for masked autoencoders
+test_mask_ratio: 0.75
+delta: 1e-4
+no_mask: false # l2 loss only on every values including
+no_mae_based_imputation: false
+
+temp: 1 # temperature scaling for entropy minimization methods
+renyi_entropy_alpha: 1.5 # for generalized entropy minimization
+ns_threshold: 0.04 # negative sampling
+kld_weight: 0.1 # for kl-divergence loss
+memo_aug_num: 64 # memo
+
+# for differential entropy minimization
+dropout_rate: 0
+dropout_steps: 0
+##################################################################
+extra_config: null
 
 ### device
 device: cuda
 gpu_idx: 0
-no_mae_based_imputation: false
-cumul_steps: 1
+
 ### seed for reproduciblity
 seed: 0
 
-##################################################################
-### log dir for logging
-log_dir: log_final_wepisodic
-
 ### output dir for saving model
 out_dir: exps/test_mae
+
+### log dir for logging
+log_dir: log
+log_prefix: log_final
 
 ### tsne
 tsne: false
@@ -80,12 +89,6 @@ tsne_dir: tsne
 ### wandb
 wandb_user: drumpt
 
-### memo
-memo_aug_num: 64
-
-log_prefix: log_final
-
 ### slack_notification
 slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
 slack_channel: experiment
-##################################################################

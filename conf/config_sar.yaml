@@ -25,7 +25,6 @@ train_ratio: 1.0
 no_mask: false
 tt_imputation_method: emd
 
-
 ### hyperparameters for training
 retrain: true
 epochs: 50
@@ -33,7 +32,6 @@ train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
 test_mask_ratio: 0.75
-
 
 ### hyperparameters for test-time adaptation
 episodic: false # reset model to the pretrained one for each batch if true

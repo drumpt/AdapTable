@@ -1,0 +1,14 @@
+normalizer: MinMaxScaler
+
+### hyperparameters for test-time adaptation
+episodic: false # reset model to the pretrained one for each batch if true
+num_steps: 10 # optimization steps for each batch
+test_lr: 1e-5
+
+##################################################################
+### methods & other hyperparameters
+method: [dem] # currently supported: mae, sar, em, gem, ns, kld
+dropout_rate: 0.5
+dropout_steps: 5
+##################################################################
+
