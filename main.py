@@ -19,6 +19,7 @@ from utils.utils import *
 # for TSNE logging purpose
 tsne_before_adaptation = [[], []] # feature_list, cls_list
 tsne_after_adaptation = [[], []] # feature_list, cls_list
+ece_list = [[], []]
 
 def copy_model_and_optimizer(model, optimizer, scheduler):
     model_state = deepcopy(model.state_dict())
@@ -178,6 +179,9 @@ def forward_and_adapt(args, x, model, optimizer):
     print('before adapt, prediction becomes:')
     with torch.no_grad():
         print(model(x).argmax(1))
+        confident_samples = torch.argsort(softmax_entropy(outputs / args.temp), dim=-1, descending=False)[:len(x) // 10]
+        outputs.argmax(1)
+        print()
 
     if 'sar' in args.method:
         entropy_first = softmax_entropy(outputs)
@@ -301,6 +305,10 @@ def main_em(args):
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
+        with torch.no_grad():
+            ece_list[0] += original_best_model(test_x).softmax(1).cpu().tolist()
+            ece_list[1] += test_y.argmax(1).cpu().tolist()
+
         if args.tsne:
             with torch.no_grad():
                 assert regression is False
@@ -318,6 +326,28 @@ def main_em(args):
         save_pickle(tsne_after_adaptation, 'after_adaptation', args)
         draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
         draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
+
+    print('current ece score')
+    from utils.utils import ece_score, draw_calibration
+    positive_prob = np.array(ece_list[0]).max(axis=-1)
+    # draw_calibration(positive_prob, ece_list[1], args)
+
+    val, acc_ece = ece_score(ece_list[0], ece_list[1])
+
+    n, bins, rects = plt.hist(x = np.arange(10)/10, bins=np.arange(11)/10, ec='k')
+
+    # iterate through rectangles, change the height of each
+    for idx in range(len(rects)):
+        rects[idx].set_height(acc_ece[idx])
+
+    # set the y limit
+    plt.ylim(0, 1)
+    plt.plot([0, 1], [0, 1], linestyle='dashed')
+
+    plt.show()
+    print(acc_ece)
+    print(f'value is {val}')
+
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
@@ -417,17 +447,17 @@ def main_mae(args):
 
 
                 estimated_test_x, _ = best_model(test_cor_x)
-                loss = mse_loss_fn(estimated_test_x, test_x) # l2 loss only on all values
-                # loss = mse_loss_fn(estimated_test_x * test_mask_x,
-                #                    test_x * test_mask_x)  # l2 loss only on non-missing values
+                # loss = mse_loss_fn(estimated_test_x, test_x) # l2 loss only on all values
+                loss = mse_loss_fn(estimated_test_x * test_mask_x,
+                                   test_x * test_mask_x)  # l2 loss only on non-missing values
                 loss = loss / args.cumul_steps
                 loss.backward(retain_graph=True)
 
             feature_grads = torch.mean(test_cor_x.grad, dim=0)
 
             # feature_importance = torch.abs(feature_grads)
-            print('grad of feature')
-            print(feature_grads)
+            # print('grad of feature')
+            # print(feature_grads)
             # feature_grads = feature_grads()
             # feature_grads = torch.relu(feature_grads)
             # feature_grads = feature_grads - torch.min(feature_grads) + 1e-4
@@ -437,7 +467,13 @@ def main_mae(args):
         feature_importance = feature_importance / torch.sum(feature_importance)
         print(feature_importance)
 
-        for _ in range(1, args.num_steps + 1):
+        with torch.no_grad():
+            _, estim_y = best_model(test_x)
+            acc = (torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+            bef_acc_log = acc / len(test_x)
+            print(f'before adaptation, (num_step), acc is : {bef_acc_log}')
+
+        for step_idx in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
             for _ in range(1, args.cumul_steps + 1):
                 test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
@@ -452,7 +488,16 @@ def main_mae(args):
                     loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
                 loss = loss / args.cumul_steps
                 loss.backward()
+                print(f'loss at step_idx {step_idx} : {loss}')
             test_optimizer.step()
+
+            with torch.no_grad():
+                _, estim_y = best_model(test_x)
+                acc = (torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+                test_acc_log = acc / len(test_x)
+                print(f'after adaptation, step : ({step_idx}), acc is : {test_acc_log - bef_acc_log}')
+
+
 
             # print(f'test loss is : {loss}')
             # loss.backward()

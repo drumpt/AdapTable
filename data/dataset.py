@@ -65,10 +65,15 @@ class Scikit_LearnDataset():
             # n_features = number of independent features
             # n_redundant = number of redundant features
             # n_informative = number of informative features
-            x,y = sklearn.datasets.make_classification(n_samples=3000, n_features=20, n_redundant=15, n_informative=5, random_state=args.seed, shuffle=True)
+            # class_sep = default 1, where larger value makes classification easier
+            n_features = 30
+            n_informative = 5
+            class_sep = 1
+            n_redundant = n_features - n_informative
+            x,y = sklearn.datasets.make_classification(n_samples=5000, class_sep=class_sep, n_classes=10, n_features=n_features, n_informative=n_informative, n_redundant=n_redundant, random_state=args.seed, shuffle=True)
         elif args.dataset == 'two_moons':
             # noise = amount of noise added to moons dataset
-            x,y = sklearn.datasets.make_moons(n_samples=3000, random_state=args.seed, noise=0.3, shuffle=True)
+            x,y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True)
         else:
             raise NotImplementedError
 

@@ -32,7 +32,7 @@ def mp_work(path):
 def main(args):
     is_valid=True
     pattern_of_path = args.regex
-    root = './debug_gradcumul/' + args.directory
+    root = './sup_final_mask_ratio0.15/' + args.directory
 
     path_list = []
 
@@ -56,7 +56,7 @@ def main(args):
     print(all_dict)
     different_path = all_dict.keys()
 
-    for method in ['em','memo','sar', 'mae_random_mask', 'mae']:
+    for method in ['mae_random_mask', 'mae']:
         # print(method)
         filtered_dict = {}
         for path in different_path:
