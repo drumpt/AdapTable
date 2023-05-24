@@ -7,14 +7,15 @@ meta_dataset: tableshift # openml-cc18, tableshift, openml-regression, shifts
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
+# shifts: weather_reg, weather_cls, power
 dataset: heloc
-shift_type: mean_std_shift # for synthetic shift: null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_type: column_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
 shift_severity: 0.6
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for MAE pretraining
-pretrain_epochs: 20
+pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
@@ -22,9 +23,6 @@ mask_ratio: 0.75
 mixup: null # input, feature, null
 mixup_scale: 3
 train_ratio: 1.0
-no_mask: false
-tt_imputation_method: emd
-
 
 ### hyperparameters for training
 retrain: true
@@ -32,33 +30,40 @@ epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
-test_mask_ratio: 0.75
-
+test_mask_ratio: 0.2
 
 ### hyperparameters for test-time adaptation
-episodic: false # reset model to the pretrained one for each batch if true
-num_steps: 10 # optimization steps for each batch
+episodic: true # reset model to the pretrained one for each batch if true
+num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
-test_lr: 1e-6
+test_lr: 3e-4
+no_mask: false
+tt_imputation_method: emd
+
 train_params: [all] # currently supported: all, LN, BN, GN
 # TODO: implement learning rate scheduler
 
 ##################################################################
 ### methods & other hyperparameters
-method: [sar] # currently supported: sar, em, gem, ns, kld, dm
+method: [mae] # currently supported: mae, sar, em, gem, ns, kld
 temp: 1 # temperature scaling
 renyi_entropy_alpha: 1.5
 ns_threshold: 0.04 # negative sampling
 kld_weight: 0.1
-dm_weight: 0.1
+
+# for xgboost classifier
+num_estimators: 500
+max_depth: 4
 ##################################################################
 
 ### device
 device: cuda
-
+gpu_idx: 0
+no_mae_based_imputation: false
+cumul_steps: 10
 ### seed for reproduciblity
-seed: 3
+seed: 0
 
 ##################################################################
 ### log dir for logging
@@ -76,7 +81,6 @@ wandb_user: drumpt
 
 ### memo
 memo_aug_num: 64
-no_mae_based_imputation: false
 
 log_prefix: log_final
 

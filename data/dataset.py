@@ -34,6 +34,8 @@ class Dataset():
             self.dataset = ShiftsDataset(args)
         elif args.meta_dataset == "folktables":
             self.dataset = FolkTablesDataset(args)
+        elif args.meta_dataset == "scikit-learn":
+            self.dataset = Scikit_LearnDataset(args)
         else:
             raise NotImplementedError
 
@@ -52,6 +54,66 @@ class Dataset():
         self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+
+
+
+class Scikit_LearnDataset():
+    def __init__(self, args):
+        from sklearn import datasets
+        if args.dataset == 'make_classification':
+            # n_features = number of independent features
+            # n_redundant = number of redundant features
+            # n_informative = number of informative features
+            # class_sep = default 1, where larger value makes classification easier
+            n_features = 30
+            n_informative = 5
+            class_sep = 1
+            n_redundant = n_features - n_informative
+            x,y = sklearn.datasets.make_classification(n_samples=5000, class_sep=class_sep, n_classes=10, n_features=n_features, n_informative=n_informative, n_redundant=n_redundant, random_state=args.seed, shuffle=True)
+        elif args.dataset == 'two_moons':
+            # noise = amount of noise added to moons dataset
+            x,y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True)
+        else:
+            raise NotImplementedError
+
+        y = y.reshape(-1, 1)
+        self.visualize_dataset(x, y)
+        # train/valid/test split
+        train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=args.seed)
+        valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=args.seed)
+
+
+        self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
+        self.input_scaler.fit(
+            np.concatenate([train_x, valid_x], axis=0)
+        )
+        train_x = self.input_scaler.transform(train_x)
+        valid_x = self.input_scaler.transform(valid_x)
+        test_x, test_mask_x = get_corrupted_data(np.array(test_x),
+                                                           np.array(train_x),
+                                                           data_type="numerical", shift_type=args.shift_type,
+                                                           shift_severity=args.shift_severity,
+                                                           imputation_method=args.imputation_method)
+        test_x = self.input_scaler.transform(test_x)
+
+        self.train_x = np.concatenate([train_x], axis=-1)
+        self.valid_x = np.concatenate([valid_x], axis=-1)
+        self.test_x = np.concatenate([test_x], axis=-1)
+        self.test_mask_x =  np.concatenate([test_x], axis=-1)
+
+        self.output_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
+        self.output_one_hot_encoder.fit(np.concatenate([train_y, valid_y], axis=0))
+        self.train_y = self.output_one_hot_encoder.transform(train_y)
+        self.valid_y = self.output_one_hot_encoder.transform(valid_y)
+        self.test_y = self.output_one_hot_encoder.transform(test_y)
+
+    def visualize_dataset(self, X, y):
+        import matplotlib.pyplot as plt
+        plt.scatter(X[:, 0], X[:, 1], marker='o', c=y, s=100,
+                    edgecolor="k", linewidth=2)
+        plt.xlabel("$X_1$")
+        plt.ylabel("$X_2$")
+        plt.show()
 
 
 
@@ -493,8 +555,7 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
     if shift_type == "Gaussian" and data_type == "numerical":
         scaler = StandardScaler()
         scaler.fit(train_data)
-        test_data = test_data.astype(np.float64) + shift_severity * np.random.randn(*test_data.shape) * np.sqrt(
-            scaler.var_)
+        test_data = test_data.astype(np.float64) + shift_severity * np.random.randn(*test_data.shape) * np.sqrt(scaler.var_)
 
     elif shift_type in ["random_drop", "column_drop", "random_replacement", "column_replacement"]:
         assert 0 <= shift_severity <= 1

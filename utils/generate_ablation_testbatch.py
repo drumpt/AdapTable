@@ -32,7 +32,7 @@ def mp_work(path):
 def main(args):
     is_valid=True
     pattern_of_path = args.regex
-    root = './log_ablation_vary_train_ratio_final/' + args.directory
+    root = './log_ablation_vary_batchsize/' + args.directory
 
     path_list = []
 
@@ -57,18 +57,18 @@ def main(args):
     different_path = all_dict.keys()
 
     for method in ['sar', 'mae']:
-        # print(method)
-        for percentage in [0.2, 0.4, 0.6, 0.8, 1]:
-            # print(f'{method} {percentage}')
+        print(method)
+        for batchsize in [1, 4, 8, 16, 32, 64]:
+            # print(percentage)
             filtered_dict = {}
             for path in different_path:
                 split_path = path.split('/')
                 # print(path)
-                if percentage != 1:
-                    if args.dataset in split_path[2] and method == split_path[3] and str(percentage) in split_path[6]:
+                if batchsize != 64:
+                    if args.dataset in split_path[2] and method == split_path[3] and '_test_batch_size' + str(batchsize) + '.' in split_path[6]:
                         filtered_dict[path] = all_dict[path]
                 else:
-                    if args.dataset in split_path[2] and method == split_path[3] and len(split_path[6].split('train_ratio'))==2:
+                    if args.dataset in split_path[2] and method == split_path[3] and '_test_batch_size' not in split_path[6]:
                         filtered_dict[path] = all_dict[path]
             if args.debug:
                 print(method)

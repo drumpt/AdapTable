@@ -5,11 +5,8 @@ NUM_GPUS=4
 ##############################################
 i=0
 
-LOG_POSTFIX="sup_final_mask_ratio0.15"
-LOG_DIR="sup_final_mask_ratio0.15"
-SEED="0 1 2 3 4"
-TESTLR="5e-5 1e-5 5e-6"
-
+LOG_POSTFIX="debug_tune"
+LOG_DIR="debug_tune"
 
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
@@ -23,12 +20,13 @@ wait_n() {
 }
 
 openml_mlpbase(){
+  SEED="0 1 2 3 4"
 #  DATASET="cmc"
 
-  DATASET="cmc semeion mfeat-karhunen optdigits diabetes"
-  METHOD="mae mae_random_mask"
+  DATASET="mfeat-karhunen optdigits diabetes"
+  METHOD="em sar memo"
 
-  if [ $method = "mae" ] || [ $method = "mae_random_mask" ] || [ $method = "memo" ]|| [ $method = "em" ]; then
+  if [ $method = "mae" ] || [ $method = "mae_random_mask" ] || [ $method = "memo" ]; then
     episodic="true"
   else
     episodic="false"
@@ -37,247 +35,232 @@ openml_mlpbase(){
   for dataset in $DATASET; do
     for method in $METHOD; do
       for seed in $SEED; do
-        for test_lr in $TESTLR; do
-          if [ $method = "sar" ]; then
-            python main.py \
+        if [ $method = "sar" ]; then
+          python main.py \
+            method=$method \
+            episodic=$episodic \
+            meta_dataset=openml-cc18 \
+            dataset="${dataset}" \
+            shift_type=null \
+            retrain=true \
+            seed=${seed} \
+            log_dir=${LOG_DIR} \
+            log_prefix=${LOG_POSTFIX} \
+            device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+            --config-name config_sar.yaml \
+            2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
               method=$method \
               episodic=$episodic \
               meta_dataset=openml-cc18 \
               dataset="${dataset}" \
-              shift_type=null \
+              shift_type=random_drop \
+              shift_severity=0.6 \
               retrain=true \
               seed=${seed} \
               log_dir=${LOG_DIR} \
               log_prefix=${LOG_POSTFIX} \
-              test_lr=$test_lr \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               --config-name config_sar.yaml \
               2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=random_drop \
-                shift_severity=0.6 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                test_lr=$test_lr \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                --config-name config_sar.yaml \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=column_drop \
-                shift_severity=0.6 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                test_lr=$test_lr \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                --config-name config_sar.yaml \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=Gaussian \
-                shift_severity=1 \
-                retrain=true \
-                test_lr=$test_lr \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                --config-name config_sar.yaml \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                test_lr=$test_lr \
-                dataset="${dataset}" \
-                shift_type=mean_std_shift \
-                shift_severity=1 \
-                retrain=true \
-                log_dir=${LOG_DIR} \
-                seed=${seed} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                --config-name config_sar.yaml \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                test_lr=$test_lr \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=std_shift \
-                shift_severity=1 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                --config-name config_sar.yaml \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                test_lr=$test_lr \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=mean_shift \
-                shift_severity=1 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                --config-name config_sar.yaml \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-          else
-            python main.py \
+          wait_n
+          i=$((i + 1))
+          python main.py \
               method=$method \
               episodic=$episodic \
               meta_dataset=openml-cc18 \
               dataset="${dataset}" \
-              test_lr=$test_lr \
-              shift_type=null \
+              shift_type=column_drop \
+              shift_severity=0.6 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              --config-name config_sar.yaml \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=Gaussian \
+              shift_severity=1 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              --config-name config_sar.yaml \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=mean_std_shift \
+              shift_severity=1 \
+              retrain=true \
+              log_dir=${LOG_DIR} \
+              seed=${seed} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              --config-name config_sar.yaml \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=std_shift \
+              shift_severity=1 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              --config-name config_sar.yaml \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=mean_shift \
+              shift_severity=1 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              --config-name config_sar.yaml \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+        else
+          python main.py \
+            method=$method \
+            episodic=$episodic \
+            meta_dataset=openml-cc18 \
+            dataset="${dataset}" \
+            shift_type=null \
+            retrain=true \
+            seed=${seed} \
+            log_dir=${LOG_DIR} \
+            log_prefix=${LOG_POSTFIX} \
+            device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+            2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=random_drop \
+              shift_severity=0.6 \
               retrain=true \
               seed=${seed} \
               log_dir=${LOG_DIR} \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                test_lr=$test_lr \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=random_drop \
-                shift_severity=0.6 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                test_lr=$test_lr \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=column_drop \
-                shift_severity=0.6 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                test_lr=$test_lr \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=Gaussian \
-                shift_severity=1 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                test_lr=$test_lr \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=mean_std_shift \
-                shift_severity=1 \
-                retrain=true \
-                log_dir=${LOG_DIR} \
-                seed=${seed} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=std_shift \
-                shift_severity=1 \
-                retrain=true \
-                test_lr=$test_lr \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-            python main.py \
-                method=$method \
-                episodic=$episodic \
-                meta_dataset=openml-cc18 \
-                dataset="${dataset}" \
-                shift_type=mean_shift \
-                test_lr=$test_lr \
-                shift_severity=1 \
-                retrain=true \
-                seed=${seed} \
-                log_dir=${LOG_DIR} \
-                log_prefix=${LOG_POSTFIX} \
-                device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                2>&1 &
-            wait_n
-            i=$((i + 1))
-          fi
-        done
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=column_drop \
+              shift_severity=0.6 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=Gaussian \
+              shift_severity=1 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=mean_std_shift \
+              shift_severity=1 \
+              retrain=true \
+              log_dir=${LOG_DIR} \
+              seed=${seed} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=std_shift \
+              shift_severity=1 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+          python main.py \
+              method=$method \
+              episodic=$episodic \
+              meta_dataset=openml-cc18 \
+              dataset="${dataset}" \
+              shift_type=mean_shift \
+              shift_severity=1 \
+              retrain=true \
+              seed=${seed} \
+              log_dir=${LOG_DIR} \
+              log_prefix=${LOG_POSTFIX} \
+              device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+              2>&1 &
+          wait_n
+          i=$((i + 1))
+        fi
+
       done
     done
   done
 }
 
 openml_conventional(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="cmc semeion mfeat-karhunen optdigits diabetes mfeat-pixel dna"
   MODEL="lr knn xgboost rf"
   METHOD="no_adapt"
@@ -394,7 +377,7 @@ tableshift_mlpbase(){
 #  DATASET="anes"
 #  METHOD="mae"
 
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="heloc anes"
   METHOD="mae mae_random_mask"
 
@@ -474,7 +457,7 @@ tableshift_mlpbase(){
 }
 
 tableshift_conventional(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="heloc mooc anes"
   MODEL="lr knn xgboost rf"
   METHOD="no_adapt"
@@ -501,7 +484,7 @@ tableshift_conventional(){
 }
 
 folktables_mlpbase(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="time state time_state"
   METHOD="mae mae_random_mask"
 
@@ -557,7 +540,7 @@ folktables_mlpbase(){
 }
 
 folktables_conventional(){
-#  SEED="0 1 2 3 4"
+  SEED="0 1 2 3 4"
   DATASET="time state time_state"
   MODEL="lr knn xgboost rf"
   METHOD="no_adapt"
@@ -585,7 +568,7 @@ folktables_conventional(){
 }
 # mlp base
 openml_mlpbase
-#wait
+wait
 #tableshift_mlpbase
 #wait
 #folktables_mlpbase

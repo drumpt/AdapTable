@@ -56,7 +56,7 @@ def main(args):
 
     different_path = all_dict.keys()
 
-    for method in ['mae']:
+    for method in ['sar', 'mae']:
         # print(method)
         for percentage in [0.2, 0.4, 0.6, 0.8]:
             # print(percentage)

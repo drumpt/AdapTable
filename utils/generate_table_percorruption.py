@@ -32,7 +32,8 @@ def mp_work(path):
 def main(args):
     is_valid=True
     pattern_of_path = args.regex
-    root = './log_ablation_vary_train_ratio_final/' + args.directory
+    root = './debug_tune/' + args.directory
+    # root = './deb/' + args.directory
 
     path_list = []
 
@@ -52,30 +53,27 @@ def main(args):
         ret = list(tqdm(p.imap(mp_work, path_list, chunksize=1), total=len(path_list)))
         for d in ret:
             all_dict.update(d)
-    # all_dict contains dictionary of all corruptions
 
+    # print(all_dict)
     different_path = all_dict.keys()
 
-    for method in ['sar', 'mae']:
+    for method in ['em', 'memo', 'sar', 'mae']:
         # print(method)
-        for percentage in [0.2, 0.4, 0.6, 0.8, 1]:
-            # print(f'{method} {percentage}')
+        for corruption_type in ['None', 'Gaussian', 'mean_shift', 'std_shift', 'mean_std_shift', 'random_drop', 'column_drop']:
             filtered_dict = {}
             for path in different_path:
                 split_path = path.split('/')
                 # print(path)
-                if percentage != 1:
-                    if args.dataset in split_path[2] and method == split_path[3] and str(percentage) in split_path[6]:
-                        filtered_dict[path] = all_dict[path]
-                else:
-                    if args.dataset in split_path[2] and method == split_path[3] and len(split_path[6].split('train_ratio'))==2:
-                        filtered_dict[path] = all_dict[path]
+                if args.dataset in split_path[2] and method == split_path[3] and ('shift_type_' + corruption_type) in split_path[5]:
+                    filtered_dict[path] = all_dict[path]
             if args.debug:
                 print(method)
                 print(filtered_dict)
             len_path = format_print(filtered_dict, args)
-            if len_path >= 5:
-                is_valid = False
+
+        print('')
+        if len_path != 40:
+            is_valid = False
 
     if is_valid:
         print("Finished!")
@@ -101,7 +99,7 @@ def format_print(filtered_dict, args):
             for path in filtered_dict.keys():
                 if corruption in path.split('/')[5]:
                     list_acc.append(filtered_dict[path])
-            print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=' ')
+            print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=',')
         print('')
 
     else:
@@ -122,9 +120,9 @@ def format_print(filtered_dict, args):
         # print(list_path)
         if args.debug:
             print(len(list_path))
-        print("%.1f ± %.1f" % (np.average(list_acc_before) * 100, np.std(list_acc_before) / np.sqrt(np.size(list_acc_before)) * 100))
-        print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=' ')
-        print('')
+        # print("%.1f ± %.1f" % (np.average(list_acc_before) * 100, np.std(list_acc_before) / np.sqrt(np.size(list_acc_before)) * 100), end=', ')
+        print("%.1f ± %.1f" % (np.average(list_acc) * 100, np.std(list_acc) / np.sqrt(np.size(list_acc)) * 100), end=',')
+        # print('')
 
         return len(list_path)
 

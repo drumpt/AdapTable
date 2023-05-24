@@ -32,7 +32,7 @@ def mp_work(path):
 def main(args):
     is_valid=True
     pattern_of_path = args.regex
-    root = './log_final_wepisodic/' + args.directory
+    root = './sup_final_mask_ratio0.15/' + args.directory
 
     path_list = []
 

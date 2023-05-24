@@ -20,6 +20,7 @@ from utils.utils import *
 logger, json_path = None, None
 tsne_before_adaptation = [[], []] # feature_list, cls_list
 tsne_after_adaptation = [[], []] # feature_list, cls_list
+ece_list = [[], []]
 
 
 def pretrain(args, model, optimizer, dataset):
@@ -116,6 +117,10 @@ def forward_and_adapt(args, x, model, optimizer):
     global original_best_model, EMA
     optimizer.zero_grad()
     outputs = model(x) if isinstance(model, MLP) else model(x)[-1]
+
+    with torch.no_grad():
+        confident_samples = torch.argsort(softmax_entropy(outputs / args.temp), dim=-1, descending=False)[:len(x) // 10]
+        outputs.argmax(1)
 
     if 'sar' in args.method:
         entropy_first = softmax_entropy(outputs)
@@ -223,6 +228,10 @@ def main_em(args):
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
+        with torch.no_grad():
+            ece_list[0] += original_best_model(test_x).softmax(1).cpu().tolist()
+            ece_list[1] += test_y.argmax(1).cpu().tolist()
+
         if args.tsne:
             with torch.no_grad():
                 assert regression is False
@@ -239,6 +248,23 @@ def main_em(args):
         save_pickle(tsne_after_adaptation, 'after_adaptation', args)
         draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
         draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
+
+    from utils.utils import ece_score, draw_calibration
+    positive_prob = np.array(ece_list[0]).max(axis=-1)
+    # draw_calibration(positive_prob, ece_list[1], args)
+
+    val, acc_ece = ece_score(ece_list[0], ece_list[1])
+
+    n, bins, rects = plt.hist(x = np.arange(10)/10, bins=np.arange(11)/10, ec='k')
+
+    # iterate through rectangles, change the height of each
+    for idx in range(len(rects)):
+        rects[idx].set_height(acc_ece[idx])
+
+    # set the y limit
+    plt.ylim(0, 1)
+    plt.plot([0, 1], [0, 1], linestyle='dashed')
+    plt.show()
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
@@ -313,39 +339,55 @@ def main_mae(args):
         feature_grads = torch.mean(test_cor_x.grad, dim=0)
 
         if 'random_mask' in args.method:
-            feature_importance = torch.ones_like(torch.abs(feature_grads))
+            feature_importance = torch.ones_like(test_x[0])
         else:
             feature_importance = torch.reciprocal(torch.abs(feature_grads) + args.delta)
         feature_importance = feature_importance / torch.sum(feature_importance)
 
-        for _ in range(1, args.num_steps + 1):
-            test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-            test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
-            estimated_test_x, _ = best_model(test_cor_x)
+        with torch.no_grad():
+            _, estim_y = best_model(test_x)
+            acc = (torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+            bef_acc_log = acc / len(test_x)
+            # print(f'before adaptation, (num_step), acc is : {bef_acc_log}')
 
-            if args.no_mask:
-                loss = mse_loss_fn(estimated_test_x, test_x)
-            else:
-                loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
-
+        for step_idx in range(1, args.num_steps + 1):
             test_optimizer.zero_grad()
-            loss.backward()
+            for _ in range(1, args.cumul_steps + 1):
+                test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
+
+                test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
+                estimated_test_x, _ = best_model(test_cor_x)
+
+                if args.no_mask:
+                    loss = mse_loss_fn(estimated_test_x, test_x)  # l2 loss only on non-missing values
+
+                else:
+                    loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
+                loss = loss / args.cumul_steps
+                loss.backward()
+                # print(f'loss at step_idx {step_idx} : {loss}')
             test_optimizer.step()
+
+            with torch.no_grad():
+                _, estim_y = best_model(test_x)
+                acc = (torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+                test_acc_log = acc / len(test_x)
+                # print(f'after adaptation, step : ({step_idx}), acc is : {test_acc_log - bef_acc_log}')
 
         if args.tsne:
             with torch.no_grad():
                 assert regression is False
-                feature_original_model = original_best_model.get_feature(test_x).tolist()
-                feature_best_model = best_model.get_feature(test_x).tolist()
 
-                tsne_before_adaptation[0] += feature_original_model
+                # input-level
+                tsne_before_adaptation[0] += test_x.tolist()
                 tsne_before_adaptation[1] += test_y.tolist()
-                tsne_after_adaptation[0] += feature_best_model
+                tsne_after_adaptation[0] +=  test_x.tolist()
                 tsne_after_adaptation[1] += test_y.tolist()
 
         # imputation with masked autoencoder
-        estimated_x, _ = best_model(test_x)
-        test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
+        if not args.no_mae_based_imputation:
+            estimated_x, _ = best_model(test_x)
+            test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
         _, estimated_y = best_model(test_x)
 
