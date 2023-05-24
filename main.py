@@ -402,20 +402,6 @@ def main_mae(args):
                 tsne_after_adaptation[0] +=  test_x.tolist()
                 tsne_after_adaptation[1] += test_y.tolist()
 
-        # print(f"test_x before: {dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1))}")
-        print("test_x before")
-        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1))]))
-        print(f"test_x before.shape: {dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1)).shape}")
-        print(f"mask")
-        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in test_cor_mask_x.cpu().numpy()]))
-
-        # print(f"test_x after: {dataset.dataset.input_scaler.inverse_transform(estimated_test_x.detach().cpu().numpy().reshape(len(test_x), -1))}")
-        # print(f"test_x before.shape: {dataset.dataset.input_scaler.inverse_transform(test_x.detach().cpu().numpy().reshape(len(test_x), -1)).shape}")
-        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in dataset.dataset.input_scaler.inverse_transform(estimated_test_x.detach().cpu().numpy().reshape(len(test_x), -1))]))
-        print(f"test_x after.shape: {dataset.dataset.input_scaler.inverse_transform(estimated_test_x.detach().cpu().numpy().reshape(len(test_x), -1)).shape}")
-        # print(f"test_x after: {test_x}")
-
-
         # imputation with masked autoencoder
         if not args.no_mae_based_imputation:
             estimated_x, _ = best_model(test_x)
