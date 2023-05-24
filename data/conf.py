@@ -64,3 +64,27 @@ HouseOpt = {
 UkairOpt = {
     'nominal_columns':['Month', 'DayofWeek', 'Environment.Type']
 }
+
+AnalcatOpt = {
+    'nominal_columns':['Liberal', 'Unconstitutional', 'Precedent_alteration', 'Unanimous']
+}
+
+DelayOpt = {
+    'nominal_columns':['vehicle_type', 'direction', 'weekday']
+}
+
+BikeOpt = {
+    'nominal_columns':['season', 'year', 'holiday', 'workingday', 'weather']
+}
+
+TaxiOpt = {
+    'nominal_columns':['VendorID', 'store_and_fwd_flag', 'RatecodeID', 'PULocationID', 'DOLocationID', 'extra', 'mta_tax', 'improvement_surcharge', 'trip_type']
+}
+
+SoilOpt = {
+    'nominal_columns':['isns']
+}
+
+GpuOpt = {
+    'nominal_columns':['KWG', 'KWI', 'STRM', 'STRN', 'SA', 'SB']
+}

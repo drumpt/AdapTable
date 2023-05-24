@@ -368,7 +368,7 @@ class OpenMLRegressionDataset():
             tot_test = tot_test.dropna()
             test_x = tot_test[wo_target]
             test_y = tot_test[target]
-        elif dataset_specification in ["abalone", "seattlecrime6", "diamonds", "Brazilian_houses", "topo_2_1", "house_sales", "particulate-matter-ukair-2017"]:
+        elif dataset_specification in ["abalone", "seattlecrime6", "diamonds", "Brazilian_houses", "topo_2_1", "house_sales", "particulate-matter-ukair-2017", "analcatdata_supreme", "delays_zurich_transport", "Bike_Sharing_Demand", "nyc-taxi-green-dec-2016", "visualizing_soil", "SGEMM_GPU_kernel_performance"]:
             dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"reg_cat/{dataset_specification}.csv")
             config = load_opt(dataset_specification)
             # dataset = load_dataset("inria_soda/tabular-benchmark", data_files=f"{data_split}/{args.dataset}.csv")
