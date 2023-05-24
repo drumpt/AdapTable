@@ -88,7 +88,9 @@ out the data agreement at https://community.fico.com/s/explainable-machine
 
 def preprocess_heloc(df: pd.DataFrame) -> pd.DataFrame:
     # Transform target to integer
+    print(f"df: {df}")
     target = HELOC_FEATURES.target
+    print(f"target: {target}")
     df[target] = (df[target] == "Good").astype(int)
 
     df['ExternalRiskEstimateLow'] = (

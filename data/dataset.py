@@ -65,7 +65,6 @@ class OpenMLCC18Dataset():
             benchmark_df.to_csv(benchmark_list_path)
         else:
             benchmark_df = pd.read_csv(benchmark_list_path)
-
         target_feature = benchmark_df[benchmark_df["name"] == args.dataset].iloc[0]["target_feature"]
 
         dataset = openml.datasets.get_dataset(args.dataset)
@@ -78,7 +77,7 @@ class OpenMLCC18Dataset():
 
         # data preprocessing (normalization and one-hot encoding)
         cat_indices = np.argwhere(np.array(cat_indicator) == True).flatten()
-        cont_indices = np.array(sorted(set(np.arange(x.shape[1] - 1)).difference(set(cat_indices))))
+        cont_indices = np.array(sorted(set(np.arange(x.shape[1])).difference(set(cat_indices))))
         if len(cont_indices):
             self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
             self.input_scaler.fit(
@@ -310,9 +309,7 @@ class OpenMLRegressionDataset():
             test_y = tot_test[target]
         elif dataset_specification in ["abalone", "seattlecrime6", "diamonds", "Brazilian_houses", "topo_2_1", "house_sales", "particulate-matter-ukair-2017"]:
             dataset = load_dataset("inria-soda/tabular-benchmark", data_files=f"reg_cat/{dataset_specification}.csv")
-
             config = load_opt(dataset_specification)
-
             # dataset = load_dataset("inria_soda/tabular-benchmark", data_files=f"{data_split}/{args.dataset}.csv")
             # last column is target
             column_names = dataset['train'].column_names
@@ -332,7 +329,7 @@ class OpenMLRegressionDataset():
         # data preprocessing (normalization and one-hot encoding)
         cat_indicator = [True if column_name in config['nominal_columns'] else False for column_name in x.columns]
         cat_indices = np.argwhere(np.array(cat_indicator) == True).flatten()
-        cont_indices = np.array(sorted(set(np.arange(x.shape[1] - 1)).difference(set(cat_indices))))
+        cont_indices = np.array(sorted(set(np.arange(x.shape[1])).difference(set(cat_indices))))
 
         if len(cont_indices):
             self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
@@ -387,6 +384,7 @@ class OpenMLRegressionDataset():
         self.train_y = self.output_scaler.transform(train_y)
         self.valid_y = self.output_scaler.transform(valid_y)
         self.test_y = self.output_scaler.transform(test_y)
+
 
 
 class ShiftsDataset():

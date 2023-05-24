@@ -1,0 +1,1028 @@
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+lenght of train dataset : 2220
+epoch 1, train_loss 0.5401, valid_loss 0.5610
+epoch 2, train_loss 0.4374, valid_loss 0.4832
+epoch 3, train_loss 0.4001, valid_loss 0.4949
+epoch 4, train_loss 0.3816, valid_loss 0.4664
+epoch 5, train_loss 0.3805, valid_loss 0.4660
+epoch 6, train_loss 0.3783, valid_loss 0.4675
+epoch 7, train_loss 0.3758, valid_loss 0.4636
+epoch 8, train_loss 0.3818, valid_loss 0.4975
+epoch 9, train_loss 0.3650, valid_loss 0.4636
+epoch 10, train_loss 0.3696, valid_loss 0.4548
+epoch 11, train_loss 0.3689, valid_loss 0.4456
+epoch 12, train_loss 0.3672, valid_loss 0.4189
+epoch 13, train_loss 0.3665, valid_loss 0.4496
+epoch 14, train_loss 0.3711, valid_loss 0.4684
+epoch 15, train_loss 0.3561, valid_loss 0.4299
+epoch 16, train_loss 0.3596, valid_loss 0.4662
+epoch 17, train_loss 0.3617, valid_loss 0.4498
+epoch 18, train_loss 0.3543, valid_loss 0.4489
+epoch 19, train_loss 0.3572, valid_loss 0.4232
+epoch 20, train_loss 0.3613, valid_loss 0.4417
+epoch 21, train_loss 0.3637, valid_loss 0.4530
+epoch 22, train_loss 0.3562, valid_loss 0.4644
+epoch 23, train_loss 0.3603, valid_loss 0.4489
+epoch 24, train_loss 0.3578, valid_loss 0.4551
+epoch 25, train_loss 0.3634, valid_loss 0.4510
+epoch 26, train_loss 0.3494, valid_loss 0.4630
+epoch 27, train_loss 0.3671, valid_loss 0.4413
+epoch 28, train_loss 0.3469, valid_loss 0.4165
+epoch 29, train_loss 0.3651, valid_loss 0.4400
+epoch 30, train_loss 0.3547, valid_loss 0.4005
+epoch 31, train_loss 0.3489, valid_loss 0.4606
+epoch 32, train_loss 0.3533, valid_loss 0.4375
+epoch 33, train_loss 0.3569, valid_loss 0.4615
+epoch 34, train_loss 0.3527, valid_loss 0.4682
+epoch 35, train_loss 0.3564, valid_loss 0.4325
+epoch 36, train_loss 0.3533, valid_loss 0.4439
+epoch 37, train_loss 0.3473, valid_loss 0.3925
+epoch 38, train_loss 0.3479, valid_loss 0.4079
+epoch 39, train_loss 0.3527, valid_loss 0.4399
+epoch 40, train_loss 0.3589, valid_loss 0.4474
+epoch 41, train_loss 0.3510, valid_loss 0.4528
+epoch 42, train_loss 0.3564, valid_loss 0.4513
+epoch 43, train_loss 0.3474, valid_loss 0.4673
+epoch 44, train_loss 0.3483, valid_loss 0.4417
+epoch 45, train_loss 0.3558, valid_loss 0.4488
+epoch 46, train_loss 0.3582, valid_loss 0.4433
+epoch 47, train_loss 0.3510, valid_loss 0.4466
+epoch 48, train_loss 0.3626, valid_loss 0.4416
+epoch 49, train_loss 0.3575, valid_loss 0.4612
+epoch 50, train_loss 0.3527, valid_loss 0.4307
+epoch 1, train_loss 0.5701, train_acc 0.7459, valid_loss 0.4938, valid_acc 0.8022
+epoch 2, train_loss 0.5291, train_acc 0.7437, valid_loss 0.4796, valid_acc 0.8022
+epoch 3, train_loss 0.5117, train_acc 0.7550, valid_loss 0.4893, valid_acc 0.7518
+epoch 4, train_loss 0.5116, train_acc 0.7441, valid_loss 0.4736, valid_acc 0.8022
+epoch 5, train_loss 0.5059, train_acc 0.7581, valid_loss 0.4916, valid_acc 0.7518
+epoch 6, train_loss 0.5087, train_acc 0.7505, valid_loss 0.4686, valid_acc 0.8022
+epoch 7, train_loss 0.5056, train_acc 0.7536, valid_loss 0.4727, valid_acc 0.8022
+epoch 8, train_loss 0.5055, train_acc 0.7527, valid_loss 0.4706, valid_acc 0.8022
+epoch 9, train_loss 0.5031, train_acc 0.7550, valid_loss 0.4807, valid_acc 0.7518
+epoch 10, train_loss 0.5011, train_acc 0.7608, valid_loss 0.4696, valid_acc 0.7986
+epoch 11, train_loss 0.5029, train_acc 0.7509, valid_loss 0.4763, valid_acc 0.7518
+epoch 12, train_loss 0.5015, train_acc 0.7509, valid_loss 0.4710, valid_acc 0.7950
+epoch 13, train_loss 0.5009, train_acc 0.7599, valid_loss 0.4681, valid_acc 0.8022
+epoch 14, train_loss 0.4985, train_acc 0.7608, valid_loss 0.4727, valid_acc 0.7986
+epoch 15, train_loss 0.4990, train_acc 0.7536, valid_loss 0.4813, valid_acc 0.7518
+epoch 16, train_loss 0.4986, train_acc 0.7554, valid_loss 0.4672, valid_acc 0.7986
+epoch 17, train_loss 0.4987, train_acc 0.7545, valid_loss 0.4752, valid_acc 0.7446
+epoch 18, train_loss 0.4964, train_acc 0.7500, valid_loss 0.4756, valid_acc 0.7518
+epoch 19, train_loss 0.4969, train_acc 0.7505, valid_loss 0.4688, valid_acc 0.7986
+epoch 20, train_loss 0.4991, train_acc 0.7536, valid_loss 0.4672, valid_acc 0.7986
+epoch 21, train_loss 0.4960, train_acc 0.7568, valid_loss 0.4686, valid_acc 0.7986
+epoch 22, train_loss 0.4966, train_acc 0.7572, valid_loss 0.4778, valid_acc 0.7482
+epoch 23, train_loss 0.4961, train_acc 0.7518, valid_loss 0.4723, valid_acc 0.7986
+epoch 24, train_loss 0.4944, train_acc 0.7554, valid_loss 0.4713, valid_acc 0.7986
+epoch 25, train_loss 0.4922, train_acc 0.7586, valid_loss 0.4671, valid_acc 0.7986
+epoch 26, train_loss 0.4934, train_acc 0.7550, valid_loss 0.4769, valid_acc 0.7446
+epoch 27, train_loss 0.4952, train_acc 0.7554, valid_loss 0.4688, valid_acc 0.7986
+epoch 28, train_loss 0.4919, train_acc 0.7604, valid_loss 0.4671, valid_acc 0.7986
+epoch 29, train_loss 0.4925, train_acc 0.7523, valid_loss 0.4669, valid_acc 0.7986
+epoch 30, train_loss 0.4911, train_acc 0.7581, valid_loss 0.4714, valid_acc 0.7950
+epoch 31, train_loss 0.4885, train_acc 0.7608, valid_loss 0.4659, valid_acc 0.7986
+epoch 32, train_loss 0.4896, train_acc 0.7622, valid_loss 0.4689, valid_acc 0.7950
+epoch 33, train_loss 0.4912, train_acc 0.7599, valid_loss 0.4700, valid_acc 0.7950
+epoch 34, train_loss 0.4873, train_acc 0.7626, valid_loss 0.4645, valid_acc 0.7950
+epoch 35, train_loss 0.4872, train_acc 0.7622, valid_loss 0.4828, valid_acc 0.7482
+epoch 36, train_loss 0.4881, train_acc 0.7541, valid_loss 0.4669, valid_acc 0.7950
+epoch 37, train_loss 0.4862, train_acc 0.7577, valid_loss 0.4696, valid_acc 0.7950
+epoch 38, train_loss 0.4851, train_acc 0.7536, valid_loss 0.4662, valid_acc 0.7986
+epoch 39, train_loss 0.4848, train_acc 0.7572, valid_loss 0.4723, valid_acc 0.7482
+epoch 40, train_loss 0.4849, train_acc 0.7523, valid_loss 0.4740, valid_acc 0.7446
+epoch 41, train_loss 0.4832, train_acc 0.7536, valid_loss 0.4677, valid_acc 0.7950
+epoch 42, train_loss 0.4832, train_acc 0.7532, valid_loss 0.4745, valid_acc 0.7986
+epoch 43, train_loss 0.4833, train_acc 0.7536, valid_loss 0.4680, valid_acc 0.7986
+epoch 44, train_loss 0.4823, train_acc 0.7572, valid_loss 0.4661, valid_acc 0.7914
+epoch 45, train_loss 0.4815, train_acc 0.7532, valid_loss 0.4694, valid_acc 0.7914
+epoch 46, train_loss 0.4800, train_acc 0.7590, valid_loss 0.4785, valid_acc 0.7446
+epoch 47, train_loss 0.4783, train_acc 0.7613, valid_loss 0.4651, valid_acc 0.7914
+epoch 48, train_loss 0.4788, train_acc 0.7586, valid_loss 0.4644, valid_acc 0.7950
+epoch 49, train_loss 0.4800, train_acc 0.7545, valid_loss 0.4720, valid_acc 0.7410
+epoch 50, train_loss 0.4779, train_acc 0.7644, valid_loss 0.4702, valid_acc 0.7410
+test_loss before adaptation 0.7737, test_acc 0.5081
+test_loss after adaptation 0.6394, test_acc 0.6415
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+lenght of train dataset : 2220
+epoch 1, train_loss 0.5401, valid_loss 0.5610
+epoch 2, train_loss 0.4374, valid_loss 0.4832
+epoch 3, train_loss 0.4001, valid_loss 0.4949
+epoch 4, train_loss 0.3816, valid_loss 0.4664
+epoch 5, train_loss 0.3805, valid_loss 0.4660
+epoch 6, train_loss 0.3783, valid_loss 0.4675
+epoch 7, train_loss 0.3758, valid_loss 0.4636
+epoch 8, train_loss 0.3818, valid_loss 0.4975
+epoch 9, train_loss 0.3650, valid_loss 0.4636
+epoch 10, train_loss 0.3696, valid_loss 0.4548
+epoch 11, train_loss 0.3689, valid_loss 0.4456
+epoch 12, train_loss 0.3672, valid_loss 0.4189
+epoch 13, train_loss 0.3665, valid_loss 0.4496
+epoch 14, train_loss 0.3711, valid_loss 0.4684
+epoch 15, train_loss 0.3561, valid_loss 0.4299
+epoch 16, train_loss 0.3596, valid_loss 0.4662
+epoch 17, train_loss 0.3617, valid_loss 0.4498
+epoch 18, train_loss 0.3543, valid_loss 0.4489
+epoch 19, train_loss 0.3572, valid_loss 0.4232
+epoch 20, train_loss 0.3613, valid_loss 0.4417
+epoch 21, train_loss 0.3637, valid_loss 0.4530
+epoch 22, train_loss 0.3562, valid_loss 0.4644
+epoch 23, train_loss 0.3603, valid_loss 0.4489
+epoch 24, train_loss 0.3578, valid_loss 0.4551
+epoch 25, train_loss 0.3634, valid_loss 0.4510
+epoch 26, train_loss 0.3494, valid_loss 0.4630
+epoch 27, train_loss 0.3671, valid_loss 0.4413
+epoch 28, train_loss 0.3469, valid_loss 0.4165
+epoch 29, train_loss 0.3651, valid_loss 0.4400
+epoch 30, train_loss 0.3547, valid_loss 0.4005
+epoch 31, train_loss 0.3489, valid_loss 0.4606
+epoch 32, train_loss 0.3533, valid_loss 0.4375
+epoch 33, train_loss 0.3569, valid_loss 0.4615
+epoch 34, train_loss 0.3527, valid_loss 0.4682
+epoch 35, train_loss 0.3564, valid_loss 0.4325
+epoch 36, train_loss 0.3533, valid_loss 0.4439
+epoch 37, train_loss 0.3473, valid_loss 0.3925
+epoch 38, train_loss 0.3479, valid_loss 0.4079
+epoch 39, train_loss 0.3527, valid_loss 0.4399
+epoch 40, train_loss 0.3589, valid_loss 0.4474
+epoch 41, train_loss 0.3510, valid_loss 0.4528
+epoch 42, train_loss 0.3564, valid_loss 0.4513
+epoch 43, train_loss 0.3474, valid_loss 0.4673
+epoch 44, train_loss 0.3483, valid_loss 0.4417
+epoch 45, train_loss 0.3558, valid_loss 0.4488
+epoch 46, train_loss 0.3582, valid_loss 0.4433
+epoch 47, train_loss 0.3510, valid_loss 0.4466
+epoch 48, train_loss 0.3626, valid_loss 0.4416
+epoch 49, train_loss 0.3575, valid_loss 0.4612
+epoch 50, train_loss 0.3527, valid_loss 0.4307
+epoch 1, train_loss 0.5701, train_acc 0.7459, valid_loss 0.4938, valid_acc 0.8022
+epoch 2, train_loss 0.5291, train_acc 0.7437, valid_loss 0.4796, valid_acc 0.8022
+epoch 3, train_loss 0.5117, train_acc 0.7550, valid_loss 0.4893, valid_acc 0.7518
+epoch 4, train_loss 0.5116, train_acc 0.7441, valid_loss 0.4736, valid_acc 0.8022
+epoch 5, train_loss 0.5059, train_acc 0.7581, valid_loss 0.4916, valid_acc 0.7518
+epoch 6, train_loss 0.5087, train_acc 0.7505, valid_loss 0.4686, valid_acc 0.8022
+epoch 7, train_loss 0.5056, train_acc 0.7536, valid_loss 0.4727, valid_acc 0.8022
+epoch 8, train_loss 0.5055, train_acc 0.7527, valid_loss 0.4706, valid_acc 0.8022
+epoch 9, train_loss 0.5031, train_acc 0.7550, valid_loss 0.4807, valid_acc 0.7518
+epoch 10, train_loss 0.5011, train_acc 0.7608, valid_loss 0.4696, valid_acc 0.7986
+epoch 11, train_loss 0.5029, train_acc 0.7509, valid_loss 0.4763, valid_acc 0.7518
+epoch 12, train_loss 0.5015, train_acc 0.7509, valid_loss 0.4710, valid_acc 0.7950
+epoch 13, train_loss 0.5009, train_acc 0.7599, valid_loss 0.4681, valid_acc 0.8022
+epoch 14, train_loss 0.4985, train_acc 0.7608, valid_loss 0.4727, valid_acc 0.7986
+epoch 15, train_loss 0.4990, train_acc 0.7536, valid_loss 0.4813, valid_acc 0.7518
+epoch 16, train_loss 0.4986, train_acc 0.7554, valid_loss 0.4672, valid_acc 0.7986
+epoch 17, train_loss 0.4987, train_acc 0.7545, valid_loss 0.4752, valid_acc 0.7446
+epoch 18, train_loss 0.4964, train_acc 0.7500, valid_loss 0.4756, valid_acc 0.7518
+epoch 19, train_loss 0.4969, train_acc 0.7505, valid_loss 0.4688, valid_acc 0.7986
+epoch 20, train_loss 0.4991, train_acc 0.7536, valid_loss 0.4672, valid_acc 0.7986
+epoch 21, train_loss 0.4960, train_acc 0.7568, valid_loss 0.4686, valid_acc 0.7986
+epoch 22, train_loss 0.4966, train_acc 0.7572, valid_loss 0.4778, valid_acc 0.7482
+epoch 23, train_loss 0.4961, train_acc 0.7518, valid_loss 0.4723, valid_acc 0.7986
+epoch 24, train_loss 0.4944, train_acc 0.7554, valid_loss 0.4713, valid_acc 0.7986
+epoch 25, train_loss 0.4922, train_acc 0.7586, valid_loss 0.4671, valid_acc 0.7986
+epoch 26, train_loss 0.4934, train_acc 0.7550, valid_loss 0.4769, valid_acc 0.7446
+epoch 27, train_loss 0.4952, train_acc 0.7554, valid_loss 0.4688, valid_acc 0.7986
+epoch 28, train_loss 0.4919, train_acc 0.7604, valid_loss 0.4671, valid_acc 0.7986
+epoch 29, train_loss 0.4925, train_acc 0.7523, valid_loss 0.4669, valid_acc 0.7986
+epoch 30, train_loss 0.4911, train_acc 0.7581, valid_loss 0.4714, valid_acc 0.7950
+epoch 31, train_loss 0.4885, train_acc 0.7608, valid_loss 0.4659, valid_acc 0.7986
+epoch 32, train_loss 0.4896, train_acc 0.7622, valid_loss 0.4689, valid_acc 0.7950
+epoch 33, train_loss 0.4912, train_acc 0.7599, valid_loss 0.4700, valid_acc 0.7950
+epoch 34, train_loss 0.4873, train_acc 0.7626, valid_loss 0.4645, valid_acc 0.7950
+epoch 35, train_loss 0.4872, train_acc 0.7622, valid_loss 0.4828, valid_acc 0.7482
+epoch 36, train_loss 0.4881, train_acc 0.7541, valid_loss 0.4669, valid_acc 0.7950
+epoch 37, train_loss 0.4862, train_acc 0.7577, valid_loss 0.4696, valid_acc 0.7950
+epoch 38, train_loss 0.4851, train_acc 0.7536, valid_loss 0.4662, valid_acc 0.7986
+epoch 39, train_loss 0.4848, train_acc 0.7572, valid_loss 0.4723, valid_acc 0.7482
+epoch 40, train_loss 0.4849, train_acc 0.7523, valid_loss 0.4740, valid_acc 0.7446
+epoch 41, train_loss 0.4832, train_acc 0.7536, valid_loss 0.4677, valid_acc 0.7950
+epoch 42, train_loss 0.4832, train_acc 0.7532, valid_loss 0.4745, valid_acc 0.7986
+epoch 43, train_loss 0.4833, train_acc 0.7536, valid_loss 0.4680, valid_acc 0.7986
+epoch 44, train_loss 0.4823, train_acc 0.7572, valid_loss 0.4661, valid_acc 0.7914
+epoch 45, train_loss 0.4815, train_acc 0.7532, valid_loss 0.4694, valid_acc 0.7914
+epoch 46, train_loss 0.4800, train_acc 0.7590, valid_loss 0.4785, valid_acc 0.7446
+epoch 47, train_loss 0.4783, train_acc 0.7613, valid_loss 0.4651, valid_acc 0.7914
+epoch 48, train_loss 0.4788, train_acc 0.7586, valid_loss 0.4644, valid_acc 0.7950
+epoch 49, train_loss 0.4800, train_acc 0.7545, valid_loss 0.4720, valid_acc 0.7410
+epoch 50, train_loss 0.4779, train_acc 0.7644, valid_loss 0.4702, valid_acc 0.7410
+test_loss before adaptation 0.7737, test_acc 0.5081
+test_loss after adaptation 0.6394, test_acc 0.6415
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+lenght of train dataset : 2220
+epoch 1, train_loss 0.5401, valid_loss 0.5610
+epoch 2, train_loss 0.4374, valid_loss 0.4832
+epoch 3, train_loss 0.4001, valid_loss 0.4949
+epoch 4, train_loss 0.3816, valid_loss 0.4664
+epoch 5, train_loss 0.3805, valid_loss 0.4660
+epoch 6, train_loss 0.3783, valid_loss 0.4675
+epoch 7, train_loss 0.3758, valid_loss 0.4636
+epoch 8, train_loss 0.3818, valid_loss 0.4975
+epoch 9, train_loss 0.3650, valid_loss 0.4636
+epoch 10, train_loss 0.3696, valid_loss 0.4548
+epoch 11, train_loss 0.3689, valid_loss 0.4456
+epoch 12, train_loss 0.3672, valid_loss 0.4189
+epoch 13, train_loss 0.3665, valid_loss 0.4496
+epoch 14, train_loss 0.3711, valid_loss 0.4684
+epoch 15, train_loss 0.3561, valid_loss 0.4299
+epoch 16, train_loss 0.3596, valid_loss 0.4662
+epoch 17, train_loss 0.3617, valid_loss 0.4498
+epoch 18, train_loss 0.3543, valid_loss 0.4489
+epoch 19, train_loss 0.3572, valid_loss 0.4232
+epoch 20, train_loss 0.3613, valid_loss 0.4417
+epoch 21, train_loss 0.3637, valid_loss 0.4530
+epoch 22, train_loss 0.3562, valid_loss 0.4644
+epoch 23, train_loss 0.3603, valid_loss 0.4489
+epoch 24, train_loss 0.3578, valid_loss 0.4551
+epoch 25, train_loss 0.3634, valid_loss 0.4510
+epoch 26, train_loss 0.3494, valid_loss 0.4630
+epoch 27, train_loss 0.3671, valid_loss 0.4413
+epoch 28, train_loss 0.3469, valid_loss 0.4165
+epoch 29, train_loss 0.3651, valid_loss 0.4400
+epoch 30, train_loss 0.3547, valid_loss 0.4005
+epoch 31, train_loss 0.3489, valid_loss 0.4606
+epoch 32, train_loss 0.3533, valid_loss 0.4375
+epoch 33, train_loss 0.3569, valid_loss 0.4615
+epoch 34, train_loss 0.3527, valid_loss 0.4682
+epoch 35, train_loss 0.3564, valid_loss 0.4325
+epoch 36, train_loss 0.3533, valid_loss 0.4439
+epoch 37, train_loss 0.3473, valid_loss 0.3925
+epoch 38, train_loss 0.3479, valid_loss 0.4079
+epoch 39, train_loss 0.3527, valid_loss 0.4399
+epoch 40, train_loss 0.3589, valid_loss 0.4474
+epoch 41, train_loss 0.3510, valid_loss 0.4528
+epoch 42, train_loss 0.3564, valid_loss 0.4513
+epoch 43, train_loss 0.3474, valid_loss 0.4673
+epoch 44, train_loss 0.3483, valid_loss 0.4417
+epoch 45, train_loss 0.3558, valid_loss 0.4488
+epoch 46, train_loss 0.3582, valid_loss 0.4433
+epoch 47, train_loss 0.3510, valid_loss 0.4466
+epoch 48, train_loss 0.3626, valid_loss 0.4416
+epoch 49, train_loss 0.3575, valid_loss 0.4612
+epoch 50, train_loss 0.3527, valid_loss 0.4307
+epoch 1, train_loss 0.5701, train_acc 0.7459, valid_loss 0.4938, valid_acc 0.8022
+epoch 2, train_loss 0.5291, train_acc 0.7437, valid_loss 0.4796, valid_acc 0.8022
+epoch 3, train_loss 0.5117, train_acc 0.7550, valid_loss 0.4893, valid_acc 0.7518
+epoch 4, train_loss 0.5116, train_acc 0.7441, valid_loss 0.4736, valid_acc 0.8022
+epoch 5, train_loss 0.5059, train_acc 0.7581, valid_loss 0.4916, valid_acc 0.7518
+epoch 6, train_loss 0.5087, train_acc 0.7505, valid_loss 0.4686, valid_acc 0.8022
+epoch 7, train_loss 0.5056, train_acc 0.7536, valid_loss 0.4727, valid_acc 0.8022
+epoch 8, train_loss 0.5055, train_acc 0.7527, valid_loss 0.4706, valid_acc 0.8022
+epoch 9, train_loss 0.5031, train_acc 0.7550, valid_loss 0.4807, valid_acc 0.7518
+epoch 10, train_loss 0.5011, train_acc 0.7608, valid_loss 0.4696, valid_acc 0.7986
+epoch 11, train_loss 0.5029, train_acc 0.7509, valid_loss 0.4763, valid_acc 0.7518
+epoch 12, train_loss 0.5015, train_acc 0.7509, valid_loss 0.4710, valid_acc 0.7950
+epoch 13, train_loss 0.5009, train_acc 0.7599, valid_loss 0.4681, valid_acc 0.8022
+epoch 14, train_loss 0.4985, train_acc 0.7608, valid_loss 0.4727, valid_acc 0.7986
+epoch 15, train_loss 0.4990, train_acc 0.7536, valid_loss 0.4813, valid_acc 0.7518
+epoch 16, train_loss 0.4986, train_acc 0.7554, valid_loss 0.4672, valid_acc 0.7986
+epoch 17, train_loss 0.4987, train_acc 0.7545, valid_loss 0.4752, valid_acc 0.7446
+epoch 18, train_loss 0.4964, train_acc 0.7500, valid_loss 0.4756, valid_acc 0.7518
+epoch 19, train_loss 0.4969, train_acc 0.7505, valid_loss 0.4688, valid_acc 0.7986
+epoch 20, train_loss 0.4991, train_acc 0.7536, valid_loss 0.4672, valid_acc 0.7986
+epoch 21, train_loss 0.4960, train_acc 0.7568, valid_loss 0.4686, valid_acc 0.7986
+epoch 22, train_loss 0.4966, train_acc 0.7572, valid_loss 0.4778, valid_acc 0.7482
+epoch 23, train_loss 0.4961, train_acc 0.7518, valid_loss 0.4723, valid_acc 0.7986
+epoch 24, train_loss 0.4944, train_acc 0.7554, valid_loss 0.4713, valid_acc 0.7986
+epoch 25, train_loss 0.4922, train_acc 0.7586, valid_loss 0.4671, valid_acc 0.7986
+epoch 26, train_loss 0.4934, train_acc 0.7550, valid_loss 0.4769, valid_acc 0.7446
+epoch 27, train_loss 0.4952, train_acc 0.7554, valid_loss 0.4688, valid_acc 0.7986
+epoch 28, train_loss 0.4919, train_acc 0.7604, valid_loss 0.4671, valid_acc 0.7986
+epoch 29, train_loss 0.4925, train_acc 0.7523, valid_loss 0.4669, valid_acc 0.7986
+epoch 30, train_loss 0.4911, train_acc 0.7581, valid_loss 0.4714, valid_acc 0.7950
+epoch 31, train_loss 0.4885, train_acc 0.7608, valid_loss 0.4659, valid_acc 0.7986
+epoch 32, train_loss 0.4896, train_acc 0.7622, valid_loss 0.4689, valid_acc 0.7950
+epoch 33, train_loss 0.4912, train_acc 0.7599, valid_loss 0.4700, valid_acc 0.7950
+epoch 34, train_loss 0.4873, train_acc 0.7626, valid_loss 0.4645, valid_acc 0.7950
+epoch 35, train_loss 0.4872, train_acc 0.7622, valid_loss 0.4828, valid_acc 0.7482
+epoch 36, train_loss 0.4881, train_acc 0.7541, valid_loss 0.4669, valid_acc 0.7950
+epoch 37, train_loss 0.4862, train_acc 0.7577, valid_loss 0.4696, valid_acc 0.7950
+epoch 38, train_loss 0.4851, train_acc 0.7536, valid_loss 0.4662, valid_acc 0.7986
+epoch 39, train_loss 0.4848, train_acc 0.7572, valid_loss 0.4723, valid_acc 0.7482
+epoch 40, train_loss 0.4849, train_acc 0.7523, valid_loss 0.4740, valid_acc 0.7446
+epoch 41, train_loss 0.4832, train_acc 0.7536, valid_loss 0.4677, valid_acc 0.7950
+epoch 42, train_loss 0.4832, train_acc 0.7532, valid_loss 0.4745, valid_acc 0.7986
+epoch 43, train_loss 0.4833, train_acc 0.7536, valid_loss 0.4680, valid_acc 0.7986
+epoch 44, train_loss 0.4823, train_acc 0.7572, valid_loss 0.4661, valid_acc 0.7914
+epoch 45, train_loss 0.4815, train_acc 0.7532, valid_loss 0.4694, valid_acc 0.7914
+epoch 46, train_loss 0.4800, train_acc 0.7590, valid_loss 0.4785, valid_acc 0.7446
+epoch 47, train_loss 0.4783, train_acc 0.7613, valid_loss 0.4651, valid_acc 0.7914
+epoch 48, train_loss 0.4788, train_acc 0.7586, valid_loss 0.4644, valid_acc 0.7950
+epoch 49, train_loss 0.4800, train_acc 0.7545, valid_loss 0.4720, valid_acc 0.7410
+epoch 50, train_loss 0.4779, train_acc 0.7644, valid_loss 0.4702, valid_acc 0.7410
+test_loss before adaptation 0.7737, test_acc 0.5081
+test_loss after adaptation 0.6397, test_acc 0.6412
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+lenght of train dataset : 2220
+epoch 1, train_loss 0.5401, valid_loss 0.5610
+epoch 2, train_loss 0.4374, valid_loss 0.4832
+epoch 3, train_loss 0.4001, valid_loss 0.4949
+epoch 4, train_loss 0.3816, valid_loss 0.4664
+epoch 5, train_loss 0.3805, valid_loss 0.4660
+epoch 6, train_loss 0.3783, valid_loss 0.4675
+epoch 7, train_loss 0.3758, valid_loss 0.4636
+epoch 8, train_loss 0.3818, valid_loss 0.4975
+epoch 9, train_loss 0.3650, valid_loss 0.4636
+epoch 10, train_loss 0.3696, valid_loss 0.4548
+epoch 11, train_loss 0.3689, valid_loss 0.4456
+epoch 12, train_loss 0.3672, valid_loss 0.4189
+epoch 13, train_loss 0.3665, valid_loss 0.4496
+epoch 14, train_loss 0.3711, valid_loss 0.4684
+epoch 15, train_loss 0.3561, valid_loss 0.4299
+epoch 16, train_loss 0.3596, valid_loss 0.4662
+epoch 17, train_loss 0.3617, valid_loss 0.4498
+epoch 18, train_loss 0.3543, valid_loss 0.4489
+epoch 19, train_loss 0.3572, valid_loss 0.4232
+epoch 20, train_loss 0.3613, valid_loss 0.4417
+epoch 21, train_loss 0.3637, valid_loss 0.4530
+epoch 22, train_loss 0.3562, valid_loss 0.4644
+epoch 23, train_loss 0.3603, valid_loss 0.4489
+epoch 24, train_loss 0.3578, valid_loss 0.4551
+epoch 25, train_loss 0.3634, valid_loss 0.4510
+epoch 26, train_loss 0.3494, valid_loss 0.4630
+epoch 27, train_loss 0.3671, valid_loss 0.4413
+epoch 28, train_loss 0.3469, valid_loss 0.4165
+epoch 29, train_loss 0.3651, valid_loss 0.4400
+epoch 30, train_loss 0.3547, valid_loss 0.4005
+epoch 31, train_loss 0.3489, valid_loss 0.4606
+epoch 32, train_loss 0.3533, valid_loss 0.4375
+epoch 33, train_loss 0.3569, valid_loss 0.4615
+epoch 34, train_loss 0.3527, valid_loss 0.4682
+epoch 35, train_loss 0.3564, valid_loss 0.4325
+epoch 36, train_loss 0.3533, valid_loss 0.4439
+epoch 37, train_loss 0.3473, valid_loss 0.3925
+epoch 38, train_loss 0.3479, valid_loss 0.4079
+epoch 39, train_loss 0.3527, valid_loss 0.4399
+epoch 40, train_loss 0.3589, valid_loss 0.4474
+epoch 41, train_loss 0.3510, valid_loss 0.4528
+epoch 42, train_loss 0.3564, valid_loss 0.4513
+epoch 43, train_loss 0.3474, valid_loss 0.4673
+epoch 44, train_loss 0.3483, valid_loss 0.4417
+epoch 45, train_loss 0.3558, valid_loss 0.4488
+epoch 46, train_loss 0.3582, valid_loss 0.4433
+epoch 47, train_loss 0.3510, valid_loss 0.4466
+epoch 48, train_loss 0.3626, valid_loss 0.4416
+epoch 49, train_loss 0.3575, valid_loss 0.4612
+epoch 50, train_loss 0.3527, valid_loss 0.4307
+epoch 1, train_loss 0.5701, train_acc 0.7459, valid_loss 0.4938, valid_acc 0.8022
+epoch 2, train_loss 0.5291, train_acc 0.7437, valid_loss 0.4796, valid_acc 0.8022
+epoch 3, train_loss 0.5117, train_acc 0.7550, valid_loss 0.4893, valid_acc 0.7518
+epoch 4, train_loss 0.5116, train_acc 0.7441, valid_loss 0.4736, valid_acc 0.8022
+epoch 5, train_loss 0.5059, train_acc 0.7581, valid_loss 0.4916, valid_acc 0.7518
+epoch 6, train_loss 0.5087, train_acc 0.7505, valid_loss 0.4686, valid_acc 0.8022
+epoch 7, train_loss 0.5056, train_acc 0.7536, valid_loss 0.4727, valid_acc 0.8022
+epoch 8, train_loss 0.5055, train_acc 0.7527, valid_loss 0.4706, valid_acc 0.8022
+epoch 9, train_loss 0.5031, train_acc 0.7550, valid_loss 0.4807, valid_acc 0.7518
+epoch 10, train_loss 0.5011, train_acc 0.7608, valid_loss 0.4696, valid_acc 0.7986
+epoch 11, train_loss 0.5029, train_acc 0.7509, valid_loss 0.4763, valid_acc 0.7518
+epoch 12, train_loss 0.5015, train_acc 0.7509, valid_loss 0.4710, valid_acc 0.7950
+epoch 13, train_loss 0.5009, train_acc 0.7599, valid_loss 0.4681, valid_acc 0.8022
+epoch 14, train_loss 0.4985, train_acc 0.7608, valid_loss 0.4727, valid_acc 0.7986
+epoch 15, train_loss 0.4990, train_acc 0.7536, valid_loss 0.4813, valid_acc 0.7518
+epoch 16, train_loss 0.4986, train_acc 0.7554, valid_loss 0.4672, valid_acc 0.7986
+epoch 17, train_loss 0.4987, train_acc 0.7545, valid_loss 0.4752, valid_acc 0.7446
+epoch 18, train_loss 0.4964, train_acc 0.7500, valid_loss 0.4756, valid_acc 0.7518
+epoch 19, train_loss 0.4969, train_acc 0.7505, valid_loss 0.4688, valid_acc 0.7986
+epoch 20, train_loss 0.4991, train_acc 0.7536, valid_loss 0.4672, valid_acc 0.7986
+epoch 21, train_loss 0.4960, train_acc 0.7568, valid_loss 0.4686, valid_acc 0.7986
+epoch 22, train_loss 0.4966, train_acc 0.7572, valid_loss 0.4778, valid_acc 0.7482
+epoch 23, train_loss 0.4961, train_acc 0.7518, valid_loss 0.4723, valid_acc 0.7986
+epoch 24, train_loss 0.4944, train_acc 0.7554, valid_loss 0.4713, valid_acc 0.7986
+epoch 25, train_loss 0.4922, train_acc 0.7586, valid_loss 0.4671, valid_acc 0.7986
+epoch 26, train_loss 0.4934, train_acc 0.7550, valid_loss 0.4769, valid_acc 0.7446
+epoch 27, train_loss 0.4952, train_acc 0.7554, valid_loss 0.4688, valid_acc 0.7986
+epoch 28, train_loss 0.4919, train_acc 0.7604, valid_loss 0.4671, valid_acc 0.7986
+epoch 29, train_loss 0.4925, train_acc 0.7523, valid_loss 0.4669, valid_acc 0.7986
+epoch 30, train_loss 0.4911, train_acc 0.7581, valid_loss 0.4714, valid_acc 0.7950
+epoch 31, train_loss 0.4885, train_acc 0.7608, valid_loss 0.4659, valid_acc 0.7986
+epoch 32, train_loss 0.4896, train_acc 0.7622, valid_loss 0.4689, valid_acc 0.7950
+epoch 33, train_loss 0.4912, train_acc 0.7599, valid_loss 0.4700, valid_acc 0.7950
+epoch 34, train_loss 0.4873, train_acc 0.7626, valid_loss 0.4645, valid_acc 0.7950
+epoch 35, train_loss 0.4872, train_acc 0.7622, valid_loss 0.4828, valid_acc 0.7482
+epoch 36, train_loss 0.4881, train_acc 0.7541, valid_loss 0.4669, valid_acc 0.7950
+epoch 37, train_loss 0.4862, train_acc 0.7577, valid_loss 0.4696, valid_acc 0.7950
+epoch 38, train_loss 0.4851, train_acc 0.7536, valid_loss 0.4662, valid_acc 0.7986
+epoch 39, train_loss 0.4848, train_acc 0.7572, valid_loss 0.4723, valid_acc 0.7482
+epoch 40, train_loss 0.4849, train_acc 0.7523, valid_loss 0.4740, valid_acc 0.7446
+epoch 41, train_loss 0.4832, train_acc 0.7536, valid_loss 0.4677, valid_acc 0.7950
+epoch 42, train_loss 0.4832, train_acc 0.7532, valid_loss 0.4745, valid_acc 0.7986
+epoch 43, train_loss 0.4833, train_acc 0.7536, valid_loss 0.4680, valid_acc 0.7986
+epoch 44, train_loss 0.4823, train_acc 0.7572, valid_loss 0.4661, valid_acc 0.7914
+epoch 45, train_loss 0.4815, train_acc 0.7532, valid_loss 0.4694, valid_acc 0.7914
+epoch 46, train_loss 0.4800, train_acc 0.7590, valid_loss 0.4785, valid_acc 0.7446
+epoch 47, train_loss 0.4783, train_acc 0.7613, valid_loss 0.4651, valid_acc 0.7914
+epoch 48, train_loss 0.4788, train_acc 0.7586, valid_loss 0.4644, valid_acc 0.7950
+epoch 49, train_loss 0.4800, train_acc 0.7545, valid_loss 0.4720, valid_acc 0.7410
+epoch 50, train_loss 0.4779, train_acc 0.7644, valid_loss 0.4702, valid_acc 0.7410
+test_loss before adaptation 0.7737, test_acc 0.5081
+test_loss after adaptation 0.6397, test_acc 0.6412
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+delta: 0.0001
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+lenght of train dataset : 2220
+epoch 1, train_loss 0.5401, valid_loss 0.5610
+epoch 2, train_loss 0.4374, valid_loss 0.4832
+epoch 3, train_loss 0.4001, valid_loss 0.4949
+epoch 4, train_loss 0.3816, valid_loss 0.4664
+epoch 5, train_loss 0.3805, valid_loss 0.4660
+epoch 6, train_loss 0.3783, valid_loss 0.4675
+epoch 7, train_loss 0.3758, valid_loss 0.4636
+epoch 8, train_loss 0.3818, valid_loss 0.4975
+epoch 9, train_loss 0.3650, valid_loss 0.4636
+epoch 10, train_loss 0.3696, valid_loss 0.4548
+epoch 11, train_loss 0.3689, valid_loss 0.4456
+epoch 12, train_loss 0.3672, valid_loss 0.4189
+epoch 13, train_loss 0.3665, valid_loss 0.4496
+epoch 14, train_loss 0.3711, valid_loss 0.4684
+epoch 15, train_loss 0.3561, valid_loss 0.4299
+epoch 16, train_loss 0.3596, valid_loss 0.4662
+epoch 17, train_loss 0.3617, valid_loss 0.4498
+epoch 18, train_loss 0.3543, valid_loss 0.4489
+epoch 19, train_loss 0.3572, valid_loss 0.4232
+epoch 20, train_loss 0.3613, valid_loss 0.4417
+epoch 21, train_loss 0.3637, valid_loss 0.4530
+epoch 22, train_loss 0.3562, valid_loss 0.4644
+epoch 23, train_loss 0.3603, valid_loss 0.4489
+epoch 24, train_loss 0.3578, valid_loss 0.4551
+epoch 25, train_loss 0.3634, valid_loss 0.4510
+epoch 26, train_loss 0.3494, valid_loss 0.4630
+epoch 27, train_loss 0.3671, valid_loss 0.4413
+epoch 28, train_loss 0.3469, valid_loss 0.4165
+epoch 29, train_loss 0.3651, valid_loss 0.4400
+epoch 30, train_loss 0.3547, valid_loss 0.4005
+epoch 31, train_loss 0.3489, valid_loss 0.4606
+epoch 32, train_loss 0.3533, valid_loss 0.4375
+epoch 33, train_loss 0.3569, valid_loss 0.4615
+epoch 34, train_loss 0.3527, valid_loss 0.4682
+epoch 35, train_loss 0.3564, valid_loss 0.4325
+epoch 36, train_loss 0.3533, valid_loss 0.4439
+epoch 37, train_loss 0.3473, valid_loss 0.3925
+epoch 38, train_loss 0.3479, valid_loss 0.4079
+epoch 39, train_loss 0.3527, valid_loss 0.4399
+epoch 40, train_loss 0.3589, valid_loss 0.4474
+epoch 41, train_loss 0.3510, valid_loss 0.4528
+epoch 42, train_loss 0.3564, valid_loss 0.4513
+epoch 43, train_loss 0.3474, valid_loss 0.4673
+epoch 44, train_loss 0.3483, valid_loss 0.4417
+epoch 45, train_loss 0.3558, valid_loss 0.4488
+epoch 46, train_loss 0.3582, valid_loss 0.4433
+epoch 47, train_loss 0.3510, valid_loss 0.4466
+epoch 48, train_loss 0.3626, valid_loss 0.4416
+epoch 49, train_loss 0.3575, valid_loss 0.4612
+epoch 50, train_loss 0.3527, valid_loss 0.4307
+epoch 1, train_loss 0.5701, train_acc 0.7459, valid_loss 0.4938, valid_acc 0.8022
+epoch 2, train_loss 0.5291, train_acc 0.7437, valid_loss 0.4796, valid_acc 0.8022
+epoch 3, train_loss 0.5117, train_acc 0.7550, valid_loss 0.4893, valid_acc 0.7518
+epoch 4, train_loss 0.5116, train_acc 0.7441, valid_loss 0.4736, valid_acc 0.8022
+epoch 5, train_loss 0.5059, train_acc 0.7581, valid_loss 0.4916, valid_acc 0.7518
+epoch 6, train_loss 0.5087, train_acc 0.7505, valid_loss 0.4686, valid_acc 0.8022
+epoch 7, train_loss 0.5056, train_acc 0.7536, valid_loss 0.4727, valid_acc 0.8022
+epoch 8, train_loss 0.5055, train_acc 0.7527, valid_loss 0.4706, valid_acc 0.8022
+epoch 9, train_loss 0.5031, train_acc 0.7550, valid_loss 0.4807, valid_acc 0.7518
+epoch 10, train_loss 0.5011, train_acc 0.7608, valid_loss 0.4696, valid_acc 0.7986
+epoch 11, train_loss 0.5029, train_acc 0.7509, valid_loss 0.4763, valid_acc 0.7518
+epoch 12, train_loss 0.5015, train_acc 0.7509, valid_loss 0.4710, valid_acc 0.7950
+epoch 13, train_loss 0.5009, train_acc 0.7599, valid_loss 0.4681, valid_acc 0.8022
+epoch 14, train_loss 0.4985, train_acc 0.7608, valid_loss 0.4727, valid_acc 0.7986
+epoch 15, train_loss 0.4990, train_acc 0.7536, valid_loss 0.4813, valid_acc 0.7518
+epoch 16, train_loss 0.4986, train_acc 0.7554, valid_loss 0.4672, valid_acc 0.7986
+epoch 17, train_loss 0.4987, train_acc 0.7545, valid_loss 0.4752, valid_acc 0.7446
+epoch 18, train_loss 0.4964, train_acc 0.7500, valid_loss 0.4756, valid_acc 0.7518
+epoch 19, train_loss 0.4969, train_acc 0.7505, valid_loss 0.4688, valid_acc 0.7986
+epoch 20, train_loss 0.4991, train_acc 0.7536, valid_loss 0.4672, valid_acc 0.7986
+epoch 21, train_loss 0.4960, train_acc 0.7568, valid_loss 0.4686, valid_acc 0.7986
+epoch 22, train_loss 0.4966, train_acc 0.7572, valid_loss 0.4778, valid_acc 0.7482
+epoch 23, train_loss 0.4961, train_acc 0.7518, valid_loss 0.4723, valid_acc 0.7986
+epoch 24, train_loss 0.4944, train_acc 0.7554, valid_loss 0.4713, valid_acc 0.7986
+epoch 25, train_loss 0.4922, train_acc 0.7586, valid_loss 0.4671, valid_acc 0.7986
+epoch 26, train_loss 0.4934, train_acc 0.7550, valid_loss 0.4769, valid_acc 0.7446
+epoch 27, train_loss 0.4952, train_acc 0.7554, valid_loss 0.4688, valid_acc 0.7986
+epoch 28, train_loss 0.4919, train_acc 0.7604, valid_loss 0.4671, valid_acc 0.7986
+epoch 29, train_loss 0.4925, train_acc 0.7523, valid_loss 0.4669, valid_acc 0.7986
+epoch 30, train_loss 0.4911, train_acc 0.7581, valid_loss 0.4714, valid_acc 0.7950
+epoch 31, train_loss 0.4885, train_acc 0.7608, valid_loss 0.4659, valid_acc 0.7986
+epoch 32, train_loss 0.4896, train_acc 0.7622, valid_loss 0.4689, valid_acc 0.7950
+epoch 33, train_loss 0.4912, train_acc 0.7599, valid_loss 0.4700, valid_acc 0.7950
+epoch 34, train_loss 0.4873, train_acc 0.7626, valid_loss 0.4645, valid_acc 0.7950
+epoch 35, train_loss 0.4872, train_acc 0.7622, valid_loss 0.4828, valid_acc 0.7482
+epoch 36, train_loss 0.4881, train_acc 0.7541, valid_loss 0.4669, valid_acc 0.7950
+epoch 37, train_loss 0.4862, train_acc 0.7577, valid_loss 0.4696, valid_acc 0.7950
+epoch 38, train_loss 0.4851, train_acc 0.7536, valid_loss 0.4662, valid_acc 0.7986
+epoch 39, train_loss 0.4848, train_acc 0.7572, valid_loss 0.4723, valid_acc 0.7482
+epoch 40, train_loss 0.4849, train_acc 0.7523, valid_loss 0.4740, valid_acc 0.7446
+epoch 41, train_loss 0.4832, train_acc 0.7536, valid_loss 0.4677, valid_acc 0.7950
+epoch 42, train_loss 0.4832, train_acc 0.7532, valid_loss 0.4745, valid_acc 0.7986
+epoch 43, train_loss 0.4833, train_acc 0.7536, valid_loss 0.4680, valid_acc 0.7986
+epoch 44, train_loss 0.4823, train_acc 0.7572, valid_loss 0.4661, valid_acc 0.7914
+epoch 45, train_loss 0.4815, train_acc 0.7532, valid_loss 0.4694, valid_acc 0.7914
+epoch 46, train_loss 0.4800, train_acc 0.7590, valid_loss 0.4785, valid_acc 0.7446
+epoch 47, train_loss 0.4783, train_acc 0.7613, valid_loss 0.4651, valid_acc 0.7914
+epoch 48, train_loss 0.4788, train_acc 0.7586, valid_loss 0.4644, valid_acc 0.7950
+epoch 49, train_loss 0.4800, train_acc 0.7545, valid_loss 0.4720, valid_acc 0.7410
+epoch 50, train_loss 0.4779, train_acc 0.7644, valid_loss 0.4702, valid_acc 0.7410
+test_loss before adaptation 0.7737, test_acc 0.5081
+test_loss after adaptation 0.6397, test_acc 0.6412
+model: MLP
+meta_dataset: tableshift
+dataset: heloc
+shift_type: column_drop
+shift_severity: 0.6
+normalizer: StandardScaler
+imputation_method: emd
+pretrain_epochs: 50
+pretrain_batch_size: 64
+pretrain_optimizer: AdamW
+pretrain_lr: 0.0001
+mask_ratio: 0.75
+mixup: null
+mixup_scale: 3
+train_ratio: 1.0
+retrain: true
+epochs: 50
+train_batch_size: 64
+train_optimizer: AdamW
+train_lr: 0.0001
+test_mask_ratio: 0.2
+episodic: true
+num_steps: 30
+test_batch_size: 64
+test_optimizer: AdamW
+test_lr: 0.0001
+no_mask: false
+tt_imputation_method: emd
+train_params:
+- all
+method:
+- mae
+temp: 1
+delta: 0.0001
+renyi_entropy_alpha: 1.5
+ns_threshold: 0.04
+kld_weight: 0.1
+num_estimators: 500
+max_depth: 4
+device: cuda
+gpu_idx: 0
+seed: 0
+log_dir: log_final_wepisodic
+out_dir: exps/test_mae
+tsne: false
+tsne_dir: tsne
+wandb_user: drumpt
+memo_aug_num: 64
+log_prefix: log_final
+slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
+slack_channel: experiment
+
+lenght of train dataset : 2220
+epoch 1, train_loss 0.5401, valid_loss 0.5610
+epoch 2, train_loss 0.4374, valid_loss 0.4832
+epoch 3, train_loss 0.4001, valid_loss 0.4949
+epoch 4, train_loss 0.3816, valid_loss 0.4664
+epoch 5, train_loss 0.3805, valid_loss 0.4660
+epoch 6, train_loss 0.3783, valid_loss 0.4675
+epoch 7, train_loss 0.3758, valid_loss 0.4636
+epoch 8, train_loss 0.3818, valid_loss 0.4975
+epoch 9, train_loss 0.3650, valid_loss 0.4636
+epoch 10, train_loss 0.3696, valid_loss 0.4548
+epoch 11, train_loss 0.3689, valid_loss 0.4456
+epoch 12, train_loss 0.3672, valid_loss 0.4189
+epoch 13, train_loss 0.3665, valid_loss 0.4496
+epoch 14, train_loss 0.3711, valid_loss 0.4684
+epoch 15, train_loss 0.3561, valid_loss 0.4299
+epoch 16, train_loss 0.3596, valid_loss 0.4662
+epoch 17, train_loss 0.3617, valid_loss 0.4498
+epoch 18, train_loss 0.3543, valid_loss 0.4489
+epoch 19, train_loss 0.3572, valid_loss 0.4232
+epoch 20, train_loss 0.3613, valid_loss 0.4417
+epoch 21, train_loss 0.3637, valid_loss 0.4530
+epoch 22, train_loss 0.3562, valid_loss 0.4644
+epoch 23, train_loss 0.3603, valid_loss 0.4489
+epoch 24, train_loss 0.3578, valid_loss 0.4551
+epoch 25, train_loss 0.3634, valid_loss 0.4510
+epoch 26, train_loss 0.3494, valid_loss 0.4630
+epoch 27, train_loss 0.3671, valid_loss 0.4413
+epoch 28, train_loss 0.3469, valid_loss 0.4165
+epoch 29, train_loss 0.3651, valid_loss 0.4400
+epoch 30, train_loss 0.3547, valid_loss 0.4005
+epoch 31, train_loss 0.3489, valid_loss 0.4606
+epoch 32, train_loss 0.3533, valid_loss 0.4375
+epoch 33, train_loss 0.3569, valid_loss 0.4615
+epoch 34, train_loss 0.3527, valid_loss 0.4682
+epoch 35, train_loss 0.3564, valid_loss 0.4325
+epoch 36, train_loss 0.3533, valid_loss 0.4439
+epoch 37, train_loss 0.3473, valid_loss 0.3925
+epoch 38, train_loss 0.3479, valid_loss 0.4079
+epoch 39, train_loss 0.3527, valid_loss 0.4399
+epoch 40, train_loss 0.3589, valid_loss 0.4474
+epoch 41, train_loss 0.3510, valid_loss 0.4528
+epoch 42, train_loss 0.3564, valid_loss 0.4513
+epoch 43, train_loss 0.3474, valid_loss 0.4673
+epoch 44, train_loss 0.3483, valid_loss 0.4417
+epoch 45, train_loss 0.3558, valid_loss 0.4488
+epoch 46, train_loss 0.3582, valid_loss 0.4433
+epoch 47, train_loss 0.3510, valid_loss 0.4466
+epoch 48, train_loss 0.3626, valid_loss 0.4416
+epoch 49, train_loss 0.3575, valid_loss 0.4612
+epoch 50, train_loss 0.3527, valid_loss 0.4307
+epoch 1, train_loss 0.5701, train_acc 0.7459, valid_loss 0.4938, valid_acc 0.8022
+epoch 2, train_loss 0.5291, train_acc 0.7437, valid_loss 0.4796, valid_acc 0.8022
+epoch 3, train_loss 0.5117, train_acc 0.7550, valid_loss 0.4893, valid_acc 0.7518
+epoch 4, train_loss 0.5116, train_acc 0.7441, valid_loss 0.4736, valid_acc 0.8022
+epoch 5, train_loss 0.5059, train_acc 0.7581, valid_loss 0.4916, valid_acc 0.7518
+epoch 6, train_loss 0.5087, train_acc 0.7505, valid_loss 0.4686, valid_acc 0.8022
+epoch 7, train_loss 0.5056, train_acc 0.7536, valid_loss 0.4727, valid_acc 0.8022
+epoch 8, train_loss 0.5055, train_acc 0.7527, valid_loss 0.4706, valid_acc 0.8022
+epoch 9, train_loss 0.5031, train_acc 0.7550, valid_loss 0.4807, valid_acc 0.7518
+epoch 10, train_loss 0.5011, train_acc 0.7608, valid_loss 0.4696, valid_acc 0.7986
+epoch 11, train_loss 0.5029, train_acc 0.7509, valid_loss 0.4763, valid_acc 0.7518
+epoch 12, train_loss 0.5015, train_acc 0.7509, valid_loss 0.4710, valid_acc 0.7950
+epoch 13, train_loss 0.5009, train_acc 0.7599, valid_loss 0.4681, valid_acc 0.8022
+epoch 14, train_loss 0.4985, train_acc 0.7608, valid_loss 0.4727, valid_acc 0.7986
+epoch 15, train_loss 0.4990, train_acc 0.7536, valid_loss 0.4813, valid_acc 0.7518
+epoch 16, train_loss 0.4986, train_acc 0.7554, valid_loss 0.4672, valid_acc 0.7986
+epoch 17, train_loss 0.4987, train_acc 0.7545, valid_loss 0.4752, valid_acc 0.7446
+epoch 18, train_loss 0.4964, train_acc 0.7500, valid_loss 0.4756, valid_acc 0.7518
+epoch 19, train_loss 0.4969, train_acc 0.7505, valid_loss 0.4688, valid_acc 0.7986
+epoch 20, train_loss 0.4991, train_acc 0.7536, valid_loss 0.4672, valid_acc 0.7986
+epoch 21, train_loss 0.4960, train_acc 0.7568, valid_loss 0.4686, valid_acc 0.7986
+epoch 22, train_loss 0.4966, train_acc 0.7572, valid_loss 0.4778, valid_acc 0.7482
+epoch 23, train_loss 0.4961, train_acc 0.7518, valid_loss 0.4723, valid_acc 0.7986
+epoch 24, train_loss 0.4944, train_acc 0.7554, valid_loss 0.4713, valid_acc 0.7986
+epoch 25, train_loss 0.4922, train_acc 0.7586, valid_loss 0.4671, valid_acc 0.7986
+epoch 26, train_loss 0.4934, train_acc 0.7550, valid_loss 0.4769, valid_acc 0.7446
+epoch 27, train_loss 0.4952, train_acc 0.7554, valid_loss 0.4688, valid_acc 0.7986
+epoch 28, train_loss 0.4919, train_acc 0.7604, valid_loss 0.4671, valid_acc 0.7986
+epoch 29, train_loss 0.4925, train_acc 0.7523, valid_loss 0.4669, valid_acc 0.7986
+epoch 30, train_loss 0.4911, train_acc 0.7581, valid_loss 0.4714, valid_acc 0.7950
+epoch 31, train_loss 0.4885, train_acc 0.7608, valid_loss 0.4659, valid_acc 0.7986
+epoch 32, train_loss 0.4896, train_acc 0.7622, valid_loss 0.4689, valid_acc 0.7950
+epoch 33, train_loss 0.4912, train_acc 0.7599, valid_loss 0.4700, valid_acc 0.7950
+epoch 34, train_loss 0.4873, train_acc 0.7626, valid_loss 0.4645, valid_acc 0.7950
+epoch 35, train_loss 0.4872, train_acc 0.7622, valid_loss 0.4828, valid_acc 0.7482
+epoch 36, train_loss 0.4881, train_acc 0.7541, valid_loss 0.4669, valid_acc 0.7950
+epoch 37, train_loss 0.4862, train_acc 0.7577, valid_loss 0.4696, valid_acc 0.7950
+epoch 38, train_loss 0.4851, train_acc 0.7536, valid_loss 0.4662, valid_acc 0.7986
+epoch 39, train_loss 0.4848, train_acc 0.7572, valid_loss 0.4723, valid_acc 0.7482
+epoch 40, train_loss 0.4849, train_acc 0.7523, valid_loss 0.4740, valid_acc 0.7446
+epoch 41, train_loss 0.4832, train_acc 0.7536, valid_loss 0.4677, valid_acc 0.7950
+epoch 42, train_loss 0.4832, train_acc 0.7532, valid_loss 0.4745, valid_acc 0.7986
+epoch 43, train_loss 0.4833, train_acc 0.7536, valid_loss 0.4680, valid_acc 0.7986
+epoch 44, train_loss 0.4823, train_acc 0.7572, valid_loss 0.4661, valid_acc 0.7914
+epoch 45, train_loss 0.4815, train_acc 0.7532, valid_loss 0.4694, valid_acc 0.7914
+epoch 46, train_loss 0.4800, train_acc 0.7590, valid_loss 0.4785, valid_acc 0.7446
+epoch 47, train_loss 0.4783, train_acc 0.7613, valid_loss 0.4651, valid_acc 0.7914
+epoch 48, train_loss 0.4788, train_acc 0.7586, valid_loss 0.4644, valid_acc 0.7950
+epoch 49, train_loss 0.4800, train_acc 0.7545, valid_loss 0.4720, valid_acc 0.7410
+epoch 50, train_loss 0.4779, train_acc 0.7644, valid_loss 0.4702, valid_acc 0.7410
+test_loss before adaptation 0.7737, test_acc 0.5081
+test_loss after adaptation 0.6397, test_acc 0.6412

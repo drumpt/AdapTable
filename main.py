@@ -2,6 +2,7 @@ import os
 import warnings
 warnings.filterwarnings("ignore")
 from copy import deepcopy
+import json
 import hydra
 from omegaconf import OmegaConf
 
@@ -11,76 +12,17 @@ import torch.nn.functional as F
 
 from data.dataset import *
 from model.mlp import MLP, MLP_MAE
-from utils.sam import SAM
 from utils import utils
+from utils.sam import SAM
 from utils.utils import *
 
-
-# for TSNE logging purpose
+# global variables shared over different functions
+logger, json_path = None, None
 tsne_before_adaptation = [[], []] # feature_list, cls_list
 tsne_after_adaptation = [[], []] # feature_list, cls_list
 
-def copy_model_and_optimizer(model, optimizer, scheduler):
-    model_state = deepcopy(model.state_dict())
-    optimizer_state = deepcopy(optimizer.state_dict())
-    if scheduler is not None:
-        scheduler_state = deepcopy(scheduler.state_dict())
-        return model_state, optimizer_state, scheduler_state
-    else:
-        return model_state, optimizer_state, None
 
-
-def load_model_and_optimizer(model, optimizer, scheduler, model_state, optimizer_state, scheduler_state):
-    model.load_state_dict(model_state, strict=True)
-    optimizer.load_state_dict(optimizer_state)
-    if scheduler is not None:
-        scheduler.load_state_dict(scheduler_state)
-        return model, optimizer, scheduler
-    else:
-        return model, optimizer, None
-
-def collect_params(model, train_params):
-    params, names = [], []
-    for nm, m in model.named_modules():
-        if 'all' in train_params:
-            for np, p in m.named_parameters():
-                p.requires_grad = True
-                if not f"{nm}.{np}" in names:
-                    params.append(p)
-                    names.append(f"{nm}.{np}")
-        if 'LN' in train_params: # TODO: change this (not working)
-            if isinstance(m, nn.LayerNorm):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if 'BN' in train_params:
-            if isinstance(m, nn.BatchNorm1d):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if 'GN' in train_params:
-            if isinstance(m, nn.GroupNorm):
-                for np, p in m.named_parameters():
-                    if np in ['weight', 'bias']:
-                        params.append(p)
-                        names.append(f"{nm}.{np}")
-        if "pretrain" in train_params:
-            for np, p in m.named_parameters():
-                if 'main_head' in f"{nm}.{np}":
-                    continue
-                params.append(p)
-                names.append(f"{nm}.{np}")
-        if "downstream" in train_params:
-            for np, p in m.named_parameters():
-                if not 'main_head' in f"{nm}.{np}":
-                    continue
-                params.append(p)
-                names.append(f"{nm}.{np}")
-    return params, names
-
-def pretrain(args, model, optimizer, dataset, logger):
+def pretrain(args, model, optimizer, dataset):
     device = args.device
     best_model, best_loss = None, float('inf')
     mse_loss_fn = nn.MSELoss(reduction='none')
@@ -125,7 +67,7 @@ def pretrain(args, model, optimizer, dataset, logger):
     return best_model
 
 
-def train(args, model, optimizer, dataset, logger):
+def train(args, model, optimizer, dataset):
     device = args.device
     best_model, best_loss = None, float('inf')
 
@@ -229,16 +171,6 @@ def forward_and_adapt(args, x, model, optimizer):
 
 
 def main_em(args):
-    if hasattr(args, 'seed'):
-        utils.set_seed(args.seed)
-        print(f"set seed as {args.seed}")
-    if not os.path.exists(args.log_dir):
-        os.makedirs(args.log_dir)
-    logger, json_path = utils.get_logger(args)
-    logger.info(OmegaConf.to_yaml(args))
-    if not os.path.exists(args.out_dir):
-        os.makedirs(args.out_dir)
-
     device = args.device
     dataset = Dataset(args)
 
@@ -255,7 +187,7 @@ def main_em(args):
         best_model.load_state_dict(best_state_dict)
         print(f"load pretrained model!")
     else:
-        best_model = train(args, model, optimizer, dataset, logger)
+        best_model = train(args, model, optimizer, dataset)
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
@@ -303,7 +235,6 @@ def main_em(args):
                 tsne_after_adaptation[1] += test_y.tolist()
 
     if args.tsne:
-        from utils.utils import draw_tsne, save_pickle
         save_pickle(tsne_before_adaptation, 'before_adaptation', args)
         save_pickle(tsne_after_adaptation, 'after_adaptation', args)
         draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
@@ -315,25 +246,12 @@ def main_em(args):
         'test_acc_before': test_acc_before / test_len,
         'test_acc_after': test_acc_after / test_len
     }
-    import json
-    # Serializing json
     json_object = json.dumps(json_saving, indent=4)
-    # Writing to sample.json
     with open(json_path, "w") as outfile:
         outfile.write(json_object)
 
-def main_mae(args):
-    if hasattr(args, 'seed'):
-        utils.set_seed(args.seed)
-        print(f"set seed as {args.seed}")
-    if not os.path.exists(args.log_dir):
-        os.makedirs(args.log_dir)
-    utils.disable_logger(args)
-    logger, json_path = utils.get_logger(args)
-    logger.info(OmegaConf.to_yaml(args))
-    if not os.path.exists(args.out_dir):
-        os.makedirs(args.out_dir)
 
+def main_mae(args):
     device = args.device
     dataset = Dataset(args)
 
@@ -349,11 +267,11 @@ def main_mae(args):
 
         # self-supervised learning (masking and reconstruction task)
         optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
-        model = pretrain(args, model, optimizer, dataset, logger)
+        model = pretrain(args, model, optimizer, dataset)
 
         # supervised learning (main task)
         optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(model, train_params="downstream")[0], lr=args.train_lr)
-        best_model = train(args, model, optimizer, dataset, logger)
+        best_model = train(args, model, optimizer, dataset)
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
@@ -371,7 +289,6 @@ def main_mae(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
     for test_x, test_mask_x, test_y in dataset.test_loader:
-
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
             best_model = best_model.eval().requires_grad_(True).to(device)
@@ -391,7 +308,6 @@ def main_mae(args):
         test_cor_x.requires_grad = True # for acquisition
         test_cor_x.grad = None
         estimated_test_x, _ = best_model(test_cor_x)
-        # loss = mse_loss_fn(estimated_test_x, test_x) # l2 loss only on non-missing values
         loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
         loss.backward(retain_graph=True)
         feature_grads = torch.mean(test_cor_x.grad, dim=0)
@@ -399,38 +315,19 @@ def main_mae(args):
         if 'random_mask' in args.method:
             feature_importance = torch.ones_like(torch.abs(feature_grads))
         else:
-            # feature_importance = torch.abs(feature_grads)
-            print('grad of feature')
-            print(feature_grads)
-            # feature_grads = feature_grads()
-            # feature_grads = torch.relu(feature_grads)
-            feature_grads = feature_grads - torch.min(feature_grads) + 1e-4
-            # bias = feature_grads.mean()
-            # feature_grads += bias
-            # feature_grads = feature_grads - torch.min(feature_grads)
-            # bias = feature_grads.mean()
-            # feature_grads += bias
-            # feature_importance = torch.reciprocal((torch.abs(feature_grads)/args.temp).softmax(-1))
-            # feature_importance = (torch.reciprocal(torch.abs(feature_grads))/args.temp).softmax(-1)
-            feature_importance = torch.reciprocal(torch.abs(feature_grads))
-
-
+            feature_importance = torch.reciprocal(torch.abs(feature_grads) + args.delta)
         feature_importance = feature_importance / torch.sum(feature_importance)
-        print(feature_importance)
 
         for _ in range(1, args.num_steps + 1):
             test_cor_mask_x = get_mask_by_feature_importance(args, test_x, feature_importance).to(test_x.device)
-
             test_cor_x = test_cor_mask_x * test_x + (1 - test_cor_mask_x) * torch.FloatTensor(get_imputed_data(test_x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(test_x.device)
             estimated_test_x, _ = best_model(test_cor_x)
 
             if args.no_mask:
-                loss = mse_loss_fn(estimated_test_x, test_x)  # l2 loss only on non-missing values
-
+                loss = mse_loss_fn(estimated_test_x, test_x)
             else:
                 loss = mse_loss_fn(estimated_test_x * test_mask_x, test_x * test_mask_x) # l2 loss only on non-missing values
 
-            # print(f'test loss is : {loss}')
             test_optimizer.zero_grad()
             loss.backward()
             test_optimizer.step()
@@ -446,7 +343,6 @@ def main_mae(args):
                 tsne_after_adaptation[0] += feature_best_model
                 tsne_after_adaptation[1] += test_y.tolist()
 
-
         # imputation with masked autoencoder
         estimated_x, _ = best_model(test_x)
         test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
@@ -456,46 +352,21 @@ def main_mae(args):
         loss = mse_loss_fn(estimated_y, test_y) if regression else ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
-        # naive input renormalization (not working)
-        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - torch.mean(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)) / torch.std(test_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
-        # test_x = torch.nan_to_num(test_x, nan=0)
-
-        # input renormalization with excluding missing ones (not working)
-        # column_mean = torch.sum(test_x[:, :dataset.dataset.cont_dim] * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True)
-        # column_std = torch.sum((test_x[:, :dataset.dataset.cont_dim] - column_mean) ** 2 * test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) / (torch.sum(test_mask_x[:, :dataset.dataset.cont_dim], dim=0, keepdim=True) - 1)
-        # test_x[:, :dataset.dataset.cont_dim] = (test_x[:, :dataset.dataset.cont_dim] - column_mean) / column_std
-        # test_x = torch.nan_to_num(test_x, nan=0)
-
     if args.tsne:
-        from utils.utils import draw_tsne
         draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
         draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
-
     json_saving = {
         'test_acc_before': test_acc_before / test_len,
         'test_acc_after': test_acc_after / test_len
     }
-    import json
-    # Writing to sample.json
     with open(json_path, "w") as outfile:
         json.dump(json_saving, outfile)
 
-def main_mae_with_em(args):
-    if hasattr(args, 'seed'):
-        utils.set_seed(args.seed)
-        print(f"set seed as {args.seed}")
-    if not os.path.exists(args.log_dir):
-        os.makedirs(args.log_dir)
-    utils.disable_logger(args)
-    logger, json_path = utils.get_logger(args)
-    logger.info(OmegaConf.to_yaml(args))
-    if not os.path.exists(args.out_dir):
-        os.makedirs(args.out_dir)
 
+def main_mae_with_em(args):
     device = args.device
     dataset = Dataset(args)
 
@@ -509,11 +380,11 @@ def main_mae_with_em(args):
 
         # self-supervised learning (masking and reconstruction task)
         optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
-        model = pretrain(args, model, optimizer, dataset, logger)
+        model = pretrain(args, model, optimizer, dataset)
 
         # supervised learning (main task)
         optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(model, train_params="downstream")[0], lr=args.train_lr)
-        best_model = train(args, model, optimizer, dataset, logger)
+        best_model = train(args, model, optimizer, dataset)
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
     original_best_model = deepcopy(best_model)
@@ -572,38 +443,22 @@ def main_mae_with_em(args):
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
-
     json_saving = {
         'test_acc_before': test_acc_before / test_len,
         'test_acc_after': test_acc_after / test_len
     }
-    import json
-    # Serializing json
     json_object = json.dumps(json_saving, indent=4)
-    # Writing to sample.json
     with open(json_path, "w") as outfile:
         outfile.write(json_object)
 
 
 def main_no_adapt(args):
-    if hasattr(args, 'seed'):
-        utils.set_seed(args.seed)
-        print(f"set seed as {args.seed}")
-    if not os.path.exists(args.log_dir):
-        os.makedirs(args.log_dir)
-    utils.disable_logger(args)
-    logger, json_path = utils.get_logger(args)
-    logger.info(OmegaConf.to_yaml(args))
-    if not os.path.exists(args.out_dir):
-        os.makedirs(args.out_dir)
-
     dataset = Dataset(args)
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
 
     regression = True if dataset.out_dim == 1 else False
     mse_loss_fn = nn.MSELoss()
     ce_loss_fn = nn.CrossEntropyLoss()
-
 
     if args.model == 'lr':
         from sklearn.linear_model import LogisticRegression
@@ -638,7 +493,6 @@ def main_no_adapt(args):
         else:
             best_model = RandomForestClassifier(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
             best_model = best_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
-
     else:
         raise NotImplementedError
 
@@ -649,25 +503,31 @@ def main_no_adapt(args):
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
-
     json_saving = {
         'test_acc_before': test_acc_after / test_len,
         'test_acc_after': test_acc_after / test_len
     }
-    import json
-    # Serializing json
     json_object = json.dumps(json_saving, indent=4)
-    # Writing to sample.json
     with open(json_path, "w") as outfile:
         outfile.write(json_object)
 
+
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
+    global logger, json_path
+    if hasattr(args, 'seed'):
+        utils.set_seed(args.seed)
+        print(f"set seed as {args.seed}")
+    if not os.path.exists(args.log_dir):
+        os.makedirs(args.log_dir)
+    utils.disable_logger(args)
+    logger, json_path = utils.get_logger(args)
+    logger.info(OmegaConf.to_yaml(args))
+    if not os.path.exists(args.out_dir):
+        os.makedirs(args.out_dir)
+
     if 'memo' in args.method:
         args.test_batch_size = 1
-
-    # if 'mae' in args.method and len(args.method) > 1:
-    #     main_mae_with_em(args)
     if 'mae' in args.method:
         main_mae(args)
     elif 'no_adapt' in args.method:
