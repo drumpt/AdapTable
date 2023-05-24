@@ -5,7 +5,6 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tables
 from collections import Counter
 
 import numpy as np
-from numpy.random import choice
 import pandas as pd
 import sklearn.preprocessing
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
@@ -586,7 +585,7 @@ def get_imputed_data(test_data, train_data, data_type, imputation_method):
 
 def get_mask_by_feature_importance(args, test_data, importance):
     mask = torch.ones_like(test_data, dtype=torch.float32)
-    selected_rows = choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.mask_ratio))
-    selected_columns = choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.mask_ratio), p=importance.cpu().numpy())
+    selected_rows = np.random.choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.mask_ratio))
+    selected_columns = np.random.choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.mask_ratio), p=importance.cpu().numpy())
     mask[selected_rows, selected_columns] = 0
     return mask
