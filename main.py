@@ -238,6 +238,11 @@ def main_em(args):
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
 
+    ORIGINAL_FEATURE_LIST_SOURCE = []
+    ORIGINAL_FEATURE_LIST_TARGET = []
+    ADAPTED_FEATURE_LIST_SOURCE = []
+    ADAPTED_FEATURE_LIST_TARGET = []
+
     for test_x, _, test_y in dataset.test_loader:
         if args.episodic or (EMA != None and EMA < 0.2):
             best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
@@ -246,6 +251,8 @@ def main_em(args):
         test_len += test_x.shape[0]
 
         estimated_y = original_best_model(test_x) if isinstance(original_best_model, MLP) else original_best_model(test_x)[-1]
+
+        ORIGINAL_FEATURE_LIST_TARGET.extend(original_best_model.get_feature(test_x).cpu().detach().numpy().tolist())
 
         # TODO: implementing entropy distribution
         ENTROPY_LIST.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
@@ -258,6 +265,7 @@ def main_em(args):
             forward_and_adapt(args, test_x, best_model, test_optimizer)
 
         estimated_y = best_model(test_x) if isinstance(best_model, MLP) else best_model(test_x)[-1]
+        ADAPTED_FEATURE_LIST_TARGET.extend(best_model.get_feature(test_x).cpu().detach().numpy().tolist())
 
         ENTROPY_LIST_NEW.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
 
@@ -280,15 +288,79 @@ def main_em(args):
                 tsne_after_adaptation[0] += feature_best_model
                 tsne_after_adaptation[1] += test_y.tolist()
 
-    if args.tsne:
-        save_pickle(tsne_before_adaptation, 'before_adaptation', args)
-        save_pickle(tsne_after_adaptation, 'after_adaptation', args)
-        draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
-        draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
+    print(f"ORIGINAL_FEATURE_LIST_TARGET: {len(ORIGINAL_FEATURE_LIST_TARGET)}")
+    print(f"ADAPTED_FEATURE_LIST_TARGET: {len(ADAPTED_FEATURE_LIST_TARGET)}")
 
-    print(f"ENTROPY_LIST: {ENTROPY_LIST}")
-    print(f"np.mean(ENTROPY_LIST): {np.mean(ENTROPY_LIST)}")
-    print(f"np.mean(ENTROPY_LIST_NEW): {np.mean(ENTROPY_LIST_NEW)}")
+    # TODO: remove (check source and target domain difference)
+    args.shift_type = None
+    original_dataset = Dataset(args)
+    for test_x, _, test_y in original_dataset.test_loader:
+        # if args.episodic or (EMA != None and EMA < 0.2):
+        #     best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
+
+        test_x, test_y = test_x.to(device), test_y.to(device)
+        test_len += test_x.shape[0]
+
+        estimated_y = original_best_model(test_x) if isinstance(original_best_model, MLP) else original_best_model(test_x)[-1]
+
+        ORIGINAL_FEATURE_LIST_SOURCE.extend(original_best_model.get_feature(test_x).cpu().detach().numpy().tolist())
+
+        # loss = loss_fn(estimated_y, test_y)
+        # test_loss_before += loss.item() * test_x.shape[0]
+        # test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+
+        estimated_y = best_model(test_x) if isinstance(best_model, MLP) else best_model(test_x)[-1]
+        ADAPTED_FEATURE_LIST_SOURCE.extend(best_model.get_feature(test_x).cpu().detach().numpy().tolist())
+
+    print(f"ORIGINAL_FEATURE_LIST_SOURCE: {len(ORIGINAL_FEATURE_LIST_SOURCE)}")
+    print(f"ADAPTED_FEATURE_LIST_SOURCE: {len(ADAPTED_FEATURE_LIST_SOURCE)}")
+
+    ORIGINAL_FEATURE_LIST_SOURCE = np.array(ORIGINAL_FEATURE_LIST_SOURCE)
+    ORIGINAL_FEATURE_LIST_TARGET = np.array(ORIGINAL_FEATURE_LIST_TARGET)
+    ADAPTED_FEATURE_LIST_SOURCE = np.array(ADAPTED_FEATURE_LIST_SOURCE)
+    ADAPTED_FEATURE_LIST_TARGET = np.array(ADAPTED_FEATURE_LIST_TARGET)
+
+    # total_features = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET, ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])
+    from sklearn.manifold import TSNE
+
+    total_features = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET])
+    X_embedded = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=30).fit_transform(total_features)
+
+    ORIGINAL_FEATURE_LIST_SOURCE = X_embedded[:len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+    ORIGINAL_FEATURE_LIST_TARGET = X_embedded[len(ORIGINAL_FEATURE_LIST_SOURCE): 2*len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+    plt.clf()
+    df = pd.DataFrame()
+    df["y"] = [0] * len(ORIGINAL_FEATURE_LIST_SOURCE) + [1] * len(ORIGINAL_FEATURE_LIST_SOURCE)
+    df["d1"] = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET])[:, 0]
+    df["d2"] = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET])[:, 1]
+    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), data=df)
+    plt.title("Before Adaptation")
+    plt.savefig("tsne_before_adaptation_em.png")
+    
+
+    total_features = np.concatenate([ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])
+    X_embedded = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=30).fit_transform(total_features)
+    ADAPTED_FEATURE_LIST_SOURCE = X_embedded[0: len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+    ADAPTED_FEATURE_LIST_TARGET = X_embedded[len(ORIGINAL_FEATURE_LIST_SOURCE): 2*len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+
+    plt.clf()
+    df = pd.DataFrame()
+    df["y"] = [0] * len(ORIGINAL_FEATURE_LIST_SOURCE) + [1] * len(ORIGINAL_FEATURE_LIST_SOURCE)
+    df["d1"] = np.concatenate([ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])[:, 0]
+    df["d2"] = np.concatenate([ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])[:, 1]
+    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), data=df)
+    plt.title("After Adaptation")
+    plt.savefig("tsne_after_adaptation_em.png")
+
+    # if args.tsne:
+    #     # save_pickle(tsne_before_adaptation, 'before_adaptation', args)
+    #     # save_pickle(tsne_after_adaptation, 'after_adaptation', args)
+    #     draw_tsne(ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET, 'before adaptation', args)
+    #     draw_tsne(ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET, 'after adaptation', args)
+
+    # print(f"ENTROPY_LIST: {ENTROPY_LIST}")
+    # print(f"np.mean(ENTROPY_LIST): {np.mean(ENTROPY_LIST)}")
+    # print(f"np.mean(ENTROPY_LIST_NEW): {np.mean(ENTROPY_LIST_NEW)}")
 
     plt.clf()
     plt.hist(ENTROPY_LIST, bins=50)
@@ -304,32 +376,31 @@ def main_em(args):
     plt.ylabel('Number of Instances')
     plt.savefig("after_adaptation.png")
 
-    from utils.utils import ece_score, draw_calibration
-    positive_prob = np.array(ece_list[0]).max(axis=-1)
-    # draw_calibration(positive_prob, ece_list[1], args)
+    # from utils.utils import ece_score, draw_calibration
+    # positive_prob = np.array(ece_list[0]).max(axis=-1)
+    # # draw_calibration(positive_prob, ece_list[1], args)
 
-    val, acc_ece = ece_score(ece_list[0], ece_list[1])
+    # val, acc_ece = ece_score(ece_list[0], ece_list[1])
+    # n, bins, rects = plt.hist(x = np.arange(10)/10, bins=np.arange(11)/10, ec='k')
 
-    n, bins, rects = plt.hist(x = np.arange(10)/10, bins=np.arange(11)/10, ec='k')
+    # # iterate through rectangles, change the height of each
+    # for idx in range(len(rects)):
+    #     rects[idx].set_height(acc_ece[idx])
 
-    # iterate through rectangles, change the height of each
-    for idx in range(len(rects)):
-        rects[idx].set_height(acc_ece[idx])
-
-    # set the y limit
-    plt.ylim(0, 1)
-    plt.plot([0, 1], [0, 1], linestyle='dashed')
-    plt.show()
+    # # set the y limit
+    # plt.ylim(0, 1)
+    # plt.plot([0, 1], [0, 1], linestyle='dashed')
+    # plt.show()
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
-    json_saving = {
-        'test_acc_before': test_acc_before / test_len,
-        'test_acc_after': test_acc_after / test_len
-    }
-    json_object = json.dumps(json_saving, indent=4)
-    with open(json_path, "w") as outfile:
-        outfile.write(json_object)
+    # json_saving = {
+    #     'test_acc_before': test_acc_before / test_len,
+    #     'test_acc_after': test_acc_after / test_len
+    # }
+    # json_object = json.dumps(json_saving, indent=4)
+    # with open(json_path, "w") as outfile:
+    #     outfile.write(json_object)
 
 
 def main_mae(args):
@@ -368,6 +439,13 @@ def main_mae(args):
 
     global EMA
     EMA = None
+
+    ORIGINAL_FEATURE_LIST_SOURCE = []
+    ORIGINAL_FEATURE_LIST_TARGET = []
+    ADAPTED_FEATURE_LIST_SOURCE = []
+    ADAPTED_FEATURE_LIST_TARGET = []
+
+
     params, _ = collect_params(best_model, train_params="pretrain")
     test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
@@ -383,6 +461,9 @@ def main_mae(args):
         test_cor_mask_x = torch.tensor(test_cor_mask_x).to(args.device)
 
         _, estimated_y = original_best_model(test_x)
+
+        ORIGINAL_FEATURE_LIST_TARGET.extend(original_best_model.get_feature(test_x).cpu().detach().numpy().tolist())
+
         loss = mse_loss_fn(estimated_y, test_y) if regression else ce_loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
@@ -449,24 +530,111 @@ def main_mae(args):
 
         _, estimated_y = best_model(test_x)
 
+        ADAPTED_FEATURE_LIST_TARGET.extend(best_model.get_feature(test_x).cpu().detach().numpy().tolist())
+
         loss = mse_loss_fn(estimated_y, test_y) if regression else ce_loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-    if args.tsne:
-        draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
-        draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
+
+    args.shift_type = None
+    original_dataset = Dataset(args)
+    for test_x, _, test_y in original_dataset.test_loader:
+        # if args.episodic or (EMA != None and EMA < 0.2):
+        #     best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
+
+        test_x, test_y = test_x.to(device), test_y.to(device)
+        test_len += test_x.shape[0]
+
+        _, estimated_y = original_best_model(test_x)
+
+        ORIGINAL_FEATURE_LIST_SOURCE.extend(original_best_model.get_feature(test_x).cpu().detach().numpy().tolist())
+
+        _, estimated_y = best_model(test_x)
+        ADAPTED_FEATURE_LIST_SOURCE.extend(best_model.get_feature(test_x).cpu().detach().numpy().tolist())
+
+
+    print(f"ORIGINAL_FEATURE_LIST_SOURCE: {len(ORIGINAL_FEATURE_LIST_SOURCE)}")
+    print(f"ADAPTED_FEATURE_LIST_SOURCE: {len(ADAPTED_FEATURE_LIST_SOURCE)}")
+
+    ORIGINAL_FEATURE_LIST_SOURCE = np.array(ORIGINAL_FEATURE_LIST_SOURCE)
+    ORIGINAL_FEATURE_LIST_TARGET = np.array(ORIGINAL_FEATURE_LIST_TARGET)
+    ADAPTED_FEATURE_LIST_SOURCE = np.array(ADAPTED_FEATURE_LIST_SOURCE)
+    ADAPTED_FEATURE_LIST_TARGET = np.array(ADAPTED_FEATURE_LIST_TARGET)
+
+    # total_features = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET, ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])
+    from sklearn.manifold import TSNE
+
+    total_features = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET])
+    X_embedded = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=30).fit_transform(total_features)
+
+    ORIGINAL_FEATURE_LIST_SOURCE = X_embedded[:len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+    ORIGINAL_FEATURE_LIST_TARGET = X_embedded[len(ORIGINAL_FEATURE_LIST_SOURCE): 2*len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+    plt.clf()
+    df = pd.DataFrame()
+    df["y"] = [0] * len(ORIGINAL_FEATURE_LIST_SOURCE) + [1] * len(ORIGINAL_FEATURE_LIST_SOURCE)
+    df["d1"] = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET])[:, 0]
+    df["d2"] = np.concatenate([ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET])[:, 1]
+    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), data=df)
+    plt.title("Before Adaptation")
+    plt.savefig("tsne_before_adaptation_mae.png")
+    
+
+    total_features = np.concatenate([ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])
+    X_embedded = TSNE(n_components=2, learning_rate='auto', init='random', perplexity=30).fit_transform(total_features)
+    ADAPTED_FEATURE_LIST_SOURCE = X_embedded[0: len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+    ADAPTED_FEATURE_LIST_TARGET = X_embedded[len(ORIGINAL_FEATURE_LIST_SOURCE): 2*len(ORIGINAL_FEATURE_LIST_SOURCE), :]
+
+    plt.clf()
+    df = pd.DataFrame()
+    df["y"] = [0] * len(ORIGINAL_FEATURE_LIST_SOURCE) + [1] * len(ORIGINAL_FEATURE_LIST_SOURCE)
+    df["d1"] = np.concatenate([ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])[:, 0]
+    df["d2"] = np.concatenate([ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET])[:, 1]
+    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), data=df)
+    plt.title("After Adaptation")
+    plt.savefig("tsne_after_adaptation_mae.png")
+
+    # if args.tsne:
+    #     # save_pickle(tsne_before_adaptation, 'before_adaptation', args)
+    #     # save_pickle(tsne_after_adaptation, 'after_adaptation', args)
+    #     draw_tsne(ORIGINAL_FEATURE_LIST_SOURCE, ORIGINAL_FEATURE_LIST_TARGET, 'before adaptation', args)
+    #     draw_tsne(ADAPTED_FEATURE_LIST_SOURCE, ADAPTED_FEATURE_LIST_TARGET, 'after adaptation', args)
+
+    # print(f"ENTROPY_LIST: {ENTROPY_LIST}")
+    # print(f"np.mean(ENTROPY_LIST): {np.mean(ENTROPY_LIST)}")
+    # print(f"np.mean(ENTROPY_LIST_NEW): {np.mean(ENTROPY_LIST_NEW)}")
+
+    # plt.clf()
+    # plt.hist(ENTROPY_LIST, bins=50)
+    # plt.title(f"Before Adaptation: {np.mean(ENTROPY_LIST):.4f}")
+    # plt.xlabel('Relative Entropy')
+    # plt.ylabel('Number of Instances')
+    # plt.savefig("before_adaptation.png")
+
+    # plt.clf()
+    # plt.hist(ENTROPY_LIST_NEW, bins=50)
+    # plt.title(f"After Adaptation: {np.mean(ENTROPY_LIST_NEW):.4f}")
+    # plt.xlabel('Relative Entropy')
+    # plt.ylabel('Number of Instances')
+    # plt.savefig("after_adaptation.png")
+
+    # from utils.utils import ece_score, draw_calibration
+    # positive_prob = np.array(ece_list[0]).max(axis=-1)
+    # # draw_calibration(positive_prob, ece_list[1], args)
+
+    # val, acc_ece = ece_score(ece_list[0], ece_list[1])
+    # n, bins, rects = plt.hist(x = np.arange(10)/10, bins=np.arange(11)/10, ec='k')
+
+    # # iterate through rectangles, change the height of each
+    # for idx in range(len(rects)):
+    #     rects[idx].set_height(acc_ece[idx])
+
+    # # set the y limit
+    # plt.ylim(0, 1)
+    # plt.plot([0, 1], [0, 1], linestyle='dashed')
+    # plt.show()
 
     logger.info(f"test_loss before adaptation {test_loss_before / test_len:.4f}, test_acc {test_acc_before / test_len:.4f}")
     logger.info(f"test_loss after adaptation {test_loss_after / test_len:.4f}, test_acc {test_acc_after / test_len:.4f}")
-    json_saving = {
-        'test_acc_before': test_acc_before / test_len,
-        'test_acc_after': test_acc_after / test_len
-    }
-    with open(json_path, "w") as outfile:
-        json.dump(json_saving, outfile)
-
-    # for step_idx in range(1, args.num_steps + 1):
-    #     print(f"adaptation {step_idx}-step: {step_acc_dict[step_idx] / test_len}")
 
 
 def main_mae_with_em(args):

@@ -2,16 +2,16 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
-meta_dataset: tableshift # openml-cc18, tableshift, openml-regression, shifts
+meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression, shifts
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
-dataset: heloc
+dataset: semeion
 train_ratio: 1.0
-shift_type: column_drop # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
-shift_severity: 0.6
+shift_type: Gaussian # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_severity: 3
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
@@ -40,7 +40,7 @@ max_depth: 4
 episodic: true # reset model to the pretrained one for each batch if true
 num_steps: 20 # optimization steps for each batch
 cumul_steps: 1
-test_batch_size: 64
+test_batch_size: 319
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
 test_lr: 1e-6
