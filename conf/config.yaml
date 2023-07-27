@@ -2,7 +2,7 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
-meta_dataset: random_drop # openml-cc18, tableshift, openml-regression, shifts
+meta_dataset: tableshift # openml-cc18, tableshift, openml-regression, shifts
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
@@ -38,17 +38,17 @@ max_depth: 4
 
 ### hyperparameters for test-time adaptation
 episodic: true # reset model to the pretrained one for each batch if true
-num_steps: 30 # optimization steps for each batch
+num_steps: 20 # optimization steps for each batch
 cumul_steps: 1
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
-test_lr: 1e-5
+test_lr: 1e-6
 tt_imputation_method: emd
 
 ##################################################################
 ### methods & other hyperparameters
-method: [mae] # currently supported: mae, sar, em, gem, ns, kld, dem
+method: [em] # currently supported: mae, sar, em, gem, ns, kld, dem
 
 # for masked autoencoders
 test_mask_ratio: 0.75

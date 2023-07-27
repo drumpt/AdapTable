@@ -7,16 +7,16 @@ i=0
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
   background=($(jobs -p))
-  local default_num_jobs=60 #12
-  local num_max_jobs=60
+  local default_num_jobs=20 #12
+  local num_max_jobs=20
   echo $num_max_jobs
   if ((${#background[@]} >= num_max_jobs)); then
     wait -n
   fi
 }
 
-# for dataset in abalone Bike_Sharing_Demand house_sales analcatdata_supreme
-for dataset in Bike_Sharing_Demand
+# for dataset in Bike_Sharing_Demand
+for dataset in abalone house_sales analcatdata_supreme
 do
     for seed in 0 1 2 3 4
     do

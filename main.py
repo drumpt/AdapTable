@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from data.dataset import *
-from model.mlp import MLP, MLP_MAE
+from model.model import *
 from utils import utils
 from utils.sam import SAM
 from utils.utils import *
@@ -185,19 +185,33 @@ def forward_and_adapt(args, x, model, optimizer):
     optimizer.step()
 
 
+def get_model(args, dataset, dropout_rate=0):
+    if args.model == "MLP" and not 'mae' in args.method:
+        model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=dropout_rate)
+    elif args.model == "MLP" and 'mae' in args.method:
+        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=dropout_rate)
+    # elif args.model == "TabNet":
+    #     model = TabNet(args, dataset)
+    elif args.model == "TabTransformer":
+        model = TabTransformer(args, dataset)
+    return model
+
+
 def main_em(args):
     device = args.device
     dataset = Dataset(args)
 
     global original_best_model
-    model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+    # model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+    model = get_model(args, dataset)
     optimizer = getattr(torch.optim, args.train_optimizer)(filter(lambda p: p.requires_grad, model.parameters()), lr=args.train_lr)
     regression = True if dataset.out_dim == 1 else False
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
 
     # use pretrained model
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
-        best_model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+        # best_model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+        best_model = get_model(args, dataset)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
         best_model.load_state_dict(best_state_dict)
         print(f"load pretrained model!")
@@ -206,7 +220,7 @@ def main_em(args):
         best_state_dict = best_model.state_dict()
 
     if args.dropout_rate > 0:
-        best_model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=args.dropout_rate)
+        best_model = get_model(args, dataset, dropout_rate=args.dropout_rate)
         best_model.load_state_dict(best_state_dict)
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
@@ -215,6 +229,7 @@ def main_em(args):
     original_best_model.eval().requires_grad_(False).to(device)
 
     global EMA, ENTROPY_LIST, GRADIENT_NORM_LIST, ENTROPY_LIST_NEW, GRADIENT_NORM_LIST_NEW, PREDICTED_LABEL, BATCH_IDX
+    ENTROPY_LIST, ENTROPY_LIST_NEW = [], []
     EMA = None
     params, _ = collect_params(best_model, train_params=args.train_params)
     if "sar" in args.method:
@@ -231,6 +246,10 @@ def main_em(args):
         test_len += test_x.shape[0]
 
         estimated_y = original_best_model(test_x) if isinstance(original_best_model, MLP) else original_best_model(test_x)[-1]
+
+        # TODO: implementing entropy distribution
+        ENTROPY_LIST.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
+
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
@@ -239,6 +258,9 @@ def main_em(args):
             forward_and_adapt(args, test_x, best_model, test_optimizer)
 
         estimated_y = best_model(test_x) if isinstance(best_model, MLP) else best_model(test_x)[-1]
+
+        ENTROPY_LIST_NEW.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
+
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
@@ -263,6 +285,24 @@ def main_em(args):
         save_pickle(tsne_after_adaptation, 'after_adaptation', args)
         draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
         draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
+
+    print(f"ENTROPY_LIST: {ENTROPY_LIST}")
+    print(f"np.mean(ENTROPY_LIST): {np.mean(ENTROPY_LIST)}")
+    print(f"np.mean(ENTROPY_LIST_NEW): {np.mean(ENTROPY_LIST_NEW)}")
+
+    plt.clf()
+    plt.hist(ENTROPY_LIST, bins=50)
+    plt.title(f"Before Adaptation: {np.mean(ENTROPY_LIST):.4f}")
+    plt.xlabel('Relative Entropy')
+    plt.ylabel('Number of Instances')
+    plt.savefig("before_adaptation.png")
+
+    plt.clf()
+    plt.hist(ENTROPY_LIST_NEW, bins=50)
+    plt.title(f"After Adaptation: {np.mean(ENTROPY_LIST_NEW):.4f}")
+    plt.xlabel('Relative Entropy')
+    plt.ylabel('Number of Instances')
+    plt.savefig("after_adaptation.png")
 
     from utils.utils import ece_score, draw_calibration
     positive_prob = np.array(ece_list[0]).max(axis=-1)
@@ -299,12 +339,12 @@ def main_mae(args):
     logger.info(f'lenght of train dataset : {len(dataset.dataset.train_x)}')
 
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
-        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+        best_model = get_model(args, dataset)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
         best_model.load_state_dict(best_state_dict)
         print(f"load pretrained model!")
     else:
-        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=0)
+        model = get_model(args, dataset)
 
         # self-supervised learning (masking and reconstruction task)
         optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)
@@ -434,12 +474,12 @@ def main_mae_with_em(args):
     dataset = Dataset(args)
 
     if os.path.exists(os.path.join(args.out_dir, "best_model.pth")) and not args.retrain:
-        best_model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4)
+        best_model = get_model(args, dataset)
         best_state_dict = torch.load(os.path.join(args.out_dir, "best_model.pth"))
         best_model.load_state_dict(best_state_dict)
         print(f"load pretrained model!")
     else:
-        model = MLP_MAE(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=0)
+        model = get_model(args, dataset)
 
         # self-supervised learning (masking and reconstruction task)
         optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(model, train_params="all")[0], lr=args.pretrain_lr)

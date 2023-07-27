@@ -227,3 +227,5 @@ git+https://github.com/jpgard/rtdl.git
 -e data/tableshift
 tune_sklearn
 rtdl
+pytorch-tabnet
+tab-transformer-pytorch
