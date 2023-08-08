@@ -10,6 +10,7 @@ import sklearn.preprocessing
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
 import torch
+import torch.nn.functional as F
 
 import openml
 from openml import tasks, runs
@@ -21,9 +22,7 @@ from utils import utils
 
 
 class Dataset():
-    def __init__(self, args):
-        # if args.seed:
-        #     utils.set_seed(args.seed)
+    def __init__(self, args, logger):
         if args.benchmark == "openml-cc18":
             self.dataset = OpenMLCC18Dataset(args)
         elif args.benchmark == "tableshift":
@@ -38,22 +37,23 @@ class Dataset():
             self.dataset = ScikitLearnDataset(args)
         else:
             raise NotImplementedError
+        self.logger = logger
 
         if float(args.train_ratio) != 1:
             len_of_train = len(self.dataset.train_x)
             self.dataset.train_x = self.dataset.train_x[:int(len_of_train * float(args.train_ratio))]
             self.dataset.train_y = self.dataset.train_y[:int(len_of_train * float(args.train_ratio))]
 
-        train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.train_x), torch.FloatTensor(self.dataset.train_y))
-        valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.valid_x), torch.FloatTensor(self.dataset.valid_y))
-        test_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.test_x), torch.FloatTensor(self.dataset.test_mask_x), torch.FloatTensor(self.dataset.test_y))
-
-        print(f"dataset size - train: {len(self.dataset.train_x)}, valid: {len(self.dataset.valid_x)}, test: {len(self.dataset.test_x)}")
+        train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.train_x).type(torch.float32), torch.FloatTensor(self.dataset.train_y).type(torch.float32))
+        valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.valid_x).type(torch.float32), torch.FloatTensor(self.dataset.valid_y).type(torch.float32))
+        test_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.dataset.test_x).type(torch.float32), torch.FloatTensor(self.dataset.test_mask_x).type(torch.float32), torch.FloatTensor(self.dataset.test_y).type(torch.float32))
 
         self.in_dim, self.out_dim = self.dataset.train_x.shape[-1], self.dataset.train_y.shape[-1]
         self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+
+        logger.info(f"dataset size | train: {len(self.dataset.train_x)}, valid: {len(self.dataset.valid_x)}, test: {len(self.dataset.test_x)}")
 
 
 
@@ -61,18 +61,13 @@ class ScikitLearnDataset():
     def __init__(self, args):
         from sklearn import datasets
         if args.dataset == 'make_classification':
-            # n_features = number of independent features
-            # n_redundant = number of redundant features
-            # n_informative = number of informative features
-            # class_sep = default 1, where larger value makes classification easier
-            n_features = 30
-            n_informative = 5
-            class_sep = 1
-            n_redundant = n_features - n_informative
+            n_features = 30 # number of independent features
+            n_informative = 5 # number of informative features
+            class_sep = 1 # default 1, where larger value makes classification easier
+            n_redundant = n_features - n_informative # number of informative features
             x,y = sklearn.datasets.make_classification(n_samples=5000, class_sep=class_sep, n_classes=10, n_features=n_features, n_informative=n_informative, n_redundant=n_redundant, random_state=args.seed, shuffle=True)
         elif args.dataset == 'two_moons':
-            # noise = amount of noise added to moons dataset
-            x,y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True)
+            x,y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True) # noise = amount of noise added to moons dataset
         else:
             raise NotImplementedError
 
@@ -82,11 +77,8 @@ class ScikitLearnDataset():
         train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=args.seed)
         valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=args.seed)
 
-
         self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
-        self.input_scaler.fit(
-            np.concatenate([train_x, valid_x], axis=0)
-        )
+        self.input_scaler.fit(np.concatenate([train_x, valid_x], axis=0))
         train_x = self.input_scaler.transform(train_x)
         valid_x = self.input_scaler.transform(valid_x)
         test_x, test_mask_x = get_corrupted_data(np.array(test_x),
@@ -106,6 +98,7 @@ class ScikitLearnDataset():
         self.train_y = self.output_one_hot_encoder.transform(train_y)
         self.valid_y = self.output_one_hot_encoder.transform(valid_y)
         self.test_y = self.output_one_hot_encoder.transform(test_y)
+
 
     def visualize_dataset(self, X, y):
         import matplotlib.pyplot as plt
@@ -130,7 +123,6 @@ class OpenMLCC18Dataset():
 
         dataset = openml.datasets.get_dataset(args.dataset)
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
-        print(f"x: {x}")
         y = np.array(y).reshape(-1, 1)
 
         # train/valid/test split
@@ -271,7 +263,6 @@ class FolkTablesDataset():
 
             train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.2, random_state=42)
             # raise NotImplementedError
-
         elif args.dataset == 'state_time' or args.dataset == 'time_state':
             # for training
             train_x_list = []
@@ -473,7 +464,6 @@ class ShiftsDataset():
             train_df = train_df
             valid_df = valid_df
             test_df = test_df
-
         else:
             train_df = pd.read_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                                 f"shifts/{dataset_path_name}/train.csv")).dropna()
@@ -529,7 +519,6 @@ class ShiftsDataset():
             self.train_y = self.output_scaler.transform(train_y).reshape(-1, 1)
             self.valid_y = self.output_scaler.transform(valid_y).reshape(-1, 1)
             self.test_y = self.output_scaler.transform(test_y).reshape(-1, 1)
-
         print('dataset preprocess done!')
 
 
@@ -539,26 +528,24 @@ class ShiftsDataset():
         for path in path_list:
             pd_list.append(pd.read_csv(path))
         train_pd = pd.concat(pd_list[:3])
-        train_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/weather/train.csv"))
+        train_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/train.csv"))
         eval_pd = pd.concat([pd_list[3]])
-        eval_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/weather/dev_in.csv"))
+        eval_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/dev_in.csv"))
         test_pd = pd.concat(pd_list[4:])
-        test_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                                f"shifts/weather/dev_out.csv"))
-        return (train_pd, eval_pd, test_pd)
+        test_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/dev_out.csv"))
+        return train_pd, eval_pd, test_pd
 
 
 def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
     mask = None
 
-    if shift_type == "Gaussian" and data_type == "numerical":
+    if shift_type in ["Gaussian", "uniform"] and data_type == "numerical":
         scaler = StandardScaler()
         scaler.fit(train_data)
-        test_data = test_data.astype(np.float64) + shift_severity * np.random.randn(*test_data.shape) * np.sqrt(scaler.var_)
+        noise = np.random.randn(*test_data.shape) if shift_type == "Gaussian" else np.random.uniform(low=-1, high=1, size=*test_data.shape)
+        test_data = test_data.astype(np.float64) + shift_severity * noise * np.sqrt(scaler.var_)
 
-    elif shift_type in ["random_drop", "column_drop", "random_replacement", "column_replacement"]:
+    elif shift_type in ["random_drop", "column_drop"]:
         assert 0 <= shift_severity <= 1
 
         if shift_type == "random_drop":
@@ -619,8 +606,6 @@ def get_imputed_data(test_data, train_data, data_type, imputation_method):
             imputed_data = []
             if isinstance(test_data, torch.Tensor):
                 test_data = test_data.cpu()
-            # for test_col in test_data.T:
-            #     imputed_data.append(np.random.choice(test_col, len(test_data)))
             for train_col in train_data.T:
                 imputed_data.append(np.random.choice(train_col, len(test_data)))
             imputed_data = np.stack(imputed_data, axis=-1)
@@ -645,9 +630,25 @@ def get_imputed_data(test_data, train_data, data_type, imputation_method):
     return imputed_data
 
 
+def get_feature_importance(args, dataset, test_data, test_mask, source_model): # TODO: change this
+    test_data.requires_grad = True
+    test_data.grad = None
+    estimated_test_x = source_model.get_recon_out(test_data)
+    loss = F.mse_loss(estimated_test_x * test_mask, test_data * test_mask)
+    loss.backward(retain_graph=True)
+    feature_grads = torch.mean(test_data.grad, dim=0) # TODO: fix this (instance-wise gradient)
+
+    if 'random_mask' in args.method:
+        feature_importance = torch.ones_like(test_x[0])
+    else:
+        feature_importance = torch.reciprocal(torch.abs(feature_grads) + args.delta)
+    feature_importance = feature_importance / torch.sum(feature_importance)
+    return feature_importance
+
+
 def get_mask_by_feature_importance(args, test_data, importance):
     mask = torch.ones_like(test_data, dtype=torch.float32)
-    selected_rows = np.random.choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.mask_ratio))
-    selected_columns = np.random.choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.mask_ratio), p=importance.cpu().numpy())
+    selected_rows = np.random.choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.test_mask_ratio))
+    selected_columns = np.random.choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.test_mask_ratio), p=importance.cpu().numpy())
     mask[selected_rows, selected_columns] = 0
     return mask

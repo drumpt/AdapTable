@@ -44,16 +44,14 @@ def get_generator(seed):
     return g
 
 
-# TODO: fix this
-def get_logger(args):
+def get_logger(args): # TODO: fix this
     logger = logging.getLogger("main")
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(message)s')
 
     time_string = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-
     if isinstance(args.method, omegaconf.listconfig.ListConfig):
-        method = args.method[0]
+        method = "_".join(args.method)
     else:
         method = args.method
     log_path = f'{args.benchmark}_{args.dataset}/{method}/{args.model}/shift_type_{args.shift_type}_shift_severity_{args.shift_severity}/'
@@ -63,26 +61,17 @@ def get_logger(args):
         os.makedirs(os.path.join(args.log_dir, log_path))
 
     # seed and dataset
-    log_path += f'{args.log_prefix}_seed{args.seed}_dataset{args.dataset}_testlr{args.test_lr}_numstep{args.num_steps}'
-
+    log_path += f'{args.log_prefix}_seed_{args.seed}_dataset_{args.dataset}_testlr_{args.test_lr}_numstep_{args.num_steps}'
     if float(args.train_ratio) != 1:
         log_path += f'_train_ratio_{args.train_ratio}'
-
     if args.test_batch_size != 64:
         log_path += f'_test_batch_size{args.test_batch_size}'
-
-    if args.no_mae_based_imputation:
-        log_path += f'_no_mae_based_imputation'
-        log_path += f'_imputation_method_{args.imputation_method}'
-
-    # txt addition
-    json_path = log_path + '.json'
     log_path += '.txt'
 
     file_handler = logging.FileHandler(os.path.join(args.log_dir, log_path))
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
-    return logger, os.path.join(args.log_dir, json_path)
+    return logger
 
 
 def disable_logger(args):
@@ -151,15 +140,17 @@ def collect_params(model, train_params):
                     continue
                 params.append(p)
                 names.append(f"{nm}.{np}")
-        if "downstream" in train_params:
-            for np, p in m.named_parameters():
-                if not 'main_head' in f"{nm}.{np}":
-                    continue
-                params.append(p)
-                names.append(f"{nm}.{np}")
+        # if "downstream" in train_params:
+        #     for np, p in m.named_parameters():
+        #         if not 'main_head' in f"{nm}.{np}":
+        #             continue
+        #         params.append(p)
+        #         names.append(f"{nm}.{np}")
     return params, names
 
 
+##################################################################
+# for loss functions
 def safe_log(x, ver):
     if ver == 1:
         return torch.log(x + 1e-5)
@@ -215,12 +206,11 @@ def mixup(data, targets, args, alpha=0.5):
     return data, targets
 
 
-def generate_augmentation(x, args):
-    # MEMO with dropout
+def generate_augmentation(x, args): # MEMO with dropout
     dropout = nn.Dropout(p=0.1)
     x_aug = torch.stack([dropout(x) for _ in range(args.memo_aug_num - 1)]).to(args.device)
     return x_aug
-##################################################################
+
 
 ##################################################################
 # for visualization
@@ -235,9 +225,7 @@ def draw_tsne(feats, cls, title, args):
     df["y"] = cls
     df["d1"] = z[:, 0]
     df["d2"] = z[:, 1]
-    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(),
-                    palette=sns.color_palette("hls", cls.max() + 1),
-                    data=df)
+    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), palette=sns.color_palette("hls", cls.max() + 1), data=df)
     plt.title(title)
     plt.show()
 
@@ -251,11 +239,7 @@ def draw_calibration(pred, gt, args):
 
     ax_calibration_curve = fig.add_subplot(gs[:2, :2])
     calibration_displays = {}
-    display = CalibrationDisplay.from_predictions(
-        y_true=gt,
-        y_prob=pred,
-        n_bins=10,
-    )
+    display = CalibrationDisplay.from_predictions(y_true=gt, y_prob=pred, n_bins=10)
     calibration_displays[f'{args.method}'] = display
 
     ax_calibration_curve.grid()
