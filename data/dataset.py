@@ -22,20 +22,20 @@ from utils import utils
 
 class Dataset():
     def __init__(self, args):
-        if args.seed:
-            utils.set_seed(args.seed)
-        if args.meta_dataset == "openml-cc18":
+        # if args.seed:
+        #     utils.set_seed(args.seed)
+        if args.benchmark == "openml-cc18":
             self.dataset = OpenMLCC18Dataset(args)
-        elif args.meta_dataset == "tableshift":
+        elif args.benchmark == "tableshift":
             self.dataset = TableShiftDataset(args)
-        elif args.meta_dataset == "openml-regression":
+        elif args.benchmark == "openml-regression":
             self.dataset = OpenMLRegressionDataset(args)
-        elif args.meta_dataset == "shifts":
+        elif args.benchmark == "shifts":
             self.dataset = ShiftsDataset(args)
-        elif args.meta_dataset == "folktables":
+        elif args.benchmark == "folktables":
             self.dataset = FolkTablesDataset(args)
-        elif args.meta_dataset == "scikit-learn":
-            self.dataset = Scikit_LearnDataset(args)
+        elif args.benchmark == "scikit-learn":
+            self.dataset = ScikitLearnDataset(args)
         else:
             raise NotImplementedError
 
@@ -57,7 +57,7 @@ class Dataset():
 
 
 
-class Scikit_LearnDataset():
+class ScikitLearnDataset():
     def __init__(self, args):
         from sklearn import datasets
         if args.dataset == 'make_classification':
@@ -130,6 +130,7 @@ class OpenMLCC18Dataset():
 
         dataset = openml.datasets.get_dataset(args.dataset)
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
+        print(f"x: {x}")
         y = np.array(y).reshape(-1, 1)
 
         # train/valid/test split

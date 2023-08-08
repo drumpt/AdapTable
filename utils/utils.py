@@ -3,16 +3,19 @@ import logging
 import random
 from datetime import datetime
 from copy import deepcopy
-
+import pickle
 import omegaconf.listconfig
 from slack_sdk import WebClient
+
+import numpy as np
+import pandas as pd
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
-import pandas as pd
-import numpy as np
-import torch
-import pickle
 
 
 def set_seed(seed):
@@ -41,6 +44,7 @@ def get_generator(seed):
     return g
 
 
+# TODO: fix this
 def get_logger(args):
     logger = logging.getLogger("main")
     logger.setLevel(logging.INFO)
@@ -52,7 +56,7 @@ def get_logger(args):
         method = args.method[0]
     else:
         method = args.method
-    log_path = f'{args.meta_dataset}_{args.dataset}/{method}/{args.model}/shift_type_{args.shift_type}_shift_severity_{args.shift_severity}/'
+    log_path = f'{args.benchmark}_{args.dataset}/{method}/{args.model}/shift_type_{args.shift_type}_shift_severity_{args.shift_severity}/'
 
     # log path exists
     if not os.path.exists(os.path.join(args.log_dir, log_path)):
@@ -71,7 +75,6 @@ def get_logger(args):
         log_path += f'_no_mae_based_imputation'
         log_path += f'_imputation_method_{args.imputation_method}'
 
-
     # txt addition
     json_path = log_path + '.json'
     log_path += '.txt'
@@ -88,11 +91,13 @@ def disable_logger(args):
         logger.propagate = False
 
 
-def send_message(message, token, channel):
+def send_slack_message(message, token, channel):
     client = WebClient(token=token)
     response = client.chat_postMessage(channel="#"+channel, text=message)
 
 
+##################################################################
+# for test-time adaptation
 def copy_model_and_optimizer(model, optimizer, scheduler):
     model_state = deepcopy(model.state_dict())
     optimizer_state = deepcopy(optimizer.state_dict())
@@ -210,6 +215,15 @@ def mixup(data, targets, args, alpha=0.5):
     return data, targets
 
 
+def generate_augmentation(x, args):
+    # MEMO with dropout
+    dropout = nn.Dropout(p=0.1)
+    x_aug = torch.stack([dropout(x) for _ in range(args.memo_aug_num - 1)]).to(args.device)
+    return x_aug
+##################################################################
+
+##################################################################
+# for visualization
 def draw_tsne(feats, cls, title, args):
     tsne = TSNE(n_components=2, verbose=1, random_state=args.seed)
 
@@ -285,3 +299,4 @@ def save_pickle(saving_object, title,args):
     file_name = f'{title}_model{args.model}_dataset{args.dataset}_shift_type{args.shift_type}_method{args.method}.pkl'
     with open(os.path.join(args.tsne_dir, file_name), 'wb') as f:
         pickle.dump(saving_object, f, pickle.HIGHEST_PROTOCOL)
+##################################################################

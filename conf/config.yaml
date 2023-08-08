@@ -2,32 +2,32 @@
 model: MLP # currently supported: MLP # TODO: implement transformer, etc
 
 ### dataset
-meta_dataset: openml-cc18 # openml-cc18, tableshift, openml-regression, shifts
+benchmark: openml-cc18 # openml-cc18, tableshift, openml-regression, shifts
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
-dataset: semeion
+dataset: cmc # categorical + numerical =>
 train_ratio: 1.0
-shift_type: Gaussian # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
-shift_severity: 3
+shift_type: null # null, Gaussian, random_drop, column_drop, column_block_drop, mean_shift, std_shift, mean_std_shift
+shift_severity: 1
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(empirical marginal distribution)
 
 ### hyperparameters for MAE pretraining
-pretrain_epochs: 50
+pretrain_epochs: 200
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
-mask_ratio: 0.75
+pretrain_mask_ratio: 0.75
 
 mixup: null # input, feature, null
 mixup_scale: 3
 
 ### hyperparameters for training
 retrain: true
-epochs: 50
+epochs: 200
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
@@ -40,7 +40,7 @@ max_depth: 4
 episodic: true # reset model to the pretrained one for each batch if true
 num_steps: 20 # optimization steps for each batch
 cumul_steps: 1
-test_batch_size: 319
+test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
 test_lr: 1e-6
@@ -48,7 +48,7 @@ tt_imputation_method: emd
 
 ##################################################################
 ### methods & other hyperparameters
-method: [em] # currently supported: mae, sar, em, gem, ns, kld, dem
+method: [tent] # currently supported: mae, sar, tent, gem, ns, kld, dem
 
 # for masked autoencoders
 test_mask_ratio: 0.75
@@ -60,11 +60,9 @@ temp: 1 # temperature scaling for entropy minimization methods
 renyi_entropy_alpha: 1.5 # for generalized entropy minimization
 ns_threshold: 0.04 # negative sampling
 kld_weight: 0.1 # for kl-divergence loss
-memo_aug_num: 64 # memo
-
-# for differential entropy minimization
-dropout_rate: 0
-dropout_steps: 0
+memo_aug_num: 64 # for memo
+dropout_rate: 0 # for differential entropy minimization
+dropout_steps: 0 # for differential entropy minimization
 ##################################################################
 extra_config: null
 
@@ -92,3 +90,14 @@ wandb_user: drumpt
 ### slack_notification
 slack_token: xoxb-5074113602964-5068716983253-VPOnZMWgclHFEjqLVgW4KlYd
 slack_channel: experiment
+
+##################################################################
+defaults:  
+  - _self_  
+  - override hydra/hydra_logging: disabled  
+  - override hydra/job_logging: disabled  
+  
+hydra:  
+  output_subdir: null  
+  run:  
+    dir: .
