@@ -18,10 +18,10 @@ from utils.sam import *
 def get_model(args, dataset, dropout_rate=0): # TODO: can we remove dropout_rate?
     if args.model == "MLP":
         model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=dropout_rate)
-    # elif args.model == "TabNet": # TODO: implement these methods
-    #     model = TabNet(args, dataset)
-    # elif args.model == "TabTransformer":
-    #     model = TabTransformer(args, dataset)
+    elif args.model == "TabNet":
+        model = TabNet(args, dataset)
+    elif args.model == "TabTransformer":
+        model = TabTransformer(args, dataset)
     return model
 
 
@@ -39,57 +39,6 @@ def get_source_model(args, dataset): # TODO: debug this function
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.train_lr)
         source_model = train(args, init_model, train_optimizer, dataset)
     return source_model
-
-
-def train_classical_baseline(args):
-    dataset = Dataset(args)
-    regression = True if dataset.out_dim == 1 else False
-
-    if args.model == 'lr':
-        if regression:
-            from sklearn.linear_model import LinearRegression
-            source_model = LinearRegression()
-        else:
-            from sklearn.linear_model import LogisticRegression
-            source_model = LogisticRegression()
-        source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
-    elif args.model == 'knn':
-        from sklearn.neighbors import KNeighborsClassifier
-        source_model = KNeighborsClassifier(n_neighbors=3)
-        source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
-    elif args.model == 'xgboost':
-        if regression:
-            objective = "reg:linear"
-        elif dataset.dataset.train_y.argmax(1).max() == 1:
-            objective = "binary:logistic"
-        else:
-            objective = "multi:softprob"
-
-        from xgboost import XGBRegressor, XGBClassifier
-        if regression:
-            source_model = xgb.XGBRegressor(objective=objective, random_state=args.seed)
-            source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
-        else:
-            source_model = xgb.XGBClassifier(n_estimators=args.num_estimators, learning_rate=args.test_lr, max_depth=args.max_depth, random_state=args.seed)
-            source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
-    elif args.model == 'rf':
-        from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-        if regression:
-            source_model = RandomForestRegressor(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
-            source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
-        else:
-            source_model = RandomForestClassifier(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
-            source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
-    else:
-        raise NotImplementedError
-
-    test_acc, test_len = 0, 0
-    for test_x, test_mask_x, test_y in dataset.test_loader:
-        test_len += test_x.shape[0]
-        estimated_y = source_model.predict(test_x)
-        test_acc += (np.array(estimated_y) == np.argmax(np.array(test_y), axis=-1)).sum()
-
-    logger.info(f"using {args.model} | test acc {test_acc / test_len:.4f}")
 
 
 def pretrain(args, model, optimizer, dataset):
@@ -267,10 +216,6 @@ def main(args):
     disable_logger(args)
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
-
-    if args.model in ['lr', 'knn', 'xgboost', 'rf']:
-        train_classical_baseline(args)
-        return
 
     device = args.device
     dataset = Dataset(args, logger)

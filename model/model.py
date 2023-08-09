@@ -87,53 +87,57 @@ class MLP_EMB(nn.Module):
 
 
 
-# class TabNet(nn.Module): # TODO: (WIP) finish implementing this!
-#     def __init__(self, args, dataset):
-#         super().__init__()
+class TabNet(nn.Module): # TODO: (WIP) finish implementing this!
+    def __init__(self, args, dataset):
+        super().__init__()
 
-#         self.model = TabNetRegressor(
-#             device_name=args.device,
-#             optimizer_fn=getattr(torch.optim, 'AdamW'),
-#             optimizer_params=dict(lr=args.train_lr),
-#         ) if dataset.out_dim == 1 else TabNetClassifier(
-#             device_name=args.device,
-#             optimizer_fn=getattr(torch.optim, 'AdamW'),
-#             optimizer_params=dict(lr=args.train_lr),
-#         )
-#         self.recon_head = nn.Sequential()
-#         self.recon_head.append(nn.Linear(256, dataset.in_dim))
-
-
-#     def forward(self, inputs):
-#         steps_out, _ = self.model.encoder.network(inputs)
-#         main_out = self.model.decoder(steps_out)
-#         recon_out = self.recon_head(steps_out)
-#         return recon_out, main_out
+        self.model = TabNetRegressor(
+            device_name=args.device,
+            optimizer_fn=getattr(torch.optim, 'AdamW'),
+            optimizer_params=dict(lr=args.train_lr),
+        ) if dataset.out_dim == 1 else TabNetClassifier(
+            device_name=args.device,
+            optimizer_fn=getattr(torch.optim, 'AdamW'),
+            optimizer_params=dict(lr=args.train_lr),
+        )
+        self.recon_head = nn.Sequential()
+        self.recon_head.append(nn.Linear(256, dataset.in_dim))
 
 
-
-# class TabTransformer(nn.Module):
-#     def __init__(self, args, dataset):
-#         print(f"dir(TabTransformer): {dir(TabTransformer.__init__)}")
-#         self.model = TabTransformer(
-#             categories=(10, 5, 6, 5, 8),      # tuple containing the number of unique values within each category
-#             num_continuous=dataset.in_dim,                # number of continuous values
-#             dim=32,                           # dimension, paper set at 32
-#             dim_out=dataset.out_dim,                        # binary prediction, but could be anything
-#             depth=6,                          # depth, paper recommended 6
-#             heads=8,                          # heads, paper recommends 8
-#             attn_dropout=0.1,                 # post-attention dropout
-#             ff_dropout=0.1,                   # feed forward dropout
-#             mlp_hidden_mults=(4, 2),          # relative multiples of each hidden dimension of the last mlp to logits
-#             mlp_act=nn.ReLU(),                # activation for final mlp, defaults to relu, but could be anything else (selu etc)
-#             # continuous_mean_std=cont_mean_std # (optional) - normalize the continuous values before layer norm
-#         )
-#         print(f"dir(self.model): {dir(self.model)}")
-#         self.recon_head = nn.Sequential()
-#         self.recon_head.append(nn.Linear(256, dataset.in_dim))
+    def forward(self, inputs):
+        steps_out, _ = self.model.encoder.network(inputs)
+        recon_out = self.recon_head(steps_out)
+        return recon_out
 
 
-#     def forward(self, inputs):
-#         hidden_repr = self.model(inputs)
-#         recon_out = self.recon_head(hidden_repr)
-#         main_out = self.main_head(hidden_repr)
+    def get_recon_out(self, inputs):
+        steps_out, _ = self.model.encoder.network(inputs)
+        main_out = self.model.decoder(steps_out)
+        return main_out
+
+
+
+class TabTransformer(nn.Module):
+    def __init__(self, args, dataset):
+        print(f"dir(TabTransformer): {dir(TabTransformer.__init__)}")
+        self.model = TabTransformer(
+            categories=(10, 5, 6, 5, 8),      # tuple containing the number of unique values within each category
+            num_continuous=dataset.in_dim,                # number of continuous values
+            dim=32,                           # dimension, paper set at 32
+            dim_out=dataset.out_dim,                        # binary prediction, but could be anything
+            depth=6,                          # depth, paper recommended 6
+            heads=8,                          # heads, paper recommends 8
+            attn_dropout=0.1,                 # post-attention dropout
+            ff_dropout=0.1,                   # feed forward dropout
+            mlp_hidden_mults=(4, 2),          # relative multiples of each hidden dimension of the last mlp to logits
+            mlp_act=nn.ReLU(),                # activation for final mlp, defaults to relu, but could be anything else (selu etc)
+        )
+        print(f"dir(self.model): {dir(self.model)}")
+        self.recon_head = nn.Sequential()
+        self.recon_head.append(nn.Linear(256, dataset.in_dim))
+
+
+    def forward(self, inputs):
+        hidden_repr = self.model(inputs)
+        recon_out = self.recon_head(hidden_repr)
+        main_out = self.main_head(hidden_repr)

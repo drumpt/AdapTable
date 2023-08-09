@@ -65,9 +65,9 @@ class ScikitLearnDataset():
             n_informative = 5 # number of informative features
             class_sep = 1 # default 1, where larger value makes classification easier
             n_redundant = n_features - n_informative # number of informative features
-            x,y = sklearn.datasets.make_classification(n_samples=5000, class_sep=class_sep, n_classes=10, n_features=n_features, n_informative=n_informative, n_redundant=n_redundant, random_state=args.seed, shuffle=True)
+            x, y = sklearn.datasets.make_classification(n_samples=5000, class_sep=class_sep, n_classes=10, n_features=n_features, n_informative=n_informative, n_redundant=n_redundant, random_state=args.seed, shuffle=True)
         elif args.dataset == 'two_moons':
-            x,y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True) # noise = amount of noise added to moons dataset
+            x, y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True) # noise = amount of noise added to moons dataset
         else:
             raise NotImplementedError
 
@@ -188,14 +188,13 @@ class TableShiftDataset():
             cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift/tmp"),
         )
         if dataset.is_domain_split:
-            print(f'ood dataset')
+            print(f'out-of-distribution dataset')
         else:
-            print(f'not ood')
+            print(f'in-distribution dataset')
 
         train_x, train_y, _, _ = dataset.get_pandas("train")
         valid_x, valid_y, _, _ = dataset.get_pandas("validation")
 
-        # TODO: require kaggle.json file!
         if dataset.is_domain_split:
             test_x, test_y, _, _ = dataset.get_pandas("ood_test")
         else:
@@ -542,7 +541,7 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
     if shift_type in ["Gaussian", "uniform"] and data_type == "numerical":
         scaler = StandardScaler()
         scaler.fit(train_data)
-        noise = np.random.randn(*test_data.shape) if shift_type == "Gaussian" else np.random.uniform(low=-1, high=1, size=*test_data.shape)
+        noise = np.random.randn(*test_data.shape) if shift_type == "Gaussian" else np.random.uniform(low=-1, high=1, size=test_data.shape)
         test_data = test_data.astype(np.float64) + shift_severity * noise * np.sqrt(scaler.var_)
 
     elif shift_type in ["random_drop", "column_drop"]:

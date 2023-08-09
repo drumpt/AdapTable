@@ -1,22 +1,24 @@
 ### model
-model: MLP # currently supported: MLP, MLP_MAE, lr, knn, xgboost, rf
+## currently supported: MLP, TabNet, TabTransformer
+## supervised baseline: lr, knn, xgboost, rf
+model: MLP
 
 ### dataset
-benchmark: openml-cc18 # openml-cc18, tableshift, openml-regression, shifts
+benchmark: tableshift # openml-cc18, tableshift, openml-regression, shifts
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
-dataset: cmc
-shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+dataset: heloc
+shift_type: Gaussian # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 1
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(from empirical marginal distribution)
 train_ratio: 1.0 # for evaluating on limited number of train instances
 
 ### hyperparameters for MAE pretraining
-pretrain_epochs: 200
+pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
@@ -24,18 +26,18 @@ pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
 retrain: true
-epochs: 200
+epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
 
 ### hyperparameters for test-time adaptation
-episodic: true # reset model to the pretrained one for each batch if true
+episodic: true # reset model to the pretrained one for every batch if true
 num_steps: 20 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
-test_lr: 1e-6
+test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
@@ -55,6 +57,10 @@ kld_weight: 0.1 # for kl-divergence loss
 memo_aug_num: 64 # for memo
 dropout_rate: 0 # for differential entropy minimization
 dropout_steps: 0 # for differential entropy minimization
+
+# for supervised baselines
+num_estimators: 25
+max_depth: 3
 
 ##################################################################
 ### device
