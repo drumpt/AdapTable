@@ -186,6 +186,10 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
     optimizer.zero_grad()
     outputs = model(x)
 
+    if 'pl' in args.method:
+        pseudo_label = torch.argmax(outputs, dim=-1)
+        loss = F.cross_entropy(outputs, pseudo_label)
+        loss.backward(retain_graph=True)
     if 'mae' in args.method:
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
         test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device)
