@@ -30,7 +30,7 @@ def get_source_model(args, dataset): # TODO: debug this function
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif 'mae' in args.method: # pretrain and train for masked autoencoder
+    elif args.method in ['mae', 'ttt++']: # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="all")[0], lr=args.train_lr)
@@ -182,7 +182,7 @@ def train(args, model, optimizer, dataset):
 
 
 def forward_and_adapt(args, dataset, x, mask, model, optimizer):
-    global EMA, original_source_model, eata_params
+    global EMA, original_source_model, eata_params, ttt_params
     optimizer.zero_grad()
     outputs = model(x)
 
@@ -190,6 +190,23 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         pseudo_label = torch.argmax(outputs, dim=-1)
         loss = F.cross_entropy(outputs, pseudo_label)
         loss.backward(retain_graph=True)
+    if 'ttt++' in args.method:
+        # getting featuers
+        z = model.get_feature(x)
+        a = model.get_recon_out(x * mask)
+
+        from utils.ttt import linear_mmd, coral, covariance
+        criterion_ssl = nn.MSELoss()
+
+        loss_ssl = criterion_ssl(x, a)
+
+        # feature alignment
+        loss_mean = linear_mmd(z.mean(axis=0), ttt_params['mean'])
+        loss_coral = coral(covariance(z), ttt_params['sigma'])
+
+        loss = loss_ssl * args.ttt_coef[0] + loss_mean * args.ttt_coef[1] + loss_coral * args.ttt_coef[2]
+        loss.backward()
+        print('ttt++ loss: ', loss.item())
 
     if 'eata' in args.method:
         # version 1 implementation
@@ -335,6 +352,8 @@ def main(args):
         # save to global variable
         ttt_params['mean'] = mean
         ttt_params['sigma'] = sigma
+        print('ttt++ mean:', mean)
+        print('ttt++ sigma:', sigma)
 
 
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)

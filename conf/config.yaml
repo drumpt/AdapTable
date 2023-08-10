@@ -61,6 +61,9 @@ dropout_steps: 0 # for differential entropy minimization
 eata_e_margin: 2.4538776394910684
 eata_d_margin: 0.05
 
+### ttt++
+ttt_coef: [1.0, 0.1, 1.0]
+
 
 ##################################################################
 ### device

@@ -15,6 +15,7 @@ class MLP(nn.Module):
         self.recon_head = nn.Sequential()
         self.main_head = nn.Sequential()
         self.cls_head = nn.Sequential()
+        self.aux_head = nn.Sequential()
 
         in_dim = input_dim
         for _ in range(n_layers - 3):
@@ -23,11 +24,16 @@ class MLP(nn.Module):
             self.encoder.append(nn.Dropout(dropout))
             in_dim = hidden_dim
         self.encoder.append(nn.Linear(in_dim, hidden_dim))
+
         self.recon_head.append(nn.Linear(hidden_dim, input_dim))
+
         self.main_head.append(nn.Linear(hidden_dim, hidden_dim))
         self.main_head.append(nn.ReLU())
         self.main_head.append(nn.Dropout(dropout))
+
         self.cls_head.append(nn.Linear(hidden_dim, output_dim))
+
+        self.aux_head.append(nn.Linear(hidden_dim, hidden_dim))
 
 
     def forward(self, inputs):
