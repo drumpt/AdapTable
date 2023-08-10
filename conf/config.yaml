@@ -57,6 +57,12 @@ dropout_rate: 0 # for differential entropy minimization
 dropout_steps: 0 # for differential entropy minimization
 
 ##################################################################
+### eata
+eata_e_margin: 2.4538776394910684
+eata_d_margin: 0.05
+
+
+##################################################################
 ### device
 device: cuda
 gpu_idx: 0

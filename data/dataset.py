@@ -542,7 +542,7 @@ def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_sever
     if shift_type in ["Gaussian", "uniform"] and data_type == "numerical":
         scaler = StandardScaler()
         scaler.fit(train_data)
-        noise = np.random.randn(*test_data.shape) if shift_type == "Gaussian" else np.random.uniform(low=-1, high=1, size=*test_data.shape)
+        noise = np.random.randn(*test_data.shape) if shift_type == "Gaussian" else np.random.uniform(low=-1, high=1, size=test_data.shape)
         test_data = test_data.astype(np.float64) + shift_severity * noise * np.sqrt(scaler.var_)
 
     elif shift_type in ["random_drop", "column_drop"]:
