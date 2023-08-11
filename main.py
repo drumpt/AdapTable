@@ -25,7 +25,7 @@ def get_model(args, dataset, dropout_rate=0): # TODO: can we remove dropout_rate
     return model
 
 
-def get_source_model(args, dataset): # TODO: debug this function
+def get_source_model(args, dataset):
     init_model = get_model(args, dataset) # get initalized model architecture only
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
@@ -50,7 +50,7 @@ def pretrain(args, model, optimizer, dataset):
         model.train().to(device)
         for train_x, _ in dataset.train_loader:
             train_x = train_x.to(device)
-            train_cor_x, _ = get_corrupted_data(train_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+            train_cor_x, _ = Dataset.get_corrupted_data(train_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change numerical parameter
             train_cor_x = torch.Tensor(train_cor_x).to(args.device)
 
             estimated_x = model.get_recon_out(train_cor_x)
@@ -68,7 +68,7 @@ def pretrain(args, model, optimizer, dataset):
         with torch.no_grad():
             for valid_x, _ in dataset.valid_loader:
                 valid_x = valid_x.to(device)
-                valid_cor_x, _ = get_corrupted_data(valid_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                valid_cor_x, _ = Dataset.get_corrupted_data(valid_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change numerical parameter
                 valid_cor_x = torch.Tensor(valid_cor_x).to(args.device)
 
                 estimated_x = model.get_recon_out(valid_cor_x)
@@ -138,7 +138,7 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
     if 'mae' in args.method:
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
         test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device)
-        test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * torch.Tensor(get_imputed_data(x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(x.device)
+        test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * torch.Tensor(Dataset.get_imputed_data(x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(x.device) # TODO: change this
         
         estimated_test_x = source_model.get_recon_out(test_cor_x)
         loss = F.mse_loss(estimated_test_x * mask, x * mask) # l2 loss only on non-missing values

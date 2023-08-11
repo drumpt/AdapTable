@@ -10,8 +10,8 @@ benchmark: tableshift # openml-cc18, tableshift, openml-regression, shifts
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
-dataset: heloc
-shift_type: Gaussian # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+dataset: diabetes_readmission
+shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 1
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(from empirical marginal distribution)
