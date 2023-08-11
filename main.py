@@ -30,7 +30,7 @@ def get_source_model(args, dataset):
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif 'mae' in args.method: # pretrain and train for masked autoencoder
+    elif args.method in ['mae', 'ttt++']: # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="all")[0], lr=args.train_lr)
@@ -131,9 +131,63 @@ def train(args, model, optimizer, dataset):
 
 
 def forward_and_adapt(args, dataset, x, mask, model, optimizer):
-    global EMA, original_source_model
+    global EMA, original_source_model, eata_params, ttt_params
     optimizer.zero_grad()
     outputs = model(x)
+
+    if 'pl' in args.method:
+        pseudo_label = torch.argmax(outputs, dim=-1)
+        loss = F.cross_entropy(outputs, pseudo_label)
+        loss.backward(retain_graph=True)
+    if 'ttt++' in args.method:
+        # getting featuers
+        z = model.get_feature(x)
+        a = model.get_recon_out(x * mask)
+
+        from utils.ttt import linear_mmd, coral, covariance
+        criterion_ssl = nn.MSELoss()
+
+        loss_ssl = criterion_ssl(x, a)
+
+        # feature alignment
+        loss_mean = linear_mmd(z.mean(axis=0), ttt_params['mean'])
+        loss_coral = coral(covariance(z), ttt_params['sigma'])
+
+        loss = loss_ssl * args.ttt_coef[0] + loss_mean * args.ttt_coef[1] + loss_coral * args.ttt_coef[2]
+        loss.backward()
+        print('ttt++ loss: ', loss.item())
+
+    if 'eata' in args.method:
+        # version 1 implementation
+        from utils.eata import update_model_probs
+        # filter unreliable samples
+        entropys = softmax_entropy(outputs / args.temp)
+        filter_ids_1 = torch.where(entropys < args.eata_e_margin)
+
+        ids1 = filter_ids_1
+        ids2 = torch.where(ids1[0]>-0.1)
+
+        # filtered entropy
+        entropys = entropys[filter_ids_1]
+        # filtered outputs
+        if eata_params['current_model_probs'] is not None:
+            cosine_similarities = F.cosine_similarity(eata_params['current_model_probs'].unsqueeze(dim=0), outputs[filter_ids_1].softmax(1), dim=1)
+            filter_ids_2 = torch.where(torch.abs(cosine_similarities) < args.eata_d_margin)
+            entropys = entropys[filter_ids_2]
+            ids2 = filter_ids_2
+            updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1][filter_ids_2].softmax(1))
+        else:
+            updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1].softmax(1))
+        coeff = 1 / (torch.exp(entropys.clone().detach() - args.eata_e_margin))
+        # implementation version 1, compute loss, all samples backward (some unselected are masked)
+        entropys = entropys.mul(coeff) # reweight entropy losses for diff. samples
+        loss = entropys.mean(0)
+        print(ids1, ids2)
+        if x[ids1][ids2].size(0) != 0:
+            loss.backward(retain_graph=True)
+
+        # eata param update
+        eata_params['current_model_probs'] = updated_probs
 
     if 'mae' in args.method:
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
@@ -203,8 +257,10 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
-    global logger, original_source_model, source_model, EMA
+    global logger, original_source_model, source_model, EMA, eata_params, ttt_params
     EMA = None
+    eata_params = {'fishers': None, 'current_model_probs': None}
+    ttt_params = {'mean': None, 'sigma': None}
     if hasattr(args, 'seed'):
         set_seed(args.seed)
         print(f"set seed as {args.seed}")
@@ -231,9 +287,24 @@ def main(args):
         test_optimizer = SAM(params, base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
     else:
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
+
+    # for TTT++
+    if args.method == 'ttt++':
+        # offline summarization
+        from utils.ttt import summarize
+        mean, sigma = summarize(args, dataset, source_model)
+
+        # save to global variable
+        ttt_params['mean'] = mean
+        ttt_params['sigma'] = sigma
+        print('ttt++ mean:', mean)
+        print('ttt++ sigma:', sigma)
+
+
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
 
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
+
     for test_x, test_mask_x, test_y in dataset.test_loader:
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
