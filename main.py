@@ -42,7 +42,7 @@ def get_source_model(args, dataset): # TODO: debug this function
 
 
 def train_classical_baseline(args):
-    dataset = Dataset(args)
+    dataset = Dataset(args, logger=logger)
     regression = True if dataset.out_dim == 1 else False
 
     if args.model == 'lr':
@@ -67,10 +67,10 @@ def train_classical_baseline(args):
 
         from xgboost import XGBRegressor, XGBClassifier
         if regression:
-            source_model = xgb.XGBRegressor(objective=objective, random_state=args.seed)
+            source_model = XGBRegressor(objective=objective, random_state=args.seed)
             source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
         else:
-            source_model = xgb.XGBClassifier(n_estimators=args.num_estimators, learning_rate=args.test_lr, max_depth=args.max_depth, random_state=args.seed)
+            source_model = XGBClassifier(n_estimators=args.num_estimators, learning_rate=args.test_lr, max_depth=args.max_depth, random_state=args.seed)
             source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
     elif args.model == 'rf':
         from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
