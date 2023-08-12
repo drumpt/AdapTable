@@ -23,6 +23,7 @@ from utils import utils
 
 class Dataset():
     def __init__(self, args, logger):
+        self.logger = logger
         if args.benchmark == "openml-cc18":
             (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_openml_cc18_dataset(args)
         elif args.benchmark == "tableshift":
@@ -37,13 +38,12 @@ class Dataset():
             (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_scikit_learn_dataset(args)
         else:
             raise NotImplementedError
-        self.logger = logger
 
         if float(args.train_ratio) != 1:
             train_x = train_x.iloc[:int(len(train_x) * float(args.train_ratio)), :]
             train_y = train_y.iloc[:int(len(train_y) * float(args.train_ratio)), :]
 
-        ##### preprocess #####
+        ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
         if len(cont_indices):
             self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
@@ -150,8 +150,8 @@ class Dataset():
         train_x, train_y, _, _ = dataset.get_pandas("train")
         valid_x, valid_y, _, _ = dataset.get_pandas("validation")
         test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("test")
-        cat_indices = np.array([sorted(train_x.columns.get_loc(c) for c in get_categorical_columns(train_x))])
-        return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
+        cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
+        return (train_x, valid_x, test_x), (pd.DataFrame(train_y), pd.DataFrame(valid_y), pd.DataFrame(test_y)), cat_indices, regression
 
 
     def get_shifts_dataset(self, args):
@@ -177,22 +177,22 @@ class Dataset():
             train_x = train_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float32)
             valid_x = valid_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float32)
             test_x = test_df[train_df.columns.difference(['fact_temperature', 'climate'])].astype(np.float32)
-            train_y = train_df['fact_temperature'].astype(np.float32)
-            valid_y = valid_df['fact_temperature'].astype(np.float32)
-            test_y = test_df['fact_temperature'].astype(np.float32)
+            train_y = train_df[['fact_temperature']].astype(np.float32)
+            valid_y = valid_df[['fact_temperature']].astype(np.float32)
+            test_y = test_df[['fact_temperature']].astype(np.float32)
         elif args.dataset == 'weather_cls':
             train_x = train_df[train_df.columns.difference(['fact_cwsm_class', 'climate'])].astype(np.float32)
             valid_x = valid_df[train_df.columns.difference(['fact_cwsm_class', 'climate'])].astype(np.float32)
             test_x = test_df[train_df.columns.difference(['fact_cwsm_class', 'climate'])].astype(np.float32)
-            train_y = train_df['fact_cwsm_class'].astype(np.float32)
-            valid_y = valid_df['fact_cwsm_class'].astype(np.float32)
-            test_y = test_df['fact_cwsm_class'].astype(np.float32)
+            train_y = train_df[['fact_cwsm_class']].astype(np.float32)
+            valid_y = valid_df[['fact_cwsm_class']].astype(np.float32)
+            test_y = test_df[['fact_cwsm_class']].astype(np.float32)
         elif args.dataset == 'power':
             train_x = train_df[train_df.columns.difference(['power'])].astype(np.float32)
             valid_x = valid_df[train_df.columns.difference(['power'])].astype(np.float32)
             test_x = test_df[train_df.columns.difference(['power'])].astype(np.float32)
-            train_y = train_df['power'].astype(np.float32)
-            valid_y = valid_df['power'].astype(np.float32)
+            train_y = train_df[['power']].astype(np.float32)
+            valid_y = valid_df[['power']].astype(np.float32)
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
 

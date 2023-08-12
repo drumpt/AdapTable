@@ -16,7 +16,6 @@ class MLP(nn.Module):
         self.main_head = nn.Sequential()
         self.cls_head = nn.Sequential()
         self.aux_head = nn.Sequential()
-
         in_dim = input_dim
         for _ in range(n_layers - 3):
             self.encoder.append(nn.Linear(in_dim, hidden_dim))
