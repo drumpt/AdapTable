@@ -288,7 +288,7 @@ class Dataset():
             x, y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True) # noise = amount of noise added to moons dataset
         else:
             raise NotImplementedError
-        y = y.reshape(-1, 1)
+        x, y = pd.DataFrame(x), pd.DataFrame(y)
         cat_indices = np.array([])
         if args.shift_type in ["numerical", "categorical"]:
             if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):

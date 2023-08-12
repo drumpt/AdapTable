@@ -4,14 +4,14 @@
 model: MLP
 
 ### dataset
-benchmark: folktables # openml-cc18, openml-regression, scikit-learn, tableshift, shifts, folktables
+benchmark: scikit-learn # openml-cc18, openml-regression, scikit-learn, tableshift, shifts, folktables
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-dataset: state_time
+dataset: two_moons
 shift_type: Gaussian # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 1
 normalizer: StandardScaler
