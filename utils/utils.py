@@ -44,8 +44,8 @@ def get_generator(seed):
     return g
 
 
-def get_logger(args): # TODO: fix this
-    logger = logging.getLogger("main")
+def get_logger(args):
+    logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(message)s')
 
@@ -67,6 +67,10 @@ def get_logger(args): # TODO: fix this
     if args.test_batch_size != 64:
         log_path += f'_test_batch_size{args.test_batch_size}'
     log_path += '.txt'
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
 
     file_handler = logging.FileHandler(os.path.join(args.log_dir, log_path))
     file_handler.setFormatter(formatter)
@@ -210,6 +214,30 @@ def generate_augmentation(x, args): # MEMO with dropout
     dropout = nn.Dropout(p=0.1)
     x_aug = torch.stack([dropout(x) for _ in range(args.memo_aug_num - 1)]).to(args.device)
     return x_aug
+
+
+def get_feature_importance(args, dataset, test_data, test_mask, source_model): # TODO: change this
+    test_data.requires_grad = True
+    test_data.grad = None
+    estimated_test_x = source_model.get_recon_out(test_data)
+    loss = F.mse_loss(estimated_test_x * test_mask, test_data * test_mask)
+    loss.backward(retain_graph=True)
+    feature_grads = torch.mean(test_data.grad, dim=0) # TODO: fix this (instance-wise gradient)
+
+    if 'random_mask' in args.method:
+        feature_importance = torch.ones_like(test_x[0])
+    else:
+        feature_importance = torch.reciprocal(torch.abs(feature_grads) + args.delta)
+    feature_importance = feature_importance / torch.sum(feature_importance)
+    return feature_importance
+
+
+def get_mask_by_feature_importance(args, test_data, importance):
+    mask = torch.ones_like(test_data, dtype=torch.float32)
+    selected_rows = np.random.choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.test_mask_ratio))
+    selected_columns = np.random.choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.test_mask_ratio), p=importance.cpu().numpy())
+    mask[selected_rows, selected_columns] = 0
+    return mask
 
 
 ##################################################################

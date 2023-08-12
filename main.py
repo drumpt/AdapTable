@@ -15,9 +15,9 @@ from utils.utils import *
 from utils.sam import *
 
 
-def get_model(args, dataset, dropout_rate=0): # TODO: can we remove dropout_rate?
+def get_model(args, dataset):
     if args.model == "MLP":
-        model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=dropout_rate)
+        model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=args.dropout_rate)
     elif args.model == "TabNet":
         model = TabNet(args, dataset)
     elif args.model == "TabTransformer":
@@ -30,7 +30,7 @@ def get_source_model(args, dataset):
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif args.method in ['mae', 'ttt++']: # pretrain and train for masked autoencoder
+    elif len(set(args.method).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="all")[0], lr=args.train_lr)
@@ -50,7 +50,7 @@ def pretrain(args, model, optimizer, dataset):
         model.train().to(device)
         for train_x, _ in dataset.train_loader:
             train_x = train_x.to(device)
-            train_cor_x, _ = Dataset.get_corrupted_data(train_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change numerical parameter
+            train_cor_x, _ = Dataset.get_corrupted_data(train_x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change this
             train_cor_x = torch.Tensor(train_cor_x).to(args.device)
 
             estimated_x = model.get_recon_out(train_cor_x)
@@ -68,7 +68,7 @@ def pretrain(args, model, optimizer, dataset):
         with torch.no_grad():
             for valid_x, _ in dataset.valid_loader:
                 valid_x = valid_x.to(device)
-                valid_cor_x, _ = Dataset.get_corrupted_data(valid_x, dataset.dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change numerical parameter
+                valid_cor_x, _ = Dataset.get_corrupted_data(valid_x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change numerical parameter
                 valid_cor_x = torch.Tensor(valid_cor_x).to(args.device)
 
                 estimated_x = model.get_recon_out(valid_cor_x)
@@ -135,64 +135,10 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
     optimizer.zero_grad()
     outputs = model(x)
 
-    if 'pl' in args.method:
-        pseudo_label = torch.argmax(outputs, dim=-1)
-        loss = F.cross_entropy(outputs, pseudo_label)
-        loss.backward(retain_graph=True)
-    if 'ttt++' in args.method:
-        # getting featuers
-        z = model.get_feature(x)
-        a = model.get_recon_out(x * mask)
-
-        from utils.ttt import linear_mmd, coral, covariance
-        criterion_ssl = nn.MSELoss()
-
-        loss_ssl = criterion_ssl(x, a)
-
-        # feature alignment
-        loss_mean = linear_mmd(z.mean(axis=0), ttt_params['mean'])
-        loss_coral = coral(covariance(z), ttt_params['sigma'])
-
-        loss = loss_ssl * args.ttt_coef[0] + loss_mean * args.ttt_coef[1] + loss_coral * args.ttt_coef[2]
-        loss.backward()
-        print('ttt++ loss: ', loss.item())
-
-    if 'eata' in args.method:
-        # version 1 implementation
-        from utils.eata import update_model_probs
-        # filter unreliable samples
-        entropys = softmax_entropy(outputs / args.temp)
-        filter_ids_1 = torch.where(entropys < args.eata_e_margin)
-
-        ids1 = filter_ids_1
-        ids2 = torch.where(ids1[0]>-0.1)
-
-        # filtered entropy
-        entropys = entropys[filter_ids_1]
-        # filtered outputs
-        if eata_params['current_model_probs'] is not None:
-            cosine_similarities = F.cosine_similarity(eata_params['current_model_probs'].unsqueeze(dim=0), outputs[filter_ids_1].softmax(1), dim=1)
-            filter_ids_2 = torch.where(torch.abs(cosine_similarities) < args.eata_d_margin)
-            entropys = entropys[filter_ids_2]
-            ids2 = filter_ids_2
-            updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1][filter_ids_2].softmax(1))
-        else:
-            updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1].softmax(1))
-        coeff = 1 / (torch.exp(entropys.clone().detach() - args.eata_e_margin))
-        # implementation version 1, compute loss, all samples backward (some unselected are masked)
-        entropys = entropys.mul(coeff) # reweight entropy losses for diff. samples
-        loss = entropys.mean(0)
-        print(ids1, ids2)
-        if x[ids1][ids2].size(0) != 0:
-            loss.backward(retain_graph=True)
-
-        # eata param update
-        eata_params['current_model_probs'] = updated_probs
-
     if 'mae' in args.method:
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
         test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device)
-        test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * torch.Tensor(Dataset.get_imputed_data(x, dataset.dataset.train_x, data_type="numerical", imputation_method="emd")).to(x.device) # TODO: change this
+        test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * torch.Tensor(Dataset.get_imputed_data(x, dataset.train_x, data_type="numerical", imputation_method="emd")).to(x.device) # TODO: change this
         
         estimated_test_x = source_model.get_recon_out(test_cor_x)
         loss = F.mse_loss(estimated_test_x * mask, x * mask) # l2 loss only on non-missing values
@@ -223,6 +169,55 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
 
         EMA = 0.9 * EMA + (1 - 0.9) * loss_second.item() if EMA != None else loss_second.item()
         return
+    if 'pl' in args.method:
+        pseudo_label = torch.argmax(outputs, dim=-1)
+        loss = F.cross_entropy(outputs, pseudo_label)
+        loss.backward(retain_graph=True)
+    if 'ttt++' in args.method:
+        # getting featuers
+        z = model.get_feature(x)
+        a = model.get_recon_out(x * mask)
+
+        from utils.ttt import linear_mmd, coral, covariance
+        criterion_ssl = nn.MSELoss()
+        loss_ssl = criterion_ssl(x, a)
+
+        # feature alignment
+        loss_mean = linear_mmd(z.mean(axis=0), ttt_params['mean'])
+        loss_coral = coral(covariance(z), ttt_params['sigma'])
+
+        loss = loss_ssl * args.ttt_coef[0] + loss_mean * args.ttt_coef[1] + loss_coral * args.ttt_coef[2]
+        loss.backward()
+    if 'eata' in args.method:
+        # version 1 implementation
+        from utils.eata import update_model_probs
+        # filter unreliable samples
+        entropys = softmax_entropy(outputs / args.temp)
+        filter_ids_1 = torch.where(entropys < args.eata_e_margin)
+
+        ids1 = filter_ids_1
+        ids2 = torch.where(ids1[0]>-0.1)
+
+        # filtered entropy
+        entropys = entropys[filter_ids_1]
+        # filtered outputs
+        if eata_params['current_model_probs'] is not None:
+            cosine_similarities = F.cosine_similarity(eata_params['current_model_probs'].unsqueeze(dim=0), outputs[filter_ids_1].softmax(1), dim=1)
+            filter_ids_2 = torch.where(torch.abs(cosine_similarities) < args.eata_d_margin)
+            entropys = entropys[filter_ids_2]
+            ids2 = filter_ids_2
+            updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1][filter_ids_2].softmax(1))
+        else:
+            updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1].softmax(1))
+        coeff = 1 / (torch.exp(entropys.clone().detach() - args.eata_e_margin))
+        # implementation version 1, compute loss, all samples backward (some unselected are masked)
+        entropys = entropys.mul(coeff) # reweight entropy losses for diff. samples
+        loss = entropys.mean(0)
+        if x[ids1][ids2].size(0) != 0:
+            loss.backward(retain_graph=True)
+
+        # eata param update
+        eata_params['current_model_probs'] = updated_probs
     if 'dem' in args.method: # differential entropy minimization
         model.train()
         prediction_list = []
@@ -288,23 +283,15 @@ def main(args):
     else:
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
 
-    # for TTT++
-    if args.method == 'ttt++':
-        # offline summarization
-        from utils.ttt import summarize
+    if args.method == 'ttt++': # for TTT++
+        from utils.ttt import summarize # offline summarization
         mean, sigma = summarize(args, dataset, source_model)
-
         # save to global variable
         ttt_params['mean'] = mean
         ttt_params['sigma'] = sigma
-        print('ttt++ mean:', mean)
-        print('ttt++ sigma:', sigma)
-
 
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
-
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
-
     for test_x, test_mask_x, test_y in dataset.test_loader:
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)

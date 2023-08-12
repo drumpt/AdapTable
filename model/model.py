@@ -24,15 +24,11 @@ class MLP(nn.Module):
             self.encoder.append(nn.Dropout(dropout))
             in_dim = hidden_dim
         self.encoder.append(nn.Linear(in_dim, hidden_dim))
-
         self.recon_head.append(nn.Linear(hidden_dim, input_dim))
-
         self.main_head.append(nn.Linear(hidden_dim, hidden_dim))
         self.main_head.append(nn.ReLU())
         self.main_head.append(nn.Dropout(dropout))
-
         self.cls_head.append(nn.Linear(hidden_dim, output_dim))
-
         self.aux_head.append(nn.Linear(hidden_dim, hidden_dim))
 
 
@@ -125,7 +121,8 @@ class TabNet(nn.Module): # TODO: (WIP) finish implementing this!
 
 class TabTransformer(nn.Module):
     def __init__(self, args, dataset):
-        print(f"dir(TabTransformer): {dir(TabTransformer.__init__)}")
+        super().__init__()
+
         self.model = TabTransformer(
             categories=(10, 5, 6, 5, 8),      # tuple containing the number of unique values within each category
             num_continuous=dataset.in_dim,                # number of continuous values
@@ -138,7 +135,6 @@ class TabTransformer(nn.Module):
             mlp_hidden_mults=(4, 2),          # relative multiples of each hidden dimension of the last mlp to logits
             mlp_act=nn.ReLU(),                # activation for final mlp, defaults to relu, but could be anything else (selu etc)
         )
-        print(f"dir(self.model): {dir(self.model)}")
         self.recon_head = nn.Sequential()
         self.recon_head.append(nn.Linear(256, dataset.in_dim))
 

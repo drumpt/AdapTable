@@ -5,7 +5,7 @@ AbaloneOpt = {
     ]
 }
 
-CholestrolOpt = {
+CholesterolOpt = {
     'path': './data/OpenML_arff/dataset_2190_cholesterol.arff',
     'nominal_columns':[
         'sex',

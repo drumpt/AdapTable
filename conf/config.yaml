@@ -1,24 +1,25 @@
 ### model
 ## currently supported: MLP, TabNet, TabTransformer
-## supervised baseline: lr, knn, xgboost, rf
+## supervised baseline: lr, knn, rf, xgboost, catboost
 model: MLP
 
 ### dataset
-benchmark: tableshift # openml-cc18, tableshift, openml-regression, shifts
+benchmark: folktables # openml-cc18, openml-regression, scikit-learn, tableshift, shifts, folktables
 ## currently available dataset list
 # openml-cc18: adult(income), cmc, mfeat-karhunen(karhunen), optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: diabetes_readmission(O), heloc(O), acsincome, acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, anes(X), mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
-dataset: diabetes_readmission
-shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+# folktables: state, time, time_state
+dataset: state_time
+shift_type: Gaussian # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 1
 normalizer: StandardScaler
 imputation_method: emd # zero, mean, emd(from empirical marginal distribution)
-train_ratio: 1.0 # for evaluating on limited number of train instances
+train_ratio: 1 # for evaluating on limited number of train instances
 
 ### hyperparameters for MAE pretraining
-pretrain_epochs: 50
+pretrain_epochs: 200
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
@@ -57,19 +58,13 @@ kld_weight: 0.1 # for kl-divergence loss
 memo_aug_num: 64 # for memo
 dropout_rate: 0 # for differential entropy minimization
 dropout_steps: 0 # for differential entropy minimization
+eata_e_margin: 2.4538776394910684 # for eata
+eata_d_margin: 0.05 # for eata
+ttt_coef: [1.0, 0.1, 1.0] # for ttt++
 
 # for supervised baselines
 num_estimators: 25
 max_depth: 3
-
-##################################################################
-### eata
-eata_e_margin: 2.4538776394910684
-eata_d_margin: 0.05
-
-### ttt++
-ttt_coef: [1.0, 0.1, 1.0]
-
 
 ##################################################################
 ### device
