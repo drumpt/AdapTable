@@ -17,7 +17,7 @@ from utils.sam import *
 
 def get_model(args, dataset):
     if args.model == "MLP":
-        model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=args.dropout_rate)
+        model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=32, n_layers=4, dropout=args.dropout_rate)
     elif args.model == "TabNet":
         model = TabNet(args, dataset)
     elif args.model == "TabTransformer":
@@ -30,7 +30,7 @@ def get_source_model(args, dataset):
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif len(set(args.method).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
+    elif len(set([args.method]).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="all")[0], lr=args.train_lr)
@@ -247,6 +247,14 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         original_probs = torch.softmax(original_outputs, dim=-1)
         kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
         (args.kld_weight * kl_div_loss).backward(retain_graph=True)
+    # if 'debug' in args.method:
+    #     print('debugging')
+    #
+    #
+    #     estimated_test_x = source_model.get_recon_out(test_cor_x)
+    #     loss = F.mse_loss(estimated_test_x * mask, x * mask)  # l2 loss only on non-missing values
+    #     loss.backward(retain_graph=True)
+
     optimizer.step()
 
 
