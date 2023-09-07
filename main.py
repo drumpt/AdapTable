@@ -16,12 +16,8 @@ from utils.sam import *
 
 
 def get_model(args, dataset):
-    if args.model == "MLP":
-        model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=256, n_layers=4, dropout=args.dropout_rate)
-    elif args.model == "TabNet":
-        model = TabNet(args, dataset)
-    elif args.model == "TabTransformer":
-        model = TabTransformer(args, dataset)
+    model = eval(args.model)(args, dataset)
+    model = model.to(args.device)
     return model
 
 
@@ -33,7 +29,7 @@ def get_source_model(args, dataset):
     elif len(set(args.method).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
-        train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="all")[0], lr=args.train_lr)
+        train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
         source_model = train(args, pretrained_model, train_optimizer, dataset) # supervised learning (main task)
     else:
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.train_lr)
@@ -47,14 +43,14 @@ def pretrain(args, model, optimizer, dataset):
     loss_fn = nn.MSELoss(reduction='none')
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
-        model.train().to(device)
+        model.train()
         for train_x, _ in dataset.train_loader:
             train_x = train_x.to(device)
             train_cor_x, _ = Dataset.get_corrupted_data(train_x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change this
             train_cor_x = torch.Tensor(train_cor_x).to(args.device)
 
             estimated_x = model.get_recon_out(train_cor_x)
-            loss = loss_fn(estimated_x, train_x).mean()
+            loss = loss_fn(estimated_x, train_x if not model.use_embedding else model.get_embedding(train_x).detach()).mean()
 
             optimizer.zero_grad()
             loss.backward()
@@ -64,7 +60,7 @@ def pretrain(args, model, optimizer, dataset):
             train_len += train_cor_x.shape[0]
 
         valid_loss, valid_len = 0, 0
-        model.eval().to(device)
+        model.eval()
         with torch.no_grad():
             for valid_x, _ in dataset.valid_loader:
                 valid_x = valid_x.to(device)
@@ -72,7 +68,7 @@ def pretrain(args, model, optimizer, dataset):
                 valid_cor_x = torch.Tensor(valid_cor_x).to(args.device)
 
                 estimated_x = model.get_recon_out(valid_cor_x)
-                loss = loss_fn(estimated_x, valid_x).mean()
+                loss = loss_fn(estimated_x, valid_x if not model.use_embedding else model.get_embedding(valid_x).detach()).mean()
 
                 valid_loss += loss.item() * valid_cor_x.shape[0]
                 valid_len += valid_cor_x.shape[0]
@@ -93,7 +89,7 @@ def train(args, model, optimizer, dataset):
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
     for epoch in range(1, args.epochs + 1):
         train_loss, train_acc, train_len = 0, 0, 0
-        model.train().to(device)
+        model = model.train()
         for train_x, train_y in dataset.train_loader:
             train_x, train_y = train_x.to(device), train_y.to(device)
 
@@ -109,7 +105,7 @@ def train(args, model, optimizer, dataset):
             train_len += train_x.shape[0]
 
         valid_loss, valid_acc, valid_len = 0, 0, 0
-        model.eval().to(device)
+        model = model.eval()
         with torch.no_grad():
             for valid_x, valid_y in dataset.valid_loader:
                 valid_x, valid_y = valid_x.to(device), valid_y.to(device)
@@ -139,9 +135,10 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
         test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device)
         test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * torch.Tensor(Dataset.get_imputed_data(x, dataset.train_x, data_type="numerical", imputation_method="emd")).to(x.device) # TODO: change this
-        
+
         estimated_test_x = source_model.get_recon_out(test_cor_x)
-        loss = F.mse_loss(estimated_test_x * mask, x * mask) # l2 loss only on non-missing values
+        loss = F.mse_loss(estimated_test_x, x if not model.use_embedding else model.get_embedding(x).detach()) # TODO: l2 loss only on non-missing values
+        # loss = F.mse_loss(estimated_test_x * mask, x if not model.use_embedding else model.get_embedding(x).detach() * mask) # l2 loss only on non-missing values
         loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
@@ -228,10 +225,10 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         differential_entropy = - torch.log(2 * np.pi * np.e * prediction_std)
         differential_entropy.backward(retain_graph=True)
         model.eval()
-    if 'gem' in args.method:
+    if 'gem' in args.method: # generalized entropy minimization
         e_loss = renyi_entropy(outputs / args.temp, alpha=args.renyi_entropy_alpha)
         e_loss.backward(retain_graph=True)
-    if 'ns' in args.method: # SGEM
+    if 'ns' in args.method: # generalized entropy minimization
         negative_outputs = outputs.clone()
         negative_loss = 0
         negative_mask = torch.where(torch.softmax(negative_outputs, dim=-1) < args.ns_threshold * (10 / negative_outputs.shape[-1]), 1, 0)
@@ -274,9 +271,9 @@ def main(args):
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
 
     source_model = get_source_model(args, dataset)
-    source_model.eval().requires_grad_(True).to(device)
+    source_model.eval().requires_grad_(True)
     original_source_model = deepcopy(source_model)
-    original_source_model.eval().requires_grad_(False).to(device)
+    original_source_model.eval().requires_grad_(False)
     params, _ = collect_params(source_model, train_params=args.train_params)
     if "sar" in args.method:
         test_optimizer = SAM(params, base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
@@ -309,7 +306,7 @@ def main(args):
 
         if "mae" in args.method: # implement imputation with masked autoencoder
             estimated_x = source_model.get_recon_out(test_x)
-            test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
+            # test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x) # TODO: implement this
 
         estimated_y = source_model(test_x)
         loss = loss_fn(estimated_y, test_y)

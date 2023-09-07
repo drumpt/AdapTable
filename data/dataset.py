@@ -45,6 +45,7 @@ class Dataset():
 
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
+        self.emb_dim = []
         if len(cont_indices):
             self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
             self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
@@ -104,6 +105,15 @@ class Dataset():
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
 
+        # for MLP_EMB and TabNeft
+        self.cont_dim = train_cont_x.shape[-1]
+        if hasattr(self, 'input_one_hot_encoder'):
+            self.emb_dim_list = [(len(category), min(10, (len(category) + 1) // 2)) if len(cat_indices) else (0, 0) for category in self.input_one_hot_encoder.categories_]
+            self.cat_end_indices = np.cumsum([num_category for num_category, _ in self.emb_dim_list])
+            self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+        else:
+            self.emb_dim_list, self.cat_end_indices, self.cat_start_indices = [], np.array([]), np.array([])
+
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")
 
 
@@ -127,7 +137,7 @@ class Dataset():
             if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):
                 raise Exception(f'No {args.shift_type} columns in {args.dataset} dataset!')
 
-            train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, regression=False)
+            train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, args.shift_severity, regression=False)
             train_x, train_y = x.iloc[train_indices, :], y.iloc[train_indices, :]
             test_x, test_y = x.iloc[test_indices, :], y.iloc[test_indices, :]
             train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
@@ -265,7 +275,7 @@ class Dataset():
             if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):
                 raise Exception(f'No {args.shift_type} columns in {args.dataset} dataset!')
 
-            train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, regression=False)
+            train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, args.shift_severity, regression=True)
             train_x, train_y = x.iloc[train_indices, :], y.iloc[train_indices, :]
             test_x, test_y = x.iloc[test_indices, :], y.iloc[test_indices, :]
             train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
@@ -294,7 +304,7 @@ class Dataset():
             if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):
                 raise Exception(f'No {args.shift_type} columns in {args.dataset} dataset!')
 
-            train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, regression=False)
+            train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, args.shift_severity, regression=False)
             train_x, train_y = x.iloc[train_indices, :], y.iloc[train_indices, :]
             test_x, test_y = x.iloc[test_indices, :], y.iloc[test_indices, :]
             train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
@@ -372,7 +382,7 @@ class Dataset():
 
 
     @staticmethod
-    def split_dataset_by_natural_shift(x, y, cat_indices, shift_type, regression):
+    def split_dataset_by_natural_shift(x, y, cat_indices, shift_type, shift_severity, regression):
         from xgboost import XGBClassifier, XGBRegressor
         from sklearn.preprocessing import LabelEncoder
 
@@ -397,7 +407,11 @@ class Dataset():
             x = x.sort_values(by=[f"{x.columns[important_feature_idx]}_count"], ascending=False)
         else:
             raise NotImplementedError
-        train_indices = np.array(x.iloc[:int(x.shape[0] * 0.8), :].index)
+
+        train_indices = np.concatenate([
+            np.random.choice(x.iloc[:int(x.shape[0] * 0.8), :].index, size=int(x.shape[0] * 0.8 * (0.8 + 0.2 * shift_severity)), replace=False),
+            np.random.choice(x.iloc[int(x.shape[0] * 0.8):, :].index, size=int(x.shape[0] * 0.8 * 0.2 * (1 - shift_severity)), replace=False),
+        ])
         test_indices = np.array(sorted(set(np.arange(x.shape[0])).difference(set(train_indices))))
         return train_indices, test_indices
 

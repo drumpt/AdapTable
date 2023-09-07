@@ -144,12 +144,12 @@ def collect_params(model, train_params):
                     continue
                 params.append(p)
                 names.append(f"{nm}.{np}")
-        # if "downstream" in train_params:
-        #     for np, p in m.named_parameters():
-        #         if not 'main_head' in f"{nm}.{np}":
-        #             continue
-        #         params.append(p)
-        #         names.append(f"{nm}.{np}")
+        if "downstream" in train_params: # TODO: check for TabNet, TabTransformer
+            for np, p in m.named_parameters():
+                if not 'main_head' in f"{nm}.{np}":
+                    continue
+                params.append(p)
+                names.append(f"{nm}.{np}")
     return params, names
 
 
@@ -216,17 +216,17 @@ def generate_augmentation(x, args): # MEMO with dropout
     return x_aug
 
 
-def get_feature_importance(args, dataset, test_data, test_mask, source_model): # TODO: change this
-    test_data.requires_grad = True
-    test_data.grad = None
-    estimated_test_x = source_model.get_recon_out(test_data)
-    loss = F.mse_loss(estimated_test_x * test_mask, test_data * test_mask)
-    loss.backward(retain_graph=True)
-    feature_grads = torch.mean(test_data.grad, dim=0) # TODO: fix this (instance-wise gradient)
-
+def get_feature_importance(args, dataset, test_data, test_mask, source_model):
     if 'random_mask' in args.method:
         feature_importance = torch.ones_like(test_x[0])
     else:
+        test_data.requires_grad = True
+        test_data.grad = None
+        estimated_test_x = source_model.get_recon_out(test_data)
+        # loss = F.mse_loss(estimated_test_x * test_mask, test_data * test_mask) # TODO: change this
+        loss = F.mse_loss(estimated_test_x, test_data if not source_model.use_embedding else source_model.get_embedding(test_data).detach())
+        loss.backward(retain_graph=True)
+        feature_grads = torch.mean(test_data.grad, dim=0) # TODO: fix this (instance-wise gradient)
         feature_importance = torch.reciprocal(torch.abs(feature_grads) + args.delta)
     feature_importance = feature_importance / torch.sum(feature_importance)
     return feature_importance
@@ -239,6 +239,18 @@ def get_mask_by_feature_importance(args, test_data, importance):
     mask[selected_rows, selected_columns] = 0
     return mask
 
+
+def get_embedding_mask(args, mask, model): # TODO: implement this!
+    embedding_mask = []
+    # if self.use_embedding:
+    #     inputs_cont = inputs[:, :self.cat_start_index]
+    #     inputs_cat = inputs[:, self.cat_start_index:]
+    #     inputs_cat_emb = []
+    #     for i, emb_layer in enumerate(self.emb_layers):
+    #         inputs_cat_emb.append(emb_layer(torch.argmax(inputs_cat[:, self.cat_start_indices[i]:self.cat_end_indices[i]], dim=-1)))
+    #     inputs_cat = torch.cat(inputs_cat_emb, dim=-1)
+    #     inputs = torch.cat([inputs_cont, inputs_cat], 1)
+    return mask
 
 ##################################################################
 # for visualization
