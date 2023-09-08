@@ -27,7 +27,7 @@ def get_source_model(args, dataset):
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
     elif len(set(args.method).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
-        pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.pretrain_lr)
+        pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="pretrain")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
         source_model = train(args, pretrained_model, train_optimizer, dataset) # supervised learning (main task)
@@ -46,8 +46,9 @@ def pretrain(args, model, optimizer, dataset):
         model.train()
         for train_x, _ in dataset.train_loader:
             train_x = train_x.to(device)
-            train_cor_x, _ = Dataset.get_corrupted_data(train_x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change this
-            train_cor_x = torch.Tensor(train_cor_x).to(args.device)
+            train_cont_cor_x, _ = Dataset.get_corrupted_data(train_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+            train_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(train_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+            train_cor_x = torch.Tensor(np.concatenate([train_cont_cor_x, dataset.input_one_hot_encoder.transform(train_cat_cor_x)], axis=-1)).to(args.device)
 
             estimated_x = model.get_recon_out(train_cor_x)
             loss = loss_fn(estimated_x, train_x if not model.use_embedding else model.get_embedding(train_x).detach()).mean()
@@ -64,8 +65,9 @@ def pretrain(args, model, optimizer, dataset):
         with torch.no_grad():
             for valid_x, _ in dataset.valid_loader:
                 valid_x = valid_x.to(device)
-                valid_cor_x, _ = Dataset.get_corrupted_data(valid_x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd") # TODO: change numerical parameter
-                valid_cor_x = torch.Tensor(valid_cor_x).to(args.device)
+                valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                valid_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(valid_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                valid_cor_x = torch.Tensor(np.concatenate([valid_cont_cor_x, dataset.input_one_hot_encoder.transform(valid_cat_cor_x)], axis=-1)).to(args.device)
 
                 estimated_x = model.get_recon_out(valid_cor_x)
                 loss = loss_fn(estimated_x, valid_x if not model.use_embedding else model.get_embedding(valid_x).detach()).mean()
@@ -132,9 +134,12 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
     outputs = model(x)
 
     if 'mae' in args.method:
+        cont_cor_x, _ = Dataset.get_corrupted_data(x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+        cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(x[:, dataset.cont_dim:].detach().cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+        cor_x = torch.Tensor(np.concatenate([cont_cor_x, dataset.input_one_hot_encoder.transform(cat_cor_x)], axis=-1)).to(args.device)
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
         test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device)
-        test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * torch.Tensor(Dataset.get_imputed_data(x, dataset.train_x, data_type="numerical", imputation_method="emd")).to(x.device) # TODO: change this
+        test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * cor_x
 
         estimated_test_x = source_model.get_recon_out(test_cor_x)
         loss = F.mse_loss(estimated_test_x, x if not model.use_embedding else model.get_embedding(x).detach()) # TODO: l2 loss only on non-missing values

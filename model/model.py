@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_tabnet.tab_network import TabNetEncoder, TabNetDecoder, EmbeddingGenerator, RandomObfuscator
-from tab_transformer_pytorch.tab_transformer_pytorch import Transformer, MLP as MLPTabTransformer
+from tab_transformer_pytorch.tab_transformer_pytorch import Transformer
 
 
 class MLP(nn.Module):
@@ -34,6 +34,8 @@ class MLP(nn.Module):
         self.encoder.append(nn.Linear(hidden_dim_list[-2], hidden_dim_list[-1]))
         self.main_head = nn.Linear(hidden_dim_list[-1], output_dim)
         self.recon_head = nn.Linear(hidden_dim_list[-1], input_dim)
+        print(f"self.encoder: {self.encoder}")
+        print(f"self.main_head: {self.main_head}")
 
 
     def forward(self, inputs):
@@ -126,6 +128,8 @@ class TabNet(nn.Module):
             virtual_batch_size=self.virtual_batch_size,
             momentum=self.momentum,
         )
+        print(f"self.encoder: {self.encoder}")
+        print(f"self.decoder: {self.decoder}")
         self.main_head = nn.Linear(self.n_d, self.output_dim)
 
 
@@ -229,7 +233,23 @@ class TabTransformer(nn.Module):
             ])
         self.encoder.append(nn.Linear(all_dimensions[-2], all_dimensions[-1]))
         self.main_head = nn.Linear(all_dimensions[-1], self.dim_out)
-        self.recon_head = nn.Linear(all_dimensions[-1], input_size)
+        # self.main_head = nn.Sequential(
+        #     nn.Linear(all_dimensions[-1], self.dim_out)
+        # )
+        self.recon_head = nn.Sequential(
+            # Transformer(
+            #     num_tokens=self.total_tokens,
+            #     dim=all_dimensions[-1],
+            #     depth=1, # asyymetric encoder-deocder architecture
+            #     heads=self.heads,
+            #     dim_head=self.dim_head,
+            #     attn_dropout=self.attn_dropout,
+            #     ff_dropout=self.ff_dropout
+            # ),
+            # nn.Linear(all_dimensions[-1], all_dimensions[-1]),
+            # nn.ReLU(),
+            nn.Linear(all_dimensions[-1], input_size),
+        )
 
 
     def forward(self, inputs):
@@ -240,7 +260,8 @@ class TabTransformer(nn.Module):
 
     def get_recon_out(self, inputs):
         inputs_emb = self.get_embedding(inputs)
-        recon_out = self.recon_head(self.encoder(inputs_emb))
+        enc_out = self.encoder(inputs_emb)
+        recon_out = self.recon_head(enc_out)
         return recon_out
 
 
@@ -257,7 +278,7 @@ class TabTransformer(nn.Module):
         xs = []
         if self.num_unique_categories > 0:
             inputs_cat += self.categories_offset
-            x, _ = self.transformer(inputs_cat.long(), return_attn = True)
+            x = self.transformer(inputs_cat.long(), return_attn=False)
             flat_categ = x.flatten(1)
             xs.append(flat_categ)
         if self.num_continuous > 0:

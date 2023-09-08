@@ -120,7 +120,7 @@ def collect_params(model, train_params):
                 if not f"{nm}.{np}" in names:
                     params.append(p)
                     names.append(f"{nm}.{np}")
-        if 'LN' in train_params: # TODO: change this (not working)
+        if 'LN' in train_params:
             if isinstance(m, nn.LayerNorm):
                 for np, p in m.named_parameters():
                     if np in ['weight', 'bias']:
@@ -144,12 +144,13 @@ def collect_params(model, train_params):
                     continue
                 params.append(p)
                 names.append(f"{nm}.{np}")
-        if "downstream" in train_params: # TODO: check for TabNet, TabTransformer
+        if "downstream" in train_params:
             for np, p in m.named_parameters():
                 if not 'main_head' in f"{nm}.{np}":
                     continue
                 params.append(p)
                 names.append(f"{nm}.{np}")
+    print(f"names: {names}")
     return params, names
 
 

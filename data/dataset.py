@@ -39,7 +39,7 @@ class Dataset():
         else:
             raise NotImplementedError
 
-        if float(args.train_ratio) != 1:
+        if 0 < float(args.train_ratio) < 1:
             train_x = train_x.iloc[:int(len(train_x) * float(args.train_ratio)), :]
             train_y = train_y.iloc[:int(len(train_y) * float(args.train_ratio)), :]
 
@@ -51,13 +51,16 @@ class Dataset():
             self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # TODO: add new synthetic corruption benchmarks
+            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # TODO (important!) add new synthetic corruption benchmarks
                 args.shift_type = None
-            test_cont_x, test_cont_mask_x = Dataset.get_corrupted_data(np.array(test_x.iloc[:, cont_indices]),
-                                                np.array(train_x.iloc[:, cont_indices]),
-                                                data_type="numerical", shift_type=args.shift_type,
-                                                shift_severity=args.shift_severity,
-                                                imputation_method=args.imputation_method)
+            test_cont_x, test_cont_mask_x = Dataset.get_corrupted_data(
+                np.array(test_x.iloc[:, cont_indices]),
+                np.array(train_x.iloc[:, cont_indices]),
+                data_type="numerical",
+                shift_type=args.shift_type,
+                shift_severity=args.shift_severity,
+                imputation_method=args.imputation_method,
+            )
             test_cont_x = self.input_scaler.transform(test_cont_x)
         else:
             train_cont_x, test_cont_mask_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([]), np.array([])
@@ -66,13 +69,16 @@ class Dataset():
             self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # TODO: add new synthetic corruption benchmarks
+            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # TODO (important!) add new synthetic corruption benchmarks
                 args.shift_type = None
-            test_cat_x, test_cat_mask_x = Dataset.get_corrupted_data(np.array(test_x.iloc[:, cat_indices]),
-                                            np.array(train_x.iloc[:, cat_indices]),
-                                            data_type="categorical", shift_type=args.shift_type,
-                                            shift_severity=args.shift_severity,
-                                            imputation_method=args.imputation_method)
+            test_cat_x, test_cat_mask_x = Dataset.get_corrupted_data(
+                np.array(test_x.iloc[:, cat_indices]),
+                np.array(train_x.iloc[:, cat_indices]),
+                data_type="categorical",
+                shift_type=args.shift_type,
+                shift_severity=args.shift_severity,
+                imputation_method=args.imputation_method,
+            )
             test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
             test_cat_mask_x = np.concatenate([np.repeat(test_cat_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
         else:
