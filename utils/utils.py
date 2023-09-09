@@ -207,7 +207,6 @@ def mixup(data, targets, args, alpha=0.5):
     lam = torch.FloatTensor([np.random.beta(alpha, alpha)]).to(args.device)
     data = final_data * lam + final_data2 * (1 - lam)
     targets = final_target * lam + final_target2 * (1 - lam)
-
     return data, targets
 
 
@@ -252,92 +251,28 @@ def get_mask_by_feature_importance(args, test_data, importance):
 #         inputs = torch.cat([inputs_cont, inputs_cat], 1)
 #     return mask
 
+
 ##################################################################
 # for visualization
-def draw_entropy_distribution():
-    pass
-    # global EMA, ENTROPY_LIST, GRADIENT_NORM_LIST, ENTROPY_LIST_NEW, GRADIENT_NORM_LIST_NEW, PREDICTED_LABEL, BATCH_IDX
-    # ENTROPY_LIST, ENTROPY_LIST_NEW = [], []
-    # EMA = None
-    # params, _ = collect_params(best_model, train_params=args.train_params)
-    # if "sar" in args.method:
-    #     test_optimizer = SAM(params, base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
-    # else:
-    #     test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
-    # original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(best_model, test_optimizer, scheduler=None)
-
-    # for test_x, _, test_y in dataset.test_loader:
-    #     if args.episodic or (EMA != None and EMA < 0.2):
-    #         best_model, test_optimizer, _ = load_model_and_optimizer(best_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
-
-    #     test_x, test_y = test_x.to(device), test_y.to(device)
-    #     test_len += test_x.shape[0]
-
-    #     estimated_y = original_best_model(test_x) if isinstance(original_best_model, MLP) else original_best_model(test_x)[-1]
-
-    #     # TODO: implementing entropy distribution
-    #     ENTROPY_LIST.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
-
-    #     loss = loss_fn(estimated_y, test_y)
-    #     test_loss_before += loss.item() * test_x.shape[0]
-    #     test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
-    #     for _ in range(1, args.num_steps + 1):
-    #         forward_and_adapt(args, test_x, best_model, test_optimizer)
-
-    #     estimated_y = best_model(test_x) if isinstance(best_model, MLP) else best_model(test_x)[-1]
-
-    #     ENTROPY_LIST_NEW.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
-
-    #     loss = loss_fn(estimated_y, test_y)
-    #     test_loss_after += loss.item() * test_x.shape[0]
-    #     test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
-    #     with torch.no_grad():
-    #         ece_list[0] += original_best_model(test_x).softmax(1).cpu().tolist()
-    #         ece_list[1] += test_y.argmax(1).cpu().tolist()
-
-    #     if args.tsne:
-    #         with torch.no_grad():
-    #             assert regression is False
-    #             feature_original_model = original_best_model.get_feature(test_x).tolist()
-    #             feature_best_model = best_model.get_feature(test_x).tolist()
-
-    #             tsne_before_adaptation[0] += feature_original_model
-    #             tsne_before_adaptation[1] += test_y.tolist()
-    #             tsne_after_adaptation[0] += feature_best_model
-    #             tsne_after_adaptation[1] += test_y.tolist()
-
-    # if args.tsne:
-    #     save_pickle(tsne_before_adaptation, 'before_adaptation', args)
-    #     save_pickle(tsne_after_adaptation, 'after_adaptation', args)
-    #     draw_tsne(tsne_before_adaptation[0], tsne_before_adaptation[1], 'before adaptation', args)
-    #     draw_tsne(tsne_after_adaptation[0], tsne_after_adaptation[1], 'after adaptation', args)
-
-    # print(f"ENTROPY_LIST: {ENTROPY_LIST}")
-    # print(f"np.mean(ENTROPY_LIST): {np.mean(ENTROPY_LIST)}")
-    # print(f"np.mean(ENTROPY_LIST_NEW): {np.mean(ENTROPY_LIST_NEW)}")
-
-    # plt.clf()
-    # plt.hist(ENTROPY_LIST, bins=50)
-    # plt.title(f"Before Adaptation: {np.mean(ENTROPY_LIST):.4f}")
-    # plt.xlabel('Relative Entropy')
-    # plt.ylabel('Number of Instances')
-    # plt.savefig("before_adaptation.png")
-
-    # plt.clf()
-    # plt.hist(ENTROPY_LIST_NEW, bins=50)
-    # plt.title(f"After Adaptation: {np.mean(ENTROPY_LIST_NEW):.4f}")
-    # plt.xlabel('Relative Entropy')
-    # plt.ylabel('Number of Instances')
-    # plt.savefig("after_adaptation.png")
+def draw_entropy_distribution(args, entropy_list, title):
+    plt.clf()
+    plt.hist(entropy_list, bins=50)
+    plt.title(title)
+    plt.xlabel('Normalized Entropy')
+    plt.ylabel('Number of Instances')
+    plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
-def draw_entropy_gradient_plot():
-    pass
+def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
+    plt.clf()
+    plt.scatter(entropy_list, gradient_list)
+    plt.title(title)
+    plt.xlabel('Normalized Entropy')
+    plt.ylabel('Gradient Norm')
+    plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
-def draw_tsne(feats, cls, title, args):
+def draw_tsne(args, feats, cls, title):
     tsne = TSNE(n_components=2, verbose=1, random_state=args.seed)
 
     cls = np.array(cls).argmax(1)
@@ -350,10 +285,10 @@ def draw_tsne(feats, cls, title, args):
     df["d2"] = z[:, 1]
     sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), palette=sns.color_palette("hls", cls.max() + 1), data=df)
     plt.title(title)
-    plt.show()
+    plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
-def draw_calibration(pred, gt, args):
+def draw_calibration(args, pred, gt):
     from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay
     from matplotlib.gridspec import GridSpec
     fig = plt.figure(figsize=(10, 10))

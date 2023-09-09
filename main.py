@@ -253,8 +253,8 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
-    global logger, original_source_model, source_model, EMA, eata_params, ttt_params
-    EMA = None
+    global logger, original_source_model, source_model, EMA, ENTROPY_LIST_BEFORE_ADAPTATION, ENTROPY_LIST_AFTER_ADAPTATION, eata_params, ttt_params
+    EMA, ENTROPY_LIST_BEFORE_ADAPTATION, ENTROPY_LIST_AFTER_ADAPTATION, GRADIENT_NORM_LIST, FEATURE_LIST, LABEL_LIST = None, [], [], [], [], []
     eata_params = {'fishers': None, 'current_model_probs': None}
     ttt_params = {'mean': None, 'sigma': None}
     if hasattr(args, 'seed'):
@@ -294,32 +294,6 @@ def main(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
 
-    # TODO: remove (only for debugging)
-    for epoch in range(1, args.epochs + 1):
-        test_loss, test_acc, test_len = 0, 0, 0
-
-        for test_x, test_mask_x, test_y in dataset.test_loader:
-            test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
-
-            estimated_y = source_model(test_x)
-            loss = loss_fn(estimated_y, test_y)
-
-            test_optimizer.zero_grad()
-            loss.backward()
-            test_optimizer.step()
-
-        for test_x, test_mask_x, test_y in dataset.test_loader:
-            test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
-
-            estimated_y = source_model(test_x)
-            loss = loss_fn(estimated_y, test_y)
-
-            test_loss += loss.item() * test_x.shape[0]
-            test_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-            test_len += test_x.shape[0]
-
-        logger.info(f"test epoch {epoch} | test_loss {test_loss / test_len:.4f}, train_acc {test_acc / test_len:.4f}")
-
     for test_x, test_mask_x, test_y in dataset.test_loader:
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
@@ -327,10 +301,24 @@ def main(args):
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
+        # for entropy vs gradient norm visualization
+        for test_instance in test_x:
+            test_optimizer.zero_grad()
+            outputs = source_model(test_instance.unsqueeze(0))
+            loss = softmax_entropy(outputs / args.temp).mean()
+            loss.backward(retain_graph=True)
+            gradient_norm = np.sqrt(sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
+            GRADIENT_NORM_LIST.append(gradient_norm)
+
         estimated_y = original_source_model(test_x)
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for 
+        FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
+        LABEL_LIST.extend(test_y.cpu().tolist())
+        print(f"type(source_model.get_feature(test_x).cpu()): {type(source_model.get_feature(test_x).cpu())}")
+        print(f"list(test_y.cpu()): {list(test_y.cpu())}")
 
         for step_idx in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_mask_x, source_model, test_optimizer)
@@ -343,10 +331,14 @@ def main(args):
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
 
     logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
     logger.info(f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
-
+    draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
+    draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
+    draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
+    draw_tsne(args, FEATURE_LIST, LABEL_LIST, "Latent Space Visualization with t-SNE")
 
 
 if __name__ == "__main__":
