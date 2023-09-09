@@ -111,7 +111,7 @@ class Dataset():
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
 
-        # for MLP_EMB and TabNeft
+        # for embedding
         self.cont_dim = train_cont_x.shape[-1]
         if hasattr(self, 'input_one_hot_encoder'):
             self.emb_dim_list = [(len(category), min(10, (len(category) + 1) // 2)) if len(cat_indices) else (0, 0) for category in self.input_one_hot_encoder.categories_]

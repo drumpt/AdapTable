@@ -51,7 +51,7 @@ def pretrain(args, model, optimizer, dataset):
             train_cor_x = torch.Tensor(np.concatenate([train_cont_cor_x, dataset.input_one_hot_encoder.transform(train_cat_cor_x)], axis=-1)).to(args.device)
 
             estimated_x = model.get_recon_out(train_cor_x)
-            loss = loss_fn(estimated_x, train_x if not model.use_embedding else model.get_embedding(train_x).detach()).mean()
+            loss = loss_fn(estimated_x, train_x).mean()
 
             optimizer.zero_grad()
             loss.backward()
@@ -70,7 +70,7 @@ def pretrain(args, model, optimizer, dataset):
                 valid_cor_x = torch.Tensor(np.concatenate([valid_cont_cor_x, dataset.input_one_hot_encoder.transform(valid_cat_cor_x)], axis=-1)).to(args.device)
 
                 estimated_x = model.get_recon_out(valid_cor_x)
-                loss = loss_fn(estimated_x, valid_x if not model.use_embedding else model.get_embedding(valid_x).detach()).mean()
+                loss = loss_fn(estimated_x, valid_x).mean()
 
                 valid_loss += loss.item() * valid_cor_x.shape[0]
                 valid_len += valid_cor_x.shape[0]
@@ -142,8 +142,7 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * cor_x
 
         estimated_test_x = source_model.get_recon_out(test_cor_x)
-        loss = F.mse_loss(estimated_test_x, x if not model.use_embedding else model.get_embedding(x).detach()) # TODO: l2 loss only on non-missing values
-        # loss = F.mse_loss(estimated_test_x * mask, x if not model.use_embedding else model.get_embedding(x).detach() * mask) # l2 loss only on non-missing values
+        loss = F.mse_loss(estimated_test_x * mask, x * mask) # l2 loss only on non-missing values
         loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
@@ -294,6 +293,33 @@ def main(args):
 
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
+
+    # TODO: remove (only for debugging)
+    for epoch in range(1, args.epochs + 1):
+        test_loss, test_acc, test_len = 0, 0, 0
+
+        for test_x, test_mask_x, test_y in dataset.test_loader:
+            test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
+
+            estimated_y = source_model(test_x)
+            loss = loss_fn(estimated_y, test_y)
+
+            test_optimizer.zero_grad()
+            loss.backward()
+            test_optimizer.step()
+
+        for test_x, test_mask_x, test_y in dataset.test_loader:
+            test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
+
+            estimated_y = source_model(test_x)
+            loss = loss_fn(estimated_y, test_y)
+
+            test_loss += loss.item() * test_x.shape[0]
+            test_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+            test_len += test_x.shape[0]
+
+        logger.info(f"test epoch {epoch} | test_loss {test_loss / test_len:.4f}, train_acc {test_acc / test_len:.4f}")
+
     for test_x, test_mask_x, test_y in dataset.test_loader:
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
@@ -311,7 +337,7 @@ def main(args):
 
         if "mae" in args.method: # implement imputation with masked autoencoder
             estimated_x = source_model.get_recon_out(test_x)
-            # test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x) # TODO: implement this
+            test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
         estimated_y = source_model(test_x)
         loss = loss_fn(estimated_y, test_y)

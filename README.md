@@ -1,6 +1,6 @@
 # MATATA
 
-## Environment Setup
+## Environmental Setup
 ```
 conda create -n matata python=3.8.13 -y
 conda activate matata

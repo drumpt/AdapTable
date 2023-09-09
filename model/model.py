@@ -33,9 +33,7 @@ class MLP(nn.Module):
             ])
         self.encoder.append(nn.Linear(hidden_dim_list[-2], hidden_dim_list[-1]))
         self.main_head = nn.Linear(hidden_dim_list[-1], output_dim)
-        self.recon_head = nn.Linear(hidden_dim_list[-1], input_dim)
-        print(f"self.encoder: {self.encoder}")
-        print(f"self.main_head: {self.main_head}")
+        self.recon_head = nn.Linear(hidden_dim_list[-1], dataset.in_dim)
 
 
     def forward(self, inputs):
@@ -120,7 +118,7 @@ class TabNet(nn.Module):
             group_attention_matrix=self.embedder.embedding_group_matrix,
         )
         self.decoder = TabNetDecoder(
-            self.post_embed_dim,
+            dataset.in_dim,
             n_d=self.n_d,
             n_steps=self.n_steps,
             n_independent=self.n_indep_decoder,
@@ -128,8 +126,6 @@ class TabNet(nn.Module):
             virtual_batch_size=self.virtual_batch_size,
             momentum=self.momentum,
         )
-        print(f"self.encoder: {self.encoder}")
-        print(f"self.decoder: {self.decoder}")
         self.main_head = nn.Linear(self.n_d, self.output_dim)
 
 
@@ -233,9 +229,6 @@ class TabTransformer(nn.Module):
             ])
         self.encoder.append(nn.Linear(all_dimensions[-2], all_dimensions[-1]))
         self.main_head = nn.Linear(all_dimensions[-1], self.dim_out)
-        # self.main_head = nn.Sequential(
-        #     nn.Linear(all_dimensions[-1], self.dim_out)
-        # )
         self.recon_head = nn.Sequential(
             # Transformer(
             #     num_tokens=self.total_tokens,
@@ -248,7 +241,7 @@ class TabTransformer(nn.Module):
             # ),
             # nn.Linear(all_dimensions[-1], all_dimensions[-1]),
             # nn.ReLU(),
-            nn.Linear(all_dimensions[-1], input_size),
+            nn.Linear(all_dimensions[-1], dataset.in_dim),
         )
 
 
@@ -288,7 +281,7 @@ class TabTransformer(nn.Module):
         return embedded_inputs
     
 
-    def get_le_from_oe(self, inputs):
+    def get_le_from_oe(self, inputs): # one-hot encoding -> label encoding
         if len(self.cat_start_indices):
             inputs_cont = inputs[:, :self.cat_start_index]
             inputs_cat = inputs[:, self.cat_start_index:]
