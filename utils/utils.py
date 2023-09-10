@@ -260,6 +260,7 @@ def draw_entropy_distribution(args, entropy_list, title):
     plt.title(title)
     plt.xlabel('Normalized Entropy')
     plt.ylabel('Number of Instances')
+    plt.show()
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
@@ -269,6 +270,7 @@ def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
     plt.title(title)
     plt.xlabel('Normalized Entropy')
     plt.ylabel('Gradient Norm')
+    plt.show()
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
@@ -292,6 +294,7 @@ def draw_tsne(args, feats, cls, title):
     plt.yticks([])
 
     plt.title(title)
+    plt.show()
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 

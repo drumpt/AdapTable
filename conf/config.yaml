@@ -1,23 +1,23 @@
 ### model
-## currently supported: MLP, TabNet, TabTransformer
+## currently supported: MLP, TabNet, TabTransformer, FTTransformer
 ## supervised baseline: lr, knn, rf, xgboost, catboost
 model: MLP
 mlp:
-  use_embedding: false
+  embedding: false
   num_layers: 4
   hidden_dim: [256, 256, 256] # either int or list of int
   dropout_rate: 0
-  use_bn: false
+  bn: false
 
 ### dataset
-benchmark: tableshift # tableshift, openml-cc18, openml-regression, scikit-learn, shifts, folktables
+benchmark: openml-cc18 # tableshift, openml-cc18, openml-regression, scikit-learn, shifts, folktables
 ## currently available dataset list
 # openml-cc18: adult, cmc, mfeat-karhunen, optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: heloc(O), diabetes_readmission(O), anes(O), acsincome(O, 매우 느림), acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-dataset: heloc
+dataset: cmc
 shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0
 normalizer: StandardScaler
@@ -28,7 +28,7 @@ train_ratio: 1 # for evaluating on limited number of train instances
 pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
-pretrain_lr: 1e-4
+pretrain_lr: 1e-2
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
@@ -36,8 +36,8 @@ retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-4
-use_smote: true
+train_lr: 1e-2
+smote: false
 
 ### hyperparameters for test-time adaptation
 episodic: true # reset model to the pretrained one for every batch if true
@@ -50,7 +50,7 @@ test_lr: 1e-4
 ##################################################################
 ### methods & other hyperparameters
 ## currently no baselines: em, sar, memo, sgem(gem + ns)
-method: [em] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld
+method: [mae] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld
 
 # for masked autoencoders
 test_mask_ratio: 0.75

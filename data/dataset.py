@@ -9,7 +9,6 @@ import pandas as pd
 import sklearn.preprocessing
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
-from imblearn.over_sampling import SMOTE
 import torch
 import torch.nn.functional as F
 
@@ -103,8 +102,11 @@ class Dataset():
             self.valid_y = self.output_one_hot_encoder.transform(valid_y)
             self.test_y = self.output_one_hot_encoder.transform(test_y)
 
-        if args.use_smote:
-            self.train_x, self.train_y = SMOTE().fit_resample(self.train_x, self.train_y)
+        if args.smote:
+            from imblearn.over_sampling import SMOTE
+            self.train_x, self.train_y = SMOTE(random_state=args.seed).fit_resample(self.train_x, self.train_y)
+
+            print(f"self.train_y: {self.train_y}")
 
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.train_y).type(torch.float32))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.valid_x).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32))
@@ -124,7 +126,18 @@ class Dataset():
         else:
             self.emb_dim_list, self.cat_end_indices, self.cat_start_indices = [], np.array([]), np.array([])
 
+        # log dataset info
+        train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
+        valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
+        test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
+        train_percent = np.round(train_counts[1] / np.sum(train_counts[1]), 2)
+        valid_percent = np.round(valid_counts[1] / np.sum(valid_counts[1]), 2)
+        test_percent = np.round(test_counts[1] / np.sum(test_counts[1]), 2)
+
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")
+        logger.info(f"Class distribution - train {train_percent}, {train_counts}")
+        logger.info(f"Class distribution - valid {valid_percent}, {valid_counts}")
+        logger.info(f"Class distribution - test {test_percent}, {test_counts}")
 
 
     def get_openml_cc18_dataset(self, args):

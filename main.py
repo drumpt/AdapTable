@@ -26,7 +26,7 @@ def get_source_model(args, dataset):
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif len(set(args.method).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
+    elif len(set([args.method]).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="pretrain")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
@@ -138,11 +138,46 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(x[:, dataset.cont_dim:].detach().cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
         cor_x = torch.Tensor(np.concatenate([cont_cor_x, dataset.input_one_hot_encoder.transform(cat_cor_x)], axis=-1)).to(args.device)
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
-        test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device)
+        test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device).detach()
         test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * cor_x
 
         estimated_test_x = source_model.get_recon_out(test_cor_x)
-        loss = F.mse_loss(estimated_test_x * mask, x * mask) # l2 loss only on non-missing values
+        if 'threshold' in args.method:
+            grad_list = []
+            for idx, test_instance in enumerate(x):
+                optimizer.zero_grad()
+                outputs = source_model(test_instance.unsqueeze(0))
+                recon_out = source_model.get_recon_out(test_instance.unsqueeze(0))
+                loss = F.mse_loss(recon_out * mask[idx], test_instance.unsqueeze(0) * mask[idx]).mean()
+                loss.backward(retain_graph=True)
+                gradient_norm = np.sqrt(np.sum(
+                    [p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in
+                     source_model.parameters()]))
+                grad_list.append(gradient_norm)
+            grad_list = torch.Tensor(grad_list).to(args.device)
+            loss_idx = torch.where(grad_list < 1)
+            optimizer.zero_grad()
+
+            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none') # l2 loss only on non-missing values
+            loss = loss[loss_idx].mean()
+        elif 'sam' in args.method:
+            # if 'threshold' in args.method:
+            optimizer.zero_grad()
+            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none')
+            loss_idx = torch.where(loss < 2 * np.log(outputs.shape[-1]))
+            loss = loss[loss_idx].mean()
+            loss.backward(retain_graph=True)
+            optimizer.first_step()
+
+            new_estimated_x = model.get_recon_out(x)
+            loss_second = F.mse_loss(new_estimated_x * mask, x * mask, reduction='none')
+            loss_idx = torch.where(loss_second < 2 * np.log(outputs.shape[-1]))
+            loss_second = loss_second[loss_idx].mean()
+            loss_second.backward(retain_graph=True)
+            optimizer.second_step()
+            return
+        else:
+            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none').mean() # l2 loss only on non-missing values
         loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
@@ -259,8 +294,8 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
-    global logger, original_source_model, source_model, EMA, ENTROPY_LIST_BEFORE_ADAPTATION, ENTROPY_LIST_AFTER_ADAPTATION, eata_params, ttt_params
-    EMA, ENTROPY_LIST_BEFORE_ADAPTATION, ENTROPY_LIST_AFTER_ADAPTATION, GRADIENT_NORM_LIST, FEATURE_LIST, LABEL_LIST = None, [], [], [], [], []
+    global logger, original_source_model, source_model, EMA, eata_params, ttt_params
+    EMA, ENTROPY_LIST_BEFORE_ADAPTATION, ENTROPY_LIST_AFTER_ADAPTATION, GRADIENT_NORM_LIST, RECON_LOSS_LIST_BEFORE_ADAPTATION, RECON_LOSS_LIST_AFTER_ADAPTATION, FEATURE_LIST, LABEL_LIST = None, [], [], [], [], [], [], []
     eata_params = {'fishers': None, 'current_model_probs': None}
     ttt_params = {'mean': None, 'sigma': None}
     if hasattr(args, 'seed'):
@@ -285,7 +320,7 @@ def main(args):
     original_source_model = deepcopy(source_model)
     original_source_model.eval().requires_grad_(False)
     params, _ = collect_params(source_model, train_params=args.train_params)
-    if "sar" in args.method:
+    if 'sam' in args.method or 'sar' in args.method:
         test_optimizer = SAM(params, base_optimizer=getattr(torch.optim, args.test_optimizer), lr=args.test_lr)
     else:
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
@@ -306,7 +341,7 @@ def main(args):
     # target_label_dist /= torch.sum(target_label_dist)
     # target_label_dist = target_label_dist.to(args.device)
 
-    for test_x, test_mask_x, test_y in dataset.test_loader:
+    for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
 
@@ -319,13 +354,17 @@ def main(args):
 
         # print(f"target_label_dist: {target_label_dist}")
 
-        # # for entropy vs gradient norm visualization
+        # for entropy and mae vs gradient norm visualization
         # for test_instance in test_x:
         #     test_optimizer.zero_grad()
         #     outputs = source_model(test_instance.unsqueeze(0))
-        #     loss = softmax_entropy(outputs / args.temp).mean()
+        #     if 'mae' in args.method:
+        #         recon_out = source_model.get_recon_out(test_instance.unsqueeze(0))
+        #         loss = F.mse_loss(recon_out * test_mask_x, test_instance.unsqueeze(0) * test_mask_x).mean()
+        #     else:
+        #         loss = softmax_entropy(outputs / args.temp).mean()
         #     loss.backward(retain_graph=True)
-        #     gradient_norm = np.sqrt(sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
+        #     gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
         #     GRADIENT_NORM_LIST.append(gradient_norm)
 
         estimated_y = original_source_model(test_x)
@@ -335,8 +374,9 @@ def main(args):
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        # ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for 
+        # test_acc_before += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        # ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for
+        # RECON_LOSS_LIST_BEFORE_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
         # FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
         # LABEL_LIST.extend(test_y.cpu().tolist())
 
@@ -347,22 +387,34 @@ def main(args):
             estimated_x = source_model.get_recon_out(test_x)
             test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
-        estimated_y = source_model(test_x)
+        # ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
+        if 'lame' in args.method:
+            import utils.lame as lame
+            # feats = source_model.get_feature(test_x)
+            estimated_y = lame.batch_evaluation(source_model, test_x)
+        else:
+            estimated_y = source_model(test_x)
+        loss = loss_fn(estimated_y, test_y)
+        test_loss_after += loss.item() * test_x.shape[0]
 
         # calibrated_probability = torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist) / torch.sum(torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist), dim=-1, keepdim=True)
         # calibrated_probability = F.softmax(estimated_y / 2.5, dim=-1) * target_label_dist / torch.sum(F.softmax(estimated_y / 2.5, dim=-1) * target_label_dist, dim=-1, keepdim=True)
-
-        loss = loss_fn(estimated_y, test_y)
-        test_loss_after += loss.item() * test_x.shape[0]
-        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        # RECON_LOSS_LIST_AFTER_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
         # ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
+        logger.info(f'online batch [{batch_idx}]: acc before {test_acc_before / test_len:.4f}, acc after {test_acc_after / test_len:.4f}')
 
     logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
     logger.info(f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
-    # draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
-    # draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
-    # draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
+    # if 'mae' in args.method:
+    #     draw_entropy_distribution(args, RECON_LOSS_LIST_BEFORE_ADAPTATION, "Recon loss Distribution Before Adaptation")
+    #     draw_entropy_distribution(args, RECON_LOSS_LIST_AFTER_ADAPTATION, "Recon loss Distribution After Adaptation")
+    #     draw_entropy_gradient_plot(args, RECON_LOSS_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST,"Recon Loss vs. Gradient Norm")
+    # else:
+    #     draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
+    #     draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
+    #     draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
     # draw_tsne(args, FEATURE_LIST, LABEL_LIST, "Latent Space Visualization with t-SNE")
 
 
