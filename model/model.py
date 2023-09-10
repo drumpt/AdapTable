@@ -147,6 +147,7 @@ class TabNet(nn.Module):
     def get_feature(self, inputs):
         embedded_inputs = self.get_embedding(inputs)
         steps_out, _ = self.encoder(embedded_inputs)
+        steps_out = torch.cat(steps_out, dim=-1) # for visualization
         return steps_out
 
 

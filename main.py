@@ -301,24 +301,22 @@ def main(args):
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
-        # for entropy vs gradient norm visualization
-        for test_instance in test_x:
-            test_optimizer.zero_grad()
-            outputs = source_model(test_instance.unsqueeze(0))
-            loss = softmax_entropy(outputs / args.temp).mean()
-            loss.backward(retain_graph=True)
-            gradient_norm = np.sqrt(sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
-            GRADIENT_NORM_LIST.append(gradient_norm)
+        # # for entropy vs gradient norm visualization
+        # for test_instance in test_x:
+        #     test_optimizer.zero_grad()
+        #     outputs = source_model(test_instance.unsqueeze(0))
+        #     loss = softmax_entropy(outputs / args.temp).mean()
+        #     loss.backward(retain_graph=True)
+        #     gradient_norm = np.sqrt(sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
+        #     GRADIENT_NORM_LIST.append(gradient_norm)
 
         estimated_y = original_source_model(test_x)
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for 
-        FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
-        LABEL_LIST.extend(test_y.cpu().tolist())
-        print(f"type(source_model.get_feature(test_x).cpu()): {type(source_model.get_feature(test_x).cpu())}")
-        print(f"list(test_y.cpu()): {list(test_y.cpu())}")
+        # ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for 
+        # FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
+        # LABEL_LIST.extend(test_y.cpu().tolist())
 
         for step_idx in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_mask_x, source_model, test_optimizer)
@@ -331,14 +329,14 @@ def main(args):
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
+        # ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
 
     logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
     logger.info(f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
-    draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
-    draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
-    draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
-    draw_tsne(args, FEATURE_LIST, LABEL_LIST, "Latent Space Visualization with t-SNE")
+    # draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
+    # draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
+    # draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
+    # draw_tsne(args, FEATURE_LIST, LABEL_LIST, "Latent Space Visualization with t-SNE")
 
 
 if __name__ == "__main__":

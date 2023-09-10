@@ -283,7 +283,14 @@ def draw_tsne(args, feats, cls, title):
     df["y"] = cls
     df["d1"] = z[:, 0]
     df["d2"] = z[:, 1]
+    plt.clf()
     sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), palette=sns.color_palette("hls", cls.max() + 1), data=df)
+
+    plt.xlabel(None)
+    plt.ylabel(None)
+    plt.xticks([])
+    plt.yticks([])
+
     plt.title(title)
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
