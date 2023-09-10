@@ -248,6 +248,14 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         original_probs = torch.softmax(original_outputs, dim=-1)
         kl_div_loss = F.kl_div(torch.log(probs), original_probs.detach(), reduction="batchmean")
         (args.kld_weight * kl_div_loss).backward(retain_graph=True)
+    # if 'debug' in args.method:
+    #     print('debugging')
+    #
+    #
+    #     estimated_test_x = source_model.get_recon_out(test_cor_x)
+    #     loss = F.mse_loss(estimated_test_x * mask, x * mask)  # l2 loss only on non-missing values
+    #     loss.backward(retain_graph=True)
+
     optimizer.step()
 
 
