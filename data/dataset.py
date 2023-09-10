@@ -129,10 +129,17 @@ class Dataset():
 
 
         # log dataset info:
-        logger.info(f"Class distribution - train {np.unique(np.argmax(self.train_y, axis=1), return_counts=True)}")
-        logger.info(f"Class distribution - valid {np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)}")
-        logger.info(f"Class distribution - test {np.unique(np.argmax(self.test_y, axis=1), return_counts=True)}")
+        train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
+        valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
+        test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
 
+        train_percent = np.round(train_counts[1] / np.sum(train_counts[1]), 2)
+        valid_percent = np.round(valid_counts[1] / np.sum(valid_counts[1]), 2)
+        test_percent = np.round(test_counts[1] / np.sum(test_counts[1]), 2)
+
+        logger.info(f"Class distribution - train {train_percent}, {train_counts}")
+        logger.info(f"Class distribution - valid {valid_percent}, {valid_counts}")
+        logger.info(f"Class distribution - test {test_percent}, {test_counts}")
 
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")
 
