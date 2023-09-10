@@ -85,8 +85,9 @@ def entropy_energy(Y, unary, pairwise, bound_lambda):
     return E
 
 
-def batch_evaluation(model, x):
+def batch_evaluation(args, model, x):
     out = model(x)
+    out /= args.temp
     unary = -torch.log(out.softmax(-1) + 1e-10)  # softmax the output
 
     feats = torch.nn.functional.normalize(model.get_feature(x), p=2, dim=-1).squeeze()
