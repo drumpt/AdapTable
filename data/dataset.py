@@ -102,6 +102,13 @@ class Dataset():
             self.valid_y = self.output_one_hot_encoder.transform(valid_y)
             self.test_y = self.output_one_hot_encoder.transform(test_y)
 
+        # if smote
+        if args.smote:
+            from imblearn.over_sampling import SMOTE
+            sm = SMOTE(random_state=42)
+            self.train_x, self.train_y = sm.fit_resample(self.train_x, np.argmax(self.train_y, axis=1))
+            self.train_y = np.eye(len(np.unique(self.train_y)))[self.train_y.flatten()]
+
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.train_y).type(torch.float32))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.valid_x).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32))
         test_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.test_x).type(torch.float32), torch.FloatTensor(self.test_mask_x).type(torch.float32), torch.FloatTensor(self.test_y).type(torch.float32))
@@ -119,6 +126,13 @@ class Dataset():
             self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
         else:
             self.emb_dim_list, self.cat_end_indices, self.cat_start_indices = [], np.array([]), np.array([])
+
+
+        # log dataset info:
+        logger.info(f"Class distribution - train {np.unique(np.argmax(self.train_y, axis=1), return_counts=True)}")
+        logger.info(f"Class distribution - valid {np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)}")
+        logger.info(f"Class distribution - test {np.unique(np.argmax(self.test_y, axis=1), return_counts=True)}")
+
 
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")
 
