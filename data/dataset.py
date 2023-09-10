@@ -9,6 +9,7 @@ import pandas as pd
 import sklearn.preprocessing
 from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
+from imblearn.over_sampling import SMOTE
 import torch
 import torch.nn.functional as F
 
@@ -101,6 +102,9 @@ class Dataset():
             self.train_y = self.output_one_hot_encoder.transform(train_y)
             self.valid_y = self.output_one_hot_encoder.transform(valid_y)
             self.test_y = self.output_one_hot_encoder.transform(test_y)
+
+        if args.use_smote:
+            self.train_x, self.train_y = SMOTE().fit_resample(self.train_x, self.train_y)
 
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.train_y).type(torch.float32))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.valid_x).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32))

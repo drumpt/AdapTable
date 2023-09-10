@@ -251,11 +251,9 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
     # if 'debug' in args.method:
     #     print('debugging')
     #
-    #
     #     estimated_test_x = source_model.get_recon_out(test_cor_x)
     #     loss = F.mse_loss(estimated_test_x * mask, x * mask)  # l2 loss only on non-missing values
     #     loss.backward(retain_graph=True)
-
     optimizer.step()
 
 
@@ -302,20 +300,24 @@ def main(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
 
-    target_label_dist = torch.zeros(*(1, dataset.out_dim))
-    for _, _, test_y in dataset.test_loader:
-        target_label_dist += torch.sum(test_y, dim=0)
-    target_label_dist /= torch.sum(target_label_dist)
-    target_label_dist = target_label_dist.to(args.device)
+    # target_label_dist = torch.zeros(*(1, dataset.out_dim))
+    # for _, _, test_y in dataset.test_loader:
+    #     target_label_dist += torch.sum(test_y, dim=0)
+    # target_label_dist /= torch.sum(target_label_dist)
+    # target_label_dist = target_label_dist.to(args.device)
 
     for test_x, test_mask_x, test_y in dataset.test_loader:
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
 
+        # target_label_dist = torch.sum(test_y, dim=0)
+        # target_label_dist /= torch.sum(target_label_dist)
+        # target_label_dist = target_label_dist.to(args.device)
+
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
-        print(f"target_label_dist: {target_label_dist}")
+        # print(f"target_label_dist: {target_label_dist}")
 
         # # for entropy vs gradient norm visualization
         # for test_instance in test_x:
@@ -328,14 +330,12 @@ def main(args):
 
         estimated_y = original_source_model(test_x)
 
-        print(f"estimated_y: {estimated_y}")
-        print(f"estimated_y.shape: {estimated_y.shape}")
-        calibrated_probability = torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist) / torch.sum(torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist), dim=-1, keepdim=True)
+        # calibrated_probability = torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist) / torch.sum(torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist), dim=-1, keepdim=True)
 
         loss = loss_fn(estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
-        # test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(calibrated_probability, dim=-1)).sum().item()
+        test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         # ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for 
         # FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
         # LABEL_LIST.extend(test_y.cpu().tolist())
@@ -349,11 +349,13 @@ def main(args):
 
         estimated_y = source_model(test_x)
 
-        calibrated_probability = torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist) / torch.sum(torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist), dim=-1, keepdim=True)
+        # calibrated_probability = torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist) / torch.sum(torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist), dim=-1, keepdim=True)
+        # calibrated_probability = F.softmax(estimated_y / 2.5, dim=-1) * target_label_dist / torch.sum(F.softmax(estimated_y / 2.5, dim=-1) * target_label_dist, dim=-1, keepdim=True)
 
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
-        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(calibrated_probability, dim=-1)).sum().item()
+        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         # ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
 
     logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
