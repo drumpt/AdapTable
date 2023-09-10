@@ -281,7 +281,7 @@ class TabTransformer(nn.Module):
         embedded_inputs = torch.cat(xs, dim=-1)
         return embedded_inputs
     
-
+    
     def get_le_from_oe(self, inputs): # one-hot encoding -> label encoding
         if len(self.cat_start_indices):
             inputs_cont = inputs[:, :self.cat_start_index]

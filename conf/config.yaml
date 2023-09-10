@@ -10,14 +10,14 @@ mlp:
   use_bn: false
 
 ### dataset
-benchmark: tableshift # tableshift, openml-cc18, openml-regression, scikit-learn, shifts, folktables
+benchmark: openml-cc18 # tableshift, openml-cc18, openml-regression, scikit-learn, shifts, folktables
 ## currently available dataset list
 # openml-cc18: adult, cmc, mfeat-karhunen, optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: heloc(O), diabetes_readmission(O), anes(O), acsincome(O, 매우 느림), acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-dataset: heloc
+dataset: cmc
 shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0
 normalizer: StandardScaler
