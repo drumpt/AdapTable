@@ -17,7 +17,7 @@ benchmark: tableshift # tableshift, openml-cc18, openml-regression, scikit-learn
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-dataset: anes
+dataset: heloc
 shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0
 normalizer: StandardScaler
@@ -50,7 +50,7 @@ test_lr: 1e-4
 ##################################################################
 ### methods & other hyperparameters
 ## currently no baselines: em, sar, memo, sgem(gem + ns)
-method: [] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld
+method: [mae] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld
 
 # for masked autoencoders
 test_mask_ratio: 0.75
@@ -87,12 +87,11 @@ log_dir: log
 log_prefix: log_final
 
 # visualization
-visualization: false
-# entropy_vis: false
-# entropy_grad_vis: false
-# recon_loss_vis: false
-# label_dist_vis: true
-# tsne_vis: false
+entropy_vis: false
+entropy_grad_vis: false
+recon_loss_vis: false
+label_dist_vis: true
+tsne_vis: false
 
 ### wandb
 wandb_user: drumpt

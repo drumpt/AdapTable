@@ -76,11 +76,8 @@ class Dataset():
             )
             test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
             test_cat_mask_x = np.concatenate([np.repeat(test_cat_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
-            self.cat_indices_groups = self.get_cat_indices_groups(self.input_one_hot_encoder, len(cont_indices))
-            print(f"self.cat_indices_groups: {self.cat_indices_groups}")
         else:
             train_cat_x, valid_cat_x, test_cat_x, test_cat_mask_x = np.array([]), np.array([]), np.array([]), np.array([])
-            self.cat_indices_groups = []
 
         self.train_x = np.concatenate([train_cont_x if len(cont_indices) else train_cont_x.reshape(train_cat_x.shape[0], 0), train_cat_x if len(cat_indices) else train_cat_x.reshape(train_cont_x.shape[0], 0)], axis=-1)
         self.valid_x = np.concatenate([valid_cont_x if len(cont_indices) else valid_cont_x.reshape(valid_cat_x.shape[0], 0), valid_cat_x if len(cat_indices) else valid_cat_x.reshape(valid_cont_x.shape[0], 0)], axis=-1)
@@ -104,8 +101,6 @@ class Dataset():
             from imblearn.over_sampling import SMOTE
             self.train_x, self.train_y = SMOTE(random_state=args.seed).fit_resample(self.train_x, self.train_y)
 
-            print(f"self.train_y: {self.train_y}")
-
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.train_y).type(torch.float32))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.valid_x).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32))
         test_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.test_x).type(torch.float32), torch.FloatTensor(self.test_mask_x).type(torch.float32), torch.FloatTensor(self.test_y).type(torch.float32))
@@ -121,21 +116,19 @@ class Dataset():
             self.emb_dim_list = [(len(category), min(10, (len(category) + 1) // 2)) if len(cat_indices) else (0, 0) for category in self.input_one_hot_encoder.categories_]
             self.cat_end_indices = np.cumsum([num_category for num_category, _ in self.emb_dim_list])
             self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+            self.cat_indices_groups = [list(range(self.cont_dim + cat_start_index, self.cont_dim + cat_end_index)) for cat_start_index, cat_end_index in zip(self.cat_start_indices, self.cat_end_indices)]
         else:
-            self.emb_dim_list, self.cat_end_indices, self.cat_start_indices = [], np.array([]), np.array([])
+            self.emb_dim_list, self.cat_end_indices, self.cat_start_indices, self.cat_indices_groups = [], np.array([]), np.array([]), []
 
-        # log dataset info
+        # print dataset info
         train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
         valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
         test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
-        train_percent = np.round(train_counts[1] / np.sum(train_counts[1]), 2)
-        valid_percent = np.round(valid_counts[1] / np.sum(valid_counts[1]), 2)
-        test_percent = np.round(test_counts[1] / np.sum(test_counts[1]), 2)
 
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")
-        logger.info(f"Class distribution - train {train_percent}, {train_counts}")
-        logger.info(f"Class distribution - valid {valid_percent}, {valid_counts}")
-        logger.info(f"Class distribution - test {test_percent}, {test_counts}")
+        logger.info(f"Class distribution - train {np.round(train_counts[1] / np.sum(train_counts[1]), 2)}, {train_counts}")
+        logger.info(f"Class distribution - valid {np.round(valid_counts[1] / np.sum(valid_counts[1]), 2)}, {valid_counts}")
+        logger.info(f"Class distribution - test {np.round(test_counts[1] / np.sum(test_counts[1]), 2)}, {test_counts}")
 
     def get_openml_cc18_dataset(self, args):
         benchmark_list_path = "data/OpenML-CC18/benchmark_list.csv"
@@ -335,6 +328,20 @@ class Dataset():
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
 
+    def concat_csvs(self, path_list, args): # for shifts benchmark
+        import pandas as pd
+        pd_list = []
+        for path in path_list:
+            pd_list.append(pd.read_csv(path))
+        train_pd = pd.concat(pd_list[:3])
+        train_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/train.csv"))
+        eval_pd = pd.concat([pd_list[3]])
+        eval_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/dev_in.csv"))
+        test_pd = pd.concat(pd_list[4:])
+        test_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/dev_out.csv"))
+        return train_pd, eval_pd, test_pd
+
+
     @staticmethod
     def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
         mask = np.ones(test_data.shape, dtype=np.int32)
@@ -437,73 +444,15 @@ class Dataset():
         return train_indices, test_indices
 
 
-    def concat_csvs(self, path_list, args): # for shifts benchmark
-        import pandas as pd
-        pd_list = []
-        for path in path_list:
-            pd_list.append(pd.read_csv(path))
-        train_pd = pd.concat(pd_list[:3])
-        train_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/train.csv"))
-        eval_pd = pd.concat([pd_list[3]])
-        eval_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/dev_in.csv"))
-        test_pd = pd.concat(pd_list[4:])
-        test_pd.to_csv(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"shifts/weather/dev_out.csv"))
-        return train_pd, eval_pd, test_pd
-
-
-    def visualize_dataset(self, X, y): # for scikit-learn benchmark
-        import matplotlib.pyplot as plt
-        plt.scatter(X[:, 0], X[:, 1], marker='o', c=y, s=100, edgecolor="k", linewidth=2)
-        plt.xlabel("$X_1$")
-        plt.ylabel("$X_2$")
-        plt.show()
-
-    from sklearn.preprocessing import OneHotEncoder
-    import numpy as np
-
-
-    def get_cat_indices_groups(self, input_one_hot_encoder, cont_indices_end):
-        cat_indices_groups = []
-        start_index = cont_indices_end
-
-        for categories in input_one_hot_encoder.categories_:
-            end_index = start_index + len(categories)
-            cat_indices_groups.append(list(range(start_index, end_index)))
-            start_index = end_index
-
-        return cat_indices_groups
-
-
     @staticmethod
     def revert_recon_to_onehot(reconstructed_data, cat_indices_groups):
-        if len(reconstructed_data.shape) == 1:
-            reconstructed_data = np.expand_dims(reconstructed_data, axis=0)
-
-        new_data = reconstructed_data.copy()
-
-        for group in cat_indices_groups:
-            cat_part = reconstructed_data[:, group]
-            from scipy.special import softmax
-            cat_part_softmax = softmax(cat_part, axis=1)
-            new_data[:, group] = cat_part_softmax
-
-        new_data = np.squeeze(new_data)
-        return new_data
-
-
-    @staticmethod
-    def torch_revert_recon_to_onehot(reconstructed_data, cat_indices_groups):
         if len(reconstructed_data.shape) == 1:
             reconstructed_data = reconstructed_data.unsqueeze(0)
 
         new_data = reconstructed_data.clone()
-
         for group in cat_indices_groups:
-            # Step 2: Extract the categorical parts
             cat_part = reconstructed_data[:, group]
             cat_part_softmax = F.softmax(cat_part, dim=1)
             new_data[:, group] = cat_part_softmax
-
         new_data = new_data.squeeze()
         return new_data
-3

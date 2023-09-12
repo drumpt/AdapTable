@@ -9,6 +9,9 @@ from pytorch_tabnet.tab_network import TabNetEncoder, TabNetDecoder, EmbeddingGe
 from tab_transformer_pytorch.tab_transformer_pytorch import Transformer as TabTransformerBlock
 from tab_transformer_pytorch.ft_transformer import NumericalEmbedder, Transformer as FTTransformerBlock
 
+from data.dataset import Dataset
+
+
 
 class MLP(nn.Module):
     def __init__(self, args, dataset):
@@ -20,7 +23,7 @@ class MLP(nn.Module):
         self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
         self.cat_indices_groups = dataset.cat_indices_groups
 
-        input_dim = dataset.in_dim if not self.use_embedding else dataset.cont_dim + sum([dim for _, dim in dataset.emb_dim_list])
+        input_dim = dataset.in_dim if not self.embedding else dataset.cont_dim + sum([dim for _, dim in dataset.emb_dim_list])
         if isinstance(args.mlp.hidden_dim, list):
             assert len(args.mlp.hidden_dim) == num_layers - 1
         hidden_dim_list = args.mlp.hidden_dim if isinstance(args.mlp.hidden_dim, omegaconf.listconfig.ListConfig) else [args.mlp.hidden_dim for _ in range(args.mlp.num_layers - 1)]
@@ -59,10 +62,8 @@ class MLP(nn.Module):
         inputs = self.get_embedding(inputs)
         hidden_repr = self.encoder(inputs)
         recon_out = self.recon_head(hidden_repr)
-
         if len(self.cat_indices_groups) != 0:
-            from data.dataset import Dataset
-            recon_out = Dataset.torch_revert_recon_to_onehot(recon_out, self.cat_indices_groups)
+            recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -89,13 +90,13 @@ class TabNet(nn.Module):
     def __init__(self, args, dataset):
         super().__init__()
 
+        self.embedding = True
         self.input_dim = dataset.cont_dim + len(dataset.cat_start_indices)
         self.cat_start_index = dataset.cont_dim
         self.cat_end_indices = np.cumsum([emb_dim for _, emb_dim in dataset.emb_dim_list])
         self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
-        self.output_dim = dataset.out_dim
         self.cat_indices_groups = dataset.cat_indices_groups
-
+        self.output_dim = dataset.out_dim
 
         self.pretraining_ratio = 0.2
         self.n_d = 8
@@ -163,6 +164,8 @@ class TabNet(nn.Module):
         embedded_inputs = self.get_embedding(inputs)
         steps_out, _ = self.encoder(embedded_inputs)
         recon_out = self.decoder(steps_out)
+        if len(self.cat_indices_groups) != 0:
+            recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -280,6 +283,8 @@ class TabTransformer(nn.Module):
         inputs_emb = self.get_embedding(inputs)
         enc_out = self.encoder(inputs_emb)
         recon_out = self.recon_head(enc_out)
+        if len(self.cat_indices_groups) != 0:
+            recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -327,6 +332,7 @@ class FTTransformer(nn.Module):
         self.cat_start_index = dataset.cont_dim
         self.cat_end_indices = np.cumsum([num_category for num_category, _ in dataset.emb_dim_list])
         self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+        self.cat_indices_groups = dataset.cat_indices_groups
 
         self.dim = 32
         self.depth = 6
@@ -390,6 +396,8 @@ class FTTransformer(nn.Module):
         x = self.transformer(inputs, return_attn=False)
         feature_out = x[:, 0]
         recon_out = self.recon_head(feature_out)
+        if len(self.cat_indices_groups) != 0:
+            recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
     

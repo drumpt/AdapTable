@@ -26,7 +26,7 @@ def get_source_model(args, dataset):
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif len(set([args.method]).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
+    elif len(set(args.method).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="pretrain")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
@@ -150,9 +150,7 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
                 recon_out = source_model.get_recon_out(test_instance.unsqueeze(0))
                 loss = F.mse_loss(recon_out * mask[idx], test_instance.unsqueeze(0) * mask[idx]).mean()
                 loss.backward(retain_graph=True)
-                gradient_norm = np.sqrt(np.sum(
-                    [p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in
-                     source_model.parameters()]))
+                gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
                 grad_list.append(gradient_norm)
             grad_list = torch.Tensor(grad_list).to(args.device)
             loss_idx = torch.where(grad_list < 1)
@@ -419,7 +417,7 @@ def main(args):
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
 
-        target_label_dist = 0.9 * target_label_dist + (1 - 0.9) * torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
+        # target_label_dist = 0.9 * target_label_dist + (1 - 0.9) * torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
         # print(f"target_label_dist: {target_label_dist}")
 
         # calibrated_probability = torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist) / torch.sum(torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist), dim=-1, keepdim=True)
@@ -429,7 +427,7 @@ def main(args):
         # calibrated_probability = estimated_y / source_label_dist + torch.log(target_label_dist)
         # print(f"calibrated_probability: {calibrated_probability}")
 
-        test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         if 'mae' in args.method and args.recon_loss_vis:
             RECON_LOSS_LIST_AFTER_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())

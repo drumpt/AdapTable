@@ -361,6 +361,13 @@ def ece_score(py, y_test, n_bins=10):
     return (ece / sum(Bm), acc)
 
 
+def visualize_dataset(X, y): # for scikit-learn benchmark
+    plt.scatter(X[:, 0], X[:, 1], marker='o', c=y, s=100, edgecolor="k", linewidth=2)
+    plt.xlabel("$X_1$")
+    plt.ylabel("$X_2$")
+    plt.show()
+
+
 def save_pickle(saving_object, title,args):
     if not os.path.exists(args.tsne_dir):
         os.makedirs(args.tsne_dir)
