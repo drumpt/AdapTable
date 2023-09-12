@@ -1,6 +1,9 @@
 import os
 from os import path
 import sys
+
+import scipy.special
+
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 from collections import Counter
 
@@ -55,6 +58,7 @@ class Dataset():
             test_cont_x = self.input_scaler.transform(test_cont_x)
         else:
             train_cont_x, test_cont_mask_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([]), np.array([])
+
         if len(cat_indices):
             self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
             self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
@@ -72,8 +76,11 @@ class Dataset():
             )
             test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
             test_cat_mask_x = np.concatenate([np.repeat(test_cat_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
+            self.cat_indices_groups = self.get_cat_indices_groups(self.input_one_hot_encoder, len(cont_indices))
+            print(f"self.cat_indices_groups: {self.cat_indices_groups}")
         else:
             train_cat_x, valid_cat_x, test_cat_x, test_cat_mask_x = np.array([]), np.array([]), np.array([]), np.array([])
+            self.cat_indices_groups = []
 
         self.train_x = np.concatenate([train_cont_x if len(cont_indices) else train_cont_x.reshape(train_cat_x.shape[0], 0), train_cat_x if len(cat_indices) else train_cat_x.reshape(train_cont_x.shape[0], 0)], axis=-1)
         self.valid_x = np.concatenate([valid_cont_x if len(cont_indices) else valid_cont_x.reshape(valid_cat_x.shape[0], 0), valid_cat_x if len(cat_indices) else valid_cat_x.reshape(valid_cont_x.shape[0], 0)], axis=-1)
@@ -129,7 +136,6 @@ class Dataset():
         logger.info(f"Class distribution - train {train_percent}, {train_counts}")
         logger.info(f"Class distribution - valid {valid_percent}, {valid_counts}")
         logger.info(f"Class distribution - test {test_percent}, {test_counts}")
-
 
     def get_openml_cc18_dataset(self, args):
         benchmark_list_path = "data/OpenML-CC18/benchmark_list.csv"
@@ -451,3 +457,53 @@ class Dataset():
         plt.xlabel("$X_1$")
         plt.ylabel("$X_2$")
         plt.show()
+
+    from sklearn.preprocessing import OneHotEncoder
+    import numpy as np
+
+
+    def get_cat_indices_groups(self, input_one_hot_encoder, cont_indices_end):
+        cat_indices_groups = []
+        start_index = cont_indices_end
+
+        for categories in input_one_hot_encoder.categories_:
+            end_index = start_index + len(categories)
+            cat_indices_groups.append(list(range(start_index, end_index)))
+            start_index = end_index
+
+        return cat_indices_groups
+
+
+    @staticmethod
+    def revert_recon_to_onehot(reconstructed_data, cat_indices_groups):
+        if len(reconstructed_data.shape) == 1:
+            reconstructed_data = np.expand_dims(reconstructed_data, axis=0)
+
+        new_data = reconstructed_data.copy()
+
+        for group in cat_indices_groups:
+            cat_part = reconstructed_data[:, group]
+            from scipy.special import softmax
+            cat_part_softmax = softmax(cat_part, axis=1)
+            new_data[:, group] = cat_part_softmax
+
+        new_data = np.squeeze(new_data)
+        return new_data
+
+
+    @staticmethod
+    def torch_revert_recon_to_onehot(reconstructed_data, cat_indices_groups):
+        if len(reconstructed_data.shape) == 1:
+            reconstructed_data = reconstructed_data.unsqueeze(0)
+
+        new_data = reconstructed_data.clone()
+
+        for group in cat_indices_groups:
+            # Step 2: Extract the categorical parts
+            cat_part = reconstructed_data[:, group]
+            cat_part_softmax = F.softmax(cat_part, dim=1)
+            new_data[:, group] = cat_part_softmax
+
+        new_data = new_data.squeeze()
+        return new_data
+3
