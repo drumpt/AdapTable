@@ -34,18 +34,16 @@ class MLP(nn.Module):
                 nn.Dropout(args.mlp.dropout_rate),
             ])
         self.encoder.append(nn.Linear(hidden_dim_list[-2], hidden_dim_list[-1]))
-        self.main_head = nn.Linear(hidden_dim_list[-1], output_dim)
-        self.recon_head = nn.Linear(hidden_dim_list[-1], dataset.in_dim)
-        # self.main_head = nn.Sequential(
-        #     nn.LayerNorm(hidden_dim_list[-1]),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim_list[-1], output_dim),
-        # )
-        # self.recon_head = nn.Sequential(
-        #     nn.LayerNorm(hidden_dim_list[-1]),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim_list[-1], dataset.in_dim),
-        # )
+        self.main_head = nn.Sequential(
+            # nn.LayerNorm(hidden_dim_list[-1]),
+            # nn.ReLU(),
+            nn.Linear(hidden_dim_list[-1], output_dim),
+        )
+        self.recon_head = nn.Sequential(
+            # nn.LayerNorm(hidden_dim_list[-1]),
+            # nn.ReLU(),
+            nn.Linear(hidden_dim_list[-1], dataset.in_dim),
+        )
 
 
     def forward(self, inputs):
@@ -242,7 +240,6 @@ class TabTransformer(nn.Module):
                 nn.ReLU(),
             ])
         self.encoder.append(nn.Linear(all_dimensions[-2], all_dimensions[-1]))
-        # self.main_head = nn.Linear(all_dimensions[-1], self.dim_out)
         self.main_head = nn.Sequential(
             # nn.LayerNorm(all_dimensions[-1]),
             # nn.ReLU(),
@@ -258,8 +255,6 @@ class TabTransformer(nn.Module):
             #     attn_dropout=self.attn_dropout,
             #     ff_dropout=self.ff_dropout
             # ),
-            # nn.Linear(all_dimensions[-1], all_dimensions[-1]),
-            # nn.ReLU(),
             # nn.LayerNorm(all_dimensions[-1]),
             # nn.ReLU(),
             nn.Linear(all_dimensions[-1], dataset.in_dim),
@@ -409,9 +404,7 @@ class FTTransformer(nn.Module):
             inputs_cont = self.numerical_embedder(inputs_cont)
             xs.append(inputs_cont)
         x = torch.cat(xs, dim=1)
-
-        # append cls tokens
-        b = x.shape[0]
+        b = x.shape[0] # append cls tokens
         cls_tokens = repeat(self.cls_token, '1 1 d -> b 1 d', b=b)
         x = torch.cat((cls_tokens, x), dim=1)
         return x

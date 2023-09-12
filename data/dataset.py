@@ -24,22 +24,13 @@ from utils import utils
 class Dataset():
     def __init__(self, args, logger):
         self.logger = logger
-        if args.benchmark == "openml-cc18":
-            (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_openml_cc18_dataset(args)
-        elif args.benchmark == "tableshift":
-            (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_tableshift_dataset(args)
-        elif args.benchmark == "shifts":
-            (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_shifts_dataset(args)
-        elif args.benchmark == "folktables":
-            (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_folktables_dataset(args)
-        elif args.benchmark == "openml-regression":
-            (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_openml_regression_dataset(args)
-        elif args.benchmark == "scikit-learn":
-            (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = self.get_scikit_learn_dataset(args)
+        if args.benchmark in ["openml-cc18", "tableshift", "shifts", "folktables", "openml-regression", "scikit-learn"]:
+            benchmark = args.benchmark.replace("-", "_")
+            (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = eval(f"self.get_{benchmark}_dataset")(args)
         else:
             raise NotImplementedError
 
-        if 0 < float(args.train_ratio) < 1:
+        if float(args.train_ratio) < 1:
             train_x = train_x.iloc[:int(len(train_x) * float(args.train_ratio)), :]
             train_y = train_y.iloc[:int(len(train_y) * float(args.train_ratio)), :]
 
@@ -232,7 +223,7 @@ class Dataset():
     def get_folktables_dataset(self, args):
         from folktables import ACSDataSource, ACSIncome, ACSPublicCoverage
         cat_indices = np.array([])
-        regression = True
+        regression = False
 
         if args.dataset == 'state':
             data_source = ACSDataSource(survey_year='2018', horizon='1-Year', survey='person')
@@ -260,6 +251,7 @@ class Dataset():
             test_x = pd.DataFrame(np.concatenate(test_x_list, axis=0))
             test_y = pd.DataFrame(np.concatenate(test_y_list, axis=0))
         train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
+        print(f"train_y: {train_y}" )
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
 

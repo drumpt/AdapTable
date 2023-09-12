@@ -26,37 +26,6 @@ def permute_columns(tensor):
 
     return permuted_tensor
 
-# def get_model(args, dataset):
-#     # if args.dataset == 'heloc':
-#     #     model = ConvNet(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=128, n_layers=6, dropout=args.dropout_rate)
-#     if args.model == "MLP":
-#         if args.dataset in ['cmc', 'heloc']:
-#             model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=16, n_layers=[1, 2],
-#                         dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#         else:
-#             model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6],
-#                         dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#
-#         # model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6], dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#     elif args.model == "TabNet":
-#         model = TabNet(args, dataset)
-#     elif args.model == "TabTransformer":
-#         model = TabTransformer(args, dataset)
-#     return model
-
-# def get_model(args, dataset):
-#     # if args.dataset == 'heloc':
-#     #     model = ConvNet(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=128, n_layers=6, dropout=args.dropout_rate)
-#     if args.model == "MLP":
-#         model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6], dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#
-#         # model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6], dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#     elif args.model == "TabNet":
-#         model = TabNet(args, dataset)
-#     elif args.model == "TabTransformer":
-#         model = TabTransformer(args, dataset)
-#     return model
-
 def plot_mean_std_column(args, dataset):
     # print statistics of the dataset, per column
     np_train_x = dataset.train_x

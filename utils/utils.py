@@ -239,7 +239,7 @@ def get_mask_by_feature_importance(args, test_data, importance):
     return mask
 
 
-# def get_embedding_mask(args, mask, model): # TODO: implement this!
+# def get_embedding_mask(args, mask, model): # TODO: implement this
 #     embedding_mask = []
 #     if self.use_embedding:
 #         inputs_cont = inputs[:, :self.cat_start_index]
@@ -258,9 +258,8 @@ def draw_entropy_distribution(args, entropy_list, title):
     plt.clf()
     plt.hist(entropy_list, bins=50)
     plt.title(title)
-    plt.xlabel('Normalized Entropy')
+    plt.xlabel('Entropy')
     plt.ylabel('Number of Instances')
-    plt.show()
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
@@ -268,16 +267,35 @@ def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
     plt.clf()
     plt.scatter(entropy_list, gradient_list)
     plt.title(title)
-    plt.xlabel('Normalized Entropy')
+    plt.xlabel('Entropy')
     plt.ylabel('Gradient Norm')
-    plt.show()
+    plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
+
+
+def draw_label_distribution_plot(args, label_list, title):
+    # TODO: change this
+    plt.clf()
+    # sns.distplot(label_list)
+    plt.title(title)
+    plt.xlabel('Class')
+    plt.ylabel('Ratio')
+
+    uniq, count = np.unique(label_list, return_counts=True)
+    ratio = count / np.sum(count)
+
+    plt.bar(range(len(uniq)), ratio)
+    # plt.set_xticks(range(len(uniq)))
+    # plt.set_xticklabels(range(len(uniq)))
+
+    # bins_labels = [i for i in range(len(idx))]
+    # plt.hist(idx - 0.5, bins=np.arange(0, idx.max() + 2, 1) - 0.5, density=True)
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
 def draw_tsne(args, feats, cls, title):
     tsne = TSNE(n_components=2, verbose=1, random_state=args.seed)
 
-    cls = np.array(cls).argmax(1)
+    # cls = np.array(cls).argmax(1)
     feats = np.array(feats)
     z = tsne.fit_transform(feats)
 
@@ -294,7 +312,6 @@ def draw_tsne(args, feats, cls, title):
     plt.yticks([])
 
     plt.title(title)
-    plt.show()
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 

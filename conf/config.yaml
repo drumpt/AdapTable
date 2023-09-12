@@ -13,7 +13,7 @@ mlp:
 benchmark: openml-cc18 # tableshift, openml-cc18, openml-regression, scikit-learn, shifts, folktables
 ## currently available dataset list
 # openml-cc18: adult, cmc, mfeat-karhunen, optdigits, diabetes, semeion, mfeat-pixel, dna
-# tableshift: heloc(O), diabetes_readmission(O), anes(O), acsincome(O, 매우 느림), acsfoodstamps(X), acspubcov(X), acsunemployment(X), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, mimic_extract_los_3, mimic_extract_mort_hosp, mooc
+# tableshift: heloc(O), diabetes_readmission(O), anes(O), acsincome(O, 매우 느림), acsfoodstamps(X), acspubcov(X), acsunemployment(O, 매우 느림), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, mimic_extract_los_3, mimic_extract_mort_hosp, mooc
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
@@ -23,12 +23,13 @@ shift_severity: 0
 normalizer: StandardScaler
 imputation_method: emd # for missing data | currently supported: zero, mean, emd(from empirical marginal distribution)
 train_ratio: 1 # for evaluating on limited number of train instances
+smote: false
 
 ### hyperparameters for MAE pretraining
 pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
-pretrain_lr: 1e-2
+pretrain_lr: 1e-4
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
@@ -36,12 +37,11 @@ retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-2
-smote: false
+train_lr: 1e-4
 
-### hyperparameters for test-time adaptation
+### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 1 # optimization steps for each batch
+num_steps: 10 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
@@ -50,7 +50,7 @@ test_lr: 1e-4
 ##################################################################
 ### methods & other hyperparameters
 ## currently no baselines: em, sar, memo, sgem(gem + ns)
-method: [mae] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld
+method: [] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld
 
 # for masked autoencoders
 test_mask_ratio: 0.75
@@ -86,9 +86,13 @@ img_dir: imgs
 log_dir: log
 log_prefix: log_final
 
-### tsne
-tsne: false
-tsne_dir: tsne
+# visualization
+visualization: false
+# entropy_vis: false
+# entropy_grad_vis: false
+# recon_loss_vis: false
+# label_dist_vis: true
+# tsne_vis: false
 
 ### wandb
 wandb_user: drumpt
