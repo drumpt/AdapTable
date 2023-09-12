@@ -1,5 +1,8 @@
 import os
 import warnings
+
+import numpy as np
+
 warnings.filterwarnings("ignore")
 from copy import deepcopy
 import hydra
@@ -13,6 +16,7 @@ from data.dataset import *
 from model.model import *
 from utils.utils import *
 from utils.sam import *
+from utils.mae_util import *
 
 
 def get_model(args, dataset):
@@ -26,11 +30,11 @@ def get_source_model(args, dataset):
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif len(set([args.method]).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
+    elif len(set([args.method]).intersection(['mae', 'ttt++'])) or 'mae' in args.method: # pretrain and train for masked autoencoder
         pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="pretrain")[0], lr=args.pretrain_lr)
         pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
-        source_model = train(args, pretrained_model, train_optimizer, dataset) # supervised learning (main task)
+        source_model = train(args, pretrained_model, train_optimizer, dataset, with_mae=True) # supervised learning (main task)
     else:
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.train_lr)
         source_model = train(args, init_model, train_optimizer, dataset)
@@ -46,12 +50,19 @@ def pretrain(args, model, optimizer, dataset):
         model.train()
         for train_x, _ in dataset.train_loader:
             train_x = train_x.to(device)
-            train_cont_cor_x, _ = Dataset.get_corrupted_data(train_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
-            train_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(train_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
-            train_cor_x = torch.Tensor(np.concatenate([train_cont_cor_x, dataset.input_one_hot_encoder.transform(train_cat_cor_x)], axis=-1)).to(args.device)
 
-            estimated_x = model.get_recon_out(train_cor_x)
-            loss = loss_fn(estimated_x, train_x).mean()
+            if len(dataset.cat_indices_groups):
+                train_cont_cor_x, _ = Dataset.get_corrupted_data(train_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                train_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(train_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                train_cor_x = torch.Tensor(np.concatenate([train_cont_cor_x, dataset.input_one_hot_encoder.transform(train_cat_cor_x)], axis=-1)).to(args.device)
+
+                estimated_x = model.get_recon_out(train_cor_x)
+            else:
+                train_cont_cor_x, _ = Dataset.get_corrupted_data(train_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                train_cor_x = torch.Tensor(train_cont_cor_x).float().to(args.device)
+                estimated_x = model.get_recon_out(train_cor_x)
+
+            loss = cat_aware_recon_loss(estimated_x, train_x, model)
 
             optimizer.zero_grad()
             loss.backward()
@@ -65,12 +76,19 @@ def pretrain(args, model, optimizer, dataset):
         with torch.no_grad():
             for valid_x, _ in dataset.valid_loader:
                 valid_x = valid_x.to(device)
-                valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
-                valid_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(valid_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
-                valid_cor_x = torch.Tensor(np.concatenate([valid_cont_cor_x, dataset.input_one_hot_encoder.transform(valid_cat_cor_x)], axis=-1)).to(args.device)
 
-                estimated_x = model.get_recon_out(valid_cor_x)
-                loss = loss_fn(estimated_x, valid_x).mean()
+                if len(dataset.cat_indices_groups):
+                    valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                    valid_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(valid_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                    valid_cor_x = torch.Tensor(np.concatenate([valid_cont_cor_x, dataset.input_one_hot_encoder.transform(valid_cat_cor_x)], axis=-1)).to(args.device)
+
+                    estimated_x = model.get_recon_out(valid_cor_x)
+                else:
+                    valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method="emd")
+                    valid_cor_x = torch.Tensor(valid_cont_cor_x).float().to(args.device)
+                    estimated_x = model.get_recon_out(valid_cor_x)
+
+                loss = cat_aware_recon_loss(estimated_x, valid_x, model)
 
                 valid_loss += loss.item() * valid_cor_x.shape[0]
                 valid_len += valid_cor_x.shape[0]
@@ -84,7 +102,7 @@ def pretrain(args, model, optimizer, dataset):
     return source_model
 
 
-def train(args, model, optimizer, dataset):
+def train(args, model, optimizer, dataset, with_mae=False):
     device = args.device
     source_model, best_loss = None, float('inf')
     regression = True if dataset.out_dim == 1 else False
@@ -97,6 +115,12 @@ def train(args, model, optimizer, dataset):
 
             estimated_y = model(train_x)
             loss = loss_fn(estimated_y, train_y)
+
+            if with_mae:
+                do = nn.Dropout(p=args.test_mask_ratio)
+                estimated_x = model.get_recon_out(do(train_x))
+                from utils.mae_util import cat_aware_recon_loss
+                loss += 0.1 * cat_aware_recon_loss(estimated_x, train_x, model)
 
             optimizer.zero_grad()
             loss.backward()
@@ -176,8 +200,13 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
             loss_second.backward(retain_graph=True)
             optimizer.second_step()
             return
+        # elif '':
+        #     estimated_test_x = Dataset.torch_revert_recon_to_onehot(estimated_test_x, dataset.input_one_hot_encoder)
+        #     loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none').mean()
         else:
-            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none').mean() # l2 loss only on non-missing values
+            from utils.mae_util import cat_aware_recon_loss
+            loss = cat_aware_recon_loss(estimated_test_x, x, model)
+            print('loss', loss)
         loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
@@ -378,7 +407,99 @@ def main(args):
         if 'lame' in args.method:
             import utils.lame as lame
             # feats = source_model.get_feature(test_x)
-            estimated_y = lame.batch_evaluation(source_model, test_x)
+            estimated_y = lame.batch_evaluation(args, source_model, test_x)
+        elif 'label_shift_gt' in args.method:
+            estimated_y = source_model(test_x)
+
+            if 'mae' in args.method:
+
+                do = nn.Dropout(p=0.75)
+                imputation_value_list = [-3, 0, 3]
+
+                from utils.mae_util import cat_aware_recon_loss, expand_mask
+                estimated_x = source_model.get_recon_out(do(test_x))
+                recon_loss = cat_aware_recon_loss(estimated_x, test_x, source_model, reduction='none')
+                sorted_recon_loss_idx = torch.argsort(recon_loss, dim=0, descending=True)
+
+                mask = torch.zeros_like(recon_loss)
+                mask[sorted_recon_loss_idx[int(len(sorted_recon_loss_idx) * 0.1):]] = 1
+                mask = expand_mask(mask, source_model).detach()
+
+                # test sample pulled to source
+                imputed_recon = []
+                for imputation_value in imputation_value_list:
+                    corrected_test = test_x * mask + imputation_value * (1 - mask)
+                    imputed_recon_test = source_model.get_recon_out(corrected_test)
+                    imputed_recon.append(imputed_recon_test)
+                imputed_recon = torch.stack(imputed_recon)
+                imputed_recon = torch.mean(imputed_recon, dim=0)
+
+                corrected_test = test_x * mask + imputed_recon * (1 - mask)
+
+
+                # from utils.utils import draw_input_change
+                # draw_input_change(test_x, corrected_test)
+
+                # orig_feat_tsne = source_model.get_feature(test_x).detach().cpu().numpy()
+                # imputed_feat_tsne = source_model.get_feature(corrected_test).detach().cpu().numpy()
+                # from utils.utils import draw_feature_change
+                # draw_feature_change(orig_feat_tsne, imputed_feat_tsne)
+
+                estimated_y = source_model(corrected_test)
+
+            # label_counts = np.unique(np.argmax(dataset.test_y.detach().cpu().numpy(), axis=-1), return_counts=True)[1]
+            if args.smote:
+                source_label_dist = torch.ones_like(torch.tensor(dataset.train_y[0])).to(args.device)
+                source_label_dist = source_label_dist / torch.sum(source_label_dist)
+            else:
+                source_label_dist = np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]
+                source_label_dist = torch.from_numpy(source_label_dist / np.sum(source_label_dist)).to(args.device)
+
+            np_label_list = np.array(LABEL_LIST)
+            target_label_dist = np.sum(np_label_list, axis=0) / np.sum(np_label_list)
+            target_label_dist = torch.from_numpy(target_label_dist).to(args.device)
+            # target_label_dist = torch.sum(test_y, dim=0)
+            # target_label_dist = target_label_dist / torch.sum(target_label_dist)
+            # target_label_dist = target_label_dist.to(args.device)
+
+            print(f'before calibration : {F.softmax(estimated_y / args.temp, dim=-1)[0]}')
+            calibrated_probability = (F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
+            print(f'after calibration : {calibrated_probability[0]}')
+            estimated_y = calibrated_probability
+        elif 'mae' in args.method:
+
+            do = nn.Dropout(p=0.75)
+            imputation_value_list = [-3, 0, 3]
+
+            from utils.mae_util import cat_aware_recon_loss, expand_mask
+            estimated_x = source_model.get_recon_out(do(test_x))
+            recon_loss = cat_aware_recon_loss(estimated_x, test_x, source_model, reduction='none')
+            sorted_recon_loss_idx = torch.argsort(recon_loss, dim=0, descending=True)
+
+            mask = torch.zeros_like(recon_loss)
+            mask[sorted_recon_loss_idx[int(len(sorted_recon_loss_idx) * 0.1):]] = 1
+            mask = expand_mask(mask, source_model).detach()
+
+            # test sample pulled to source
+            imputed_recon = []
+            for imputation_value in imputation_value_list:
+                corrected_test = test_x * mask + imputation_value * (1 - mask)
+                imputed_recon_test = source_model.get_recon_out(corrected_test)
+                imputed_recon.append(imputed_recon_test)
+            imputed_recon = torch.stack(imputed_recon)
+            imputed_recon = torch.mean(imputed_recon, dim=0)
+
+            corrected_test = test_x * mask + imputed_recon * (1 - mask)
+
+            # from utils.utils import draw_input_change
+            # draw_input_change(test_x, corrected_test)
+
+            # orig_feat_tsne = source_model.get_feature(test_x).detach().cpu().numpy()
+            # imputed_feat_tsne = source_model.get_feature(corrected_test).detach().cpu().numpy()
+            # from utils.utils import draw_feature_change
+            # draw_feature_change(orig_feat_tsne, imputed_feat_tsne)
+
+            estimated_y = source_model(corrected_test)
         else:
             estimated_y = source_model(test_x)
         loss = loss_fn(estimated_y, test_y)

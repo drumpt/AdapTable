@@ -26,37 +26,6 @@ def permute_columns(tensor):
 
     return permuted_tensor
 
-# def get_model(args, dataset):
-#     # if args.dataset == 'heloc':
-#     #     model = ConvNet(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=128, n_layers=6, dropout=args.dropout_rate)
-#     if args.model == "MLP":
-#         if args.dataset in ['cmc', 'heloc']:
-#             model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=16, n_layers=[1, 2],
-#                         dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#         else:
-#             model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6],
-#                         dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#
-#         # model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6], dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#     elif args.model == "TabNet":
-#         model = TabNet(args, dataset)
-#     elif args.model == "TabTransformer":
-#         model = TabTransformer(args, dataset)
-#     return model
-
-# def get_model(args, dataset):
-#     # if args.dataset == 'heloc':
-#     #     model = ConvNet(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=128, n_layers=6, dropout=args.dropout_rate)
-#     if args.model == "MLP":
-#         model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6], dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#
-#         # model = MLP(input_dim=dataset.in_dim, output_dim=dataset.out_dim, hidden_dim=64, n_layers=[3, 6], dropout=args.dropout_rate, num_chunks=args.num_chunks)
-#     elif args.model == "TabNet":
-#         model = TabNet(args, dataset)
-#     elif args.model == "TabTransformer":
-#         model = TabTransformer(args, dataset)
-#     return model
-
 def plot_mean_std_column(args, dataset):
     # print statistics of the dataset, per column
     np_train_x = dataset.train_x
@@ -248,7 +217,6 @@ def plot_learned_bias(args, model, dataset):
     plt.title('Difference between learned bias and learned bias test')
     plt.xticks(range(len(bias_test)))
     plt.show()
-
 
 def plot_recon_feature(args, dataset, model):
     torch_train_x = torch.from_numpy(dataset.train_x).float().to(args.device)
@@ -528,7 +496,6 @@ def plot_stunt_tasks(args, dataset, model):
         plt.tight_layout()  # Adjusts subplots for better layout
         plt.show()
 
-
 def plot_maskratio(args, dataset, model):
     from utils.stunt_prototype import StuntPrototype
 
@@ -704,7 +671,6 @@ def plot_recon_loss_per_column_per_class(args, model, dataset):
         plt.tight_layout()
         plt.show()
 
-
 def plot_recon_loss_per_column(args, model, dataset):
     model = model.to(args.device)
 
@@ -874,7 +840,6 @@ def plot_recon_loss_per_column(args, model, dataset):
     import scipy
     # print(scipy.stats.entropy(mask_vector, shap_importance, base=None, axis=0))
 
-
 def linear_layer_exp(args, model, dataset):
     def init_weights(m):
         if isinstance(m, nn.Linear):
@@ -988,8 +953,6 @@ def linear_layer_exp(args, model, dataset):
             print('loss at epoch {} is {}'.format(epoch, loss.item()))
             print('')
             # pooled_avg_plot(args, model, dataset)
-
-
 
 def prediction_based_on_mask(args, model, dataset):
     model = model.to(args.device)
@@ -1374,7 +1337,6 @@ def permutation_invariant(args, dataset, model):
         test_acc = (torch.argmax(model(test_x_permuted), dim=-1) == torch.argmax(test_y, dim=-1)).float().mean().item()
         print(f"w permutation train acc is {train_acc}, test acc is {test_acc}")
 
-
 def permuation_invariant(args, dataset, model):
     model = model.to(args.device)
     model.train()
@@ -1415,7 +1377,6 @@ def permuation_invariant(args, dataset, model):
             print(np.unique(np_estim_y, return_counts=True))
             print('acc : ', (torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).float().mean().item())
     plot_permutation_result(args, dataset, model)
-
 
 def plot_gumbel_softmax(args, dataset, model):
 
@@ -2106,6 +2067,30 @@ def mmd_loss(args, dataset, model):
             print(f'epoch {epoch} loss is {loss}, acc is {acc}')
     # print(loss)
 
+def draw_feature_difference(args, dataset, model):
+    # using TSNE, draw the feature difference between source and target, and modified target
+    import torch
+    train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
+        args.device)
+    test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
+        args.device)
+
+    model.requires_grad_(False)
+    model.eval()
+
+    train_feat = model.get_feature(train_x).detach().cpu().numpy()
+    test_feat = model.get_feature(test_x).detach().cpu().numpy()
+
+    X = TSNE(n_components=2).fit_transform(np.concatenate([train_feat, test_feat], axis=0))
+
+    plt.figure(figsize=(10, 10))
+    plt.subplot(2, 2, 1)
+    plt.scatter(X[:len(train_feat), 0], X[:len(train_feat), 1], c=np.argmax(dataset.train_y, axis=1), cmap='rainbow')
+    plt.subplot(2, 2, 2)
+    plt.scatter(X[len(train_feat):, 0], X[len(train_feat):, 1], c=np.argmax(dataset.test_y, axis=1), cmap='rainbow')
+    # plt.savefig('feature_difference.png')
+    plt.show()
+
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
@@ -2117,7 +2102,7 @@ def main(args):
     init_model = get_model(args, dataset)
     orig_model = get_model(args, dataset)
     dir_path = './'
-    # print(os.listdir('../'))# get initalized model architecture only
+    print(os.listdir('./'))# get initalized model architecture only
     if os.path.exists(os.path.join(dir_path, args.out_dir, "source_model.pth")):
         init_model.load_state_dict(torch.load(os.path.join(dir_path, args.out_dir, "source_model.pth")))
         source_model = init_model
@@ -2185,7 +2170,8 @@ def main(args):
     # give_adaptive_recon_loss(args, dataset, source_model, test_model)
     # subtract_emd(args, source_model, dataset)
     # plot_distance_over_acc(args, dataset, source_model)
-    recon_wise_correction(args, dataset, source_model)
+    # recon_wise_correction(args, dataset, source_model)
+    draw_feature_difference(args, dataset, source_model)
     # mmd_loss(args, dataset, source_model)
 
 if __name__ == "__main__":
