@@ -331,6 +331,40 @@ def draw_calibration(args, pred, gt):
     ax_calibration_curve.set_title("Calibration plots")
     plt.show()
 
+def draw_feature_change(feat1, feat2):
+    tsne = TSNE(n_components=2, verbose=1, random_state=0)
+
+    if isinstance(feat1, torch.Tensor) or isinstance(feat2, torch.Tensor):
+        feat1_np = feat1.detach().cpu().numpy()
+        feat2_np = feat2.detach().cpu().numpy()
+    else:
+        feat1_np = feat1
+        feat2_np = feat2
+
+
+    X = tsne.fit_transform(np.concatenate([feat1_np, feat2_np], axis=0))
+    plt.scatter(X[:len(feat1_np), 0], X[:len(feat1_np), 1], color='b')
+    plt.scatter(X[len(feat1_np):, 0], X[len(feat1_np):, 1], color='r')
+    plt.title('Feature Change')
+    plt.legend(['Before', 'After'])
+    plt.show()
+
+def draw_input_change(input1, input2):
+    if isinstance(input1, torch.Tensor) or isinstance(input2, torch.Tensor):
+        input1_np = input1.detach().cpu().numpy()
+        input2_np = input2.detach().cpu().numpy()
+    else:
+        input1_np = input1
+        input2_np = input2
+
+    plt.subplot(2, 1, 1)
+    plt.gca().set_title('Original input')
+    plt.bar(np.arange(len(input1_np[0])), input1_np[0], color='b')
+    plt.subplot(2, 1, 2)
+    plt.gca().set_title('Changed input')
+    plt.bar(np.arange(len(input2_np[0])), input2_np[0], color='r')
+    plt.tight_layout()
+    plt.show()
 
 def ece_score(py, y_test, n_bins=10):
     py = np.array(py)

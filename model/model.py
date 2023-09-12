@@ -62,7 +62,7 @@ class MLP(nn.Module):
         inputs = self.get_embedding(inputs)
         hidden_repr = self.encoder(inputs)
         recon_out = self.recon_head(hidden_repr)
-        if len(self.cat_indices_groups) != 0:
+        if len(self.cat_indices_groups):
             recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
@@ -74,7 +74,7 @@ class MLP(nn.Module):
 
 
     def get_embedding(self, inputs):
-        if self.embedding:
+        if self.embedding and len(self.emb_layers):
             inputs_cont = inputs[:, :self.cat_start_index]
             inputs_cat = inputs[:, self.cat_start_index:]
             inputs_cat_emb = []
@@ -164,7 +164,7 @@ class TabNet(nn.Module):
         embedded_inputs = self.get_embedding(inputs)
         steps_out, _ = self.encoder(embedded_inputs)
         recon_out = self.decoder(steps_out)
-        if len(self.cat_indices_groups) != 0:
+        if len(self.cat_indices_groups):
             recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
@@ -283,7 +283,7 @@ class TabTransformer(nn.Module):
         inputs_emb = self.get_embedding(inputs)
         enc_out = self.encoder(inputs_emb)
         recon_out = self.recon_head(enc_out)
-        if len(self.cat_indices_groups) != 0:
+        if len(self.cat_indices_groups):
             recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
@@ -396,7 +396,7 @@ class FTTransformer(nn.Module):
         x = self.transformer(inputs, return_attn=False)
         feature_out = x[:, 0]
         recon_out = self.recon_head(feature_out)
-        if len(self.cat_indices_groups) != 0:
+        if len(self.cat_indices_groups):
             recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 

@@ -53,7 +53,7 @@ class Dataset():
                 data_type="numerical",
                 shift_type=args.shift_type,
                 shift_severity=args.shift_severity,
-                imputation_method=args.imputation_method,
+                imputation_method=args.missing_imputation_method,
             )
             test_cont_x = self.input_scaler.transform(test_cont_x)
         else:
@@ -72,7 +72,7 @@ class Dataset():
                 data_type="categorical",
                 shift_type=args.shift_type,
                 shift_severity=args.shift_severity,
-                imputation_method=args.imputation_method,
+                imputation_method=args.missing_imputation_method,
             )
             test_cat_x = self.input_one_hot_encoder.transform(test_cat_x)
             test_cat_mask_x = np.concatenate([np.repeat(test_cat_mask_x[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
@@ -376,11 +376,12 @@ class Dataset():
     def get_imputed_data(test_data, train_data, data_type, imputation_method):
         if data_type == "numerical":
             if imputation_method == "zero":
-                if isinstance(test_data, torch.Tensor):
-                    test_data = test_data.cpu()
-                imputed_data = np.zeros_like(test_data)
-            elif imputation_method == "mean":
+                # if isinstance(test_data, torch.Tensor):
+                #     test_data = test_data.cpu()
+                # imputed_data = np.zeros_like(test_data)
                 imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], len(test_data), axis=0)
+            # elif imputation_method == "mean":
+            #     imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], len(test_data), axis=0)
             elif imputation_method == "emd":
                 imputed_data = []
                 if isinstance(test_data, torch.Tensor):
@@ -395,12 +396,12 @@ class Dataset():
                     train_col = set([str(train_col_elem) for train_col_elem in train_col])
                     imputed_data.append(np.array([max(train_col) + "." for _ in range(len(test_data))]))
                 imputed_data = np.stack(imputed_data, axis=-1)
-            elif imputation_method == "mean":  # mode (most frequent value)
-                imputed_data = []
-                for train_col in train_data.T:
-                    unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
-                    imputed_data.append(np.array([unique[np.argmax(counts)] for _ in range(len(test_data))]))
-                imputed_data = np.stack(imputed_data, axis=-1)
+            # elif imputation_method == "mean":  # mode (most frequent value) for categorical variable
+            #     imputed_data = []
+            #     for train_col in train_data.T:
+            #         unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
+            #         imputed_data.append(np.array([unique[np.argmax(counts)] for _ in range(len(test_data))]))
+            #     imputed_data = np.stack(imputed_data, axis=-1)
             elif imputation_method == "emd":
                 imputed_data = []
                 for train_col in train_data.T:

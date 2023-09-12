@@ -2,24 +2,16 @@ import torch
 import torch.nn.functional as F
 
 
-def cat_aware_recon_loss(estimated_x, orig_x, model, reduction='mean'):
-    cont_part_recon = estimated_x[:, :model.cat_start_index]
-    cont_part_orig = orig_x[:, :model.cat_start_index]
-
-    if reduction == 'none':
-        recon_loss = F.mse_loss(cont_part_recon, cont_part_orig, reduction='none').mean(0)
-        for cat_start_idx, cat_end_idx in zip(model.cat_start_indices, model.cat_end_indices):
-            recon_loss = torch.cat([recon_loss, F.cross_entropy(
-                estimated_x[:, model.cat_start_index + cat_start_idx:model.cat_start_index + cat_end_idx],
-                torch.argmax(orig_x[:, model.cat_start_index + cat_start_idx:model.cat_start_index + cat_end_idx], dim=1),
-            ).mean().reshape(1)], dim=0)
+def cat_aware_recon_loss(estimated_x, gt_x, model, cat_loss='mae'): # cat_loss: 'mse', 'ce'
+    if cat_loss == 'mse':
+        recon_loss = F.mse_loss(estimated_x, gt_x)
     else:
-        recon_loss = F.mse_loss(cont_part_recon, cont_part_orig).mean()
-        for cat_start_idx, cat_end_idx in zip(model.cat_start_indices, model.cat_end_indices):
+        recon_loss = F.mse_loss(estimated_x[:, :model.cat_start_index], gt_x[:, :model.cat_start_index]) * (model.cat_start_index / estimated_x.shape[-1]) # numerical loss
+        for cat_start_idx, cat_end_idx in zip(model.cat_start_indices, model.cat_end_indices): # categorical loss
             recon_loss += F.cross_entropy(
                 estimated_x[:, model.cat_start_index + cat_start_idx:model.cat_start_index + cat_end_idx],
-                torch.argmax(orig_x[:, model.cat_start_index + cat_start_idx:model.cat_start_index + cat_end_idx], dim=1)
-            ).mean()
+                torch.argmax(gt_x[:, model.cat_start_index + cat_start_idx:model.cat_start_index + cat_end_idx], dim=-1)
+            ).mean() * ((cat_end_idx - cat_start_idx) / estimated_x.shape[-1])
     return recon_loss
 
 
