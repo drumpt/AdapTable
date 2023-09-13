@@ -29,7 +29,8 @@ class MLP(nn.Module):
         hidden_dim_list = args.mlp.hidden_dim if isinstance(args.mlp.hidden_dim, omegaconf.listconfig.ListConfig) else [args.mlp.hidden_dim for _ in range(args.mlp.num_layers - 1)]
         output_dim = dataset.out_dim
 
-        self.emb_layers = nn.ModuleList([nn.Embedding(x, y) for x, y in dataset.emb_dim_list])
+        if self.embedding:
+            self.emb_layers = nn.ModuleList([nn.Embedding(x, y) for x, y in dataset.emb_dim_list])
         self.encoder = nn.Sequential()
         for layer_idx, hidden_dim in zip(range(args.mlp.num_layers - 2), hidden_dim_list):
             self.encoder.extend([

@@ -68,9 +68,9 @@ def get_logger(args):
         log_path += f'_test_batch_size{args.test_batch_size}'
     log_path += '.txt'
 
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    # console_handler = logging.StreamHandler()
+    # console_handler.setFormatter(formatter)
+    # logger.addHandler(console_handler)
 
     file_handler = logging.FileHandler(os.path.join(args.log_dir, log_path))
     file_handler.setFormatter(formatter)
@@ -275,8 +275,6 @@ def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
 
 def draw_label_distribution_plot(args, label_list, title):
     # TODO: set x label
-
-    # TODO: change this
     plt.clf()
     # sns.distplot(label_list)
     plt.title(title)

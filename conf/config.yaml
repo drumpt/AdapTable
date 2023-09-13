@@ -10,10 +10,10 @@ mlp:
   bn: false
 
 ### dataset
-benchmark: openml-cc18 # tableshift, openml-cc18, openml-regression, scikit-learn, shifts, folktables
+benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 ## currently available dataset list
 # openml-cc18: adult, cmc, mfeat-karhunen, optdigits, diabetes, semeion, mfeat-pixel, dna
-# tableshift: heloc(O), diabetes_readmission(O), anes(O), acsincome(O, 매우 느림), acsfoodstamps(X), acspubcov(X), acsunemployment(O, 매우 느림), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, mimic_extract_los_3, mimic_extract_mort_hosp, mooc
+# tableshift: heloc(O), diabetes_readmission(O), anes(O), mooc(O), acsincome(O, 매우 느림), acsfoodstamps(X), acspubcov(X), acsunemployment(O, 매우 느림), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, mimic_extract_los_3, mimic_extract_mort_hosp
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
@@ -34,14 +34,14 @@ pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
 retrain: true
-epochs: 100
+epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-4
+train_lr: 1e-5
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 10 # optimization steps for each batch
+num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
@@ -50,7 +50,7 @@ test_lr: 1e-4
 ##################################################################
 ### methods & other hyperparameters
 ## currently no baselines: em, sar, memo, sgem(gem + ns)
-method: [mae] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld
+method: [] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld, lame
 
 # for masked autoencoders
 mae_imputation_method: emd

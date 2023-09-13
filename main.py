@@ -1,5 +1,7 @@
 import os
 from functools import partial
+from itertools import chain
+from collections import defaultdict
 import warnings
 warnings.filterwarnings("ignore")
 from copy import deepcopy
@@ -44,10 +46,11 @@ def pretrain(args, model, optimizer, dataset):
     device = args.device
     source_model, best_loss = None, float('inf')
     loss_fn = partial(cat_aware_recon_loss, model=model)
-    model.train()
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
-        for train_x, _ in dataset.train_loader:
+        model.train()
+
+        for train_x, _ in chain(dataset.train_loader, dataset.valid_loader):
             train_x = train_x.to(device)
 
             if len(dataset.cat_indices_groups):
@@ -58,7 +61,6 @@ def pretrain(args, model, optimizer, dataset):
                 train_cont_cor_x, _ = Dataset.get_corrupted_data(train_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
                 train_cor_x = torch.Tensor(train_cont_cor_x).float().to(args.device)
             estimated_x = model.get_recon_out(train_cor_x)
-
             loss = loss_fn(estimated_x, train_x)
 
             optimizer.zero_grad()
@@ -68,36 +70,8 @@ def pretrain(args, model, optimizer, dataset):
             train_loss += loss.item() * train_cor_x.shape[0]
             train_len += train_cor_x.shape[0]
 
-        valid_loss, valid_len = 0, 0
-        for valid_x, _ in dataset.valid_loader:
-            valid_x = valid_x.to(device)
-
-            if len(dataset.cat_indices_groups):
-                valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                valid_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(valid_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                valid_cor_x = torch.Tensor(np.concatenate([valid_cont_cor_x, dataset.input_one_hot_encoder.transform(valid_cat_cor_x)], axis=-1)).to(args.device)
-            else:
-                valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                valid_cor_x = torch.Tensor(valid_cont_cor_x).float().to(args.device)
-            estimated_x = model.get_recon_out(valid_cor_x)
-
-            loss = loss_fn(estimated_x, valid_x)
-        
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            valid_loss += loss.item() * valid_cor_x.shape[0]
-            valid_len += valid_cor_x.shape[0]
-
-        # if valid_loss < best_loss:
-        #     best_loss = valid_loss
-        #     source_model = deepcopy(model)
-        #     torch.save(source_model.state_dict(), os.path.join(args.out_dir, "best_pretrained_model.pth"))
         source_model = deepcopy(model)
-
-        # logger.info(f"pretrain epoch {epoch} | train_loss {train_loss / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}")
-        logger.info(f"pretrain epoch {epoch} | train + valid loss {(train_loss + valid_loss) / (train_len + valid_len):.4f}")
+        logger.info(f"pretrain epoch {epoch} | train_loss {train_loss / train_len:.4f}")
     return source_model
 
 
@@ -367,7 +341,7 @@ def main(args):
     #     target_label_dist += torch.sum(test_y, dim=0)
     # target_label_dist /= torch.sum(target_label_dist)
     # target_label_dist = target_label_dist.to(args.device)
-    # target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
+    target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
     # target_label_dist = source_label_dist
 
     if args.vis:
@@ -378,6 +352,9 @@ def main(args):
             SOURCE_ENTROPY_LIST.extend(softmax_entropy(original_source_model(train_x.to(args.device))).tolist())
             SOURCE_LABEL_LIST.extend(torch.argmax(train_y, dim=-1).tolist())
 
+    kl_divergence_dict = defaultdict(int)
+    kl_div_loss = nn.KLDivLoss()
+
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
@@ -385,10 +362,16 @@ def main(args):
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
-        estimated_y = original_source_model(test_x)
+        estimated_y = source_model(test_x)
 
-        # target_label_dist = torch.mean(test_y, dim=0)
-        # target_label_dist = target_label_dist.to(args.device)
+        gt_target_label_dist = torch.mean(test_y, dim=0)
+        gt_target_label_dist = target_label_dist.to(args.device)
+        # print(f"gt_target_label_dist: {gt_target_label_dist}")
+
+        original_estimated_target_label_dist = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
+        # print(f"original_estimated_target_label_dist: {original_estimated_target_label_dist}")
+        before_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
+
         # calibrated_probability = (F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True)
 
         loss = loss_fn(estimated_y, test_y)
@@ -426,11 +409,20 @@ def main(args):
             estimated_x = source_model.get_recon_out(test_x)
             test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
+        import utils.lame as lame
+        estimated_y_lame = lame.batch_evaluation(args, original_source_model, test_x)
+        # print(f"estimated_y_lame: {torch.mean(F.softmax(estimated_y_lame, dim=-1), dim=0)}")
+
         if 'lame' in args.method:
             import utils.lame as lame
             estimated_y = lame.batch_evaluation(args, source_model, test_x)
         else:
             estimated_y = source_model(test_x)
+
+            ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
+            # print(f"mae_prediction: {original_estimated_target_label_dist}")
+
+        after_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
 
         if args.vis:
             ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
@@ -466,12 +458,39 @@ def main(args):
         # print(f'after calibration : {calibrated_probability[0]}')
         # print(f"calibrated_probability: {calibrated_probability}")
 
+        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist), dim=-1, keepdim=True)
+        calibrated_probability = (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), dim=-1, keepdim=True)
+
+        target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
+
+        cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 500)
+        # cal_use_ratio = 1
+        print(f"cal_use_ratio: {cal_use_ratio}")
+        print(f"kl_div: {kl_div_loss(torch.log(target_label_dist), source_label_dist)}")
+
+        calibrated_probability = calibrated_probability * cal_use_ratio + F.softmax(estimated_y, dim=-1) * (1 - cal_use_ratio)
+
+        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
+
+        print(f"torch.mean(calibrated_probability, dim=0, keepdim=True): {torch.mean(calibrated_probability, dim=0, keepdim=True)}")
+        print(f"target_label_dist: {target_label_dist}")
+
+        kl_divergence_dict['ori'] += kl_div_loss(torch.log(original_estimated_target_label_dist), gt_target_label_dist)
+        kl_divergence_dict['ori_div_src'] += kl_div_loss(torch.log(before_div_source), gt_target_label_dist)
+        kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
+        kl_divergence_dict['ada_div_src'] += kl_div_loss(torch.log(after_div_source), gt_target_label_dist)
+        kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
+        kl_divergence_dict['ma'] = kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
+
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
-        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
+        # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         logger.info(f'online batch [{batch_idx}]: acc before {test_acc_before / test_len:.4f}, acc after {test_acc_after / test_len:.4f}')
+
+    for key, item in kl_divergence_dict.items():
+        print(f"{key}: {item / (test_len / args.test_batch_size)}")
 
     logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
     logger.info(f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
