@@ -409,8 +409,8 @@ def main(args):
             estimated_x = source_model.get_recon_out(test_x)
             test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
-        import utils.lame as lame
-        estimated_y_lame = lame.batch_evaluation(args, original_source_model, test_x)
+        # import utils.lame as lame
+        # estimated_y_lame = lame.batch_evaluation(args, original_source_model, test_x)
         # print(f"estimated_y_lame: {torch.mean(F.softmax(estimated_y_lame, dim=-1), dim=0)}")
 
         if 'lame' in args.method:
@@ -463,7 +463,10 @@ def main(args):
 
         target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
 
-        cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 500)
+        cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 100)
+        # cal_use_ratio = 1 / (1 + 1000 * kl_div_loss(torch.log(target_label_dist), source_label_dist))
+        # cal_use_ratio = torch.exp(- 100 * kl_div_loss(torch.log(target_label_dist), source_label_dist))
+        # cal_use_ratio = 1 / (1 + torch.exp(kl_div_loss(torch.log(target_label_dist), source_label_dist)))
         # cal_use_ratio = 1
         print(f"cal_use_ratio: {cal_use_ratio}")
         print(f"kl_div: {kl_div_loss(torch.log(target_label_dist), source_label_dist)}")
@@ -479,7 +482,7 @@ def main(args):
         kl_divergence_dict['ori_div_src'] += kl_div_loss(torch.log(before_div_source), gt_target_label_dist)
         kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
         kl_divergence_dict['ada_div_src'] += kl_div_loss(torch.log(after_div_source), gt_target_label_dist)
-        kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
+        # kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
         kl_divergence_dict['ma'] = kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
 
         loss = loss_fn(estimated_y, test_y)

@@ -18,8 +18,8 @@ benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-reg
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
 dataset: cmc
-shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0
+shift_type: Gaussian # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_severity: 3
 normalizer: StandardScaler
 missing_imputation_method: emd # for missing data | currently supported: zero, mean, emd(from empirical marginal distribution)
 train_ratio: 1 # for evaluating on limited number of train instances
