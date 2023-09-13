@@ -37,6 +37,10 @@ class Dataset():
             train_x = train_x.iloc[:int(len(train_x) * float(args.train_ratio)), :]
             train_y = train_y.iloc[:int(len(train_y) * float(args.train_ratio)), :]
 
+        if args.smote:
+            from imblearn.over_sampling import SMOTENC
+            train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
+
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
         self.emb_dim = []
@@ -96,10 +100,6 @@ class Dataset():
             self.train_y = self.output_one_hot_encoder.transform(train_y)
             self.valid_y = self.output_one_hot_encoder.transform(valid_y)
             self.test_y = self.output_one_hot_encoder.transform(test_y)
-
-        if args.smote:
-            from imblearn.over_sampling import SMOTE
-            self.train_x, self.train_y = SMOTE(random_state=args.seed).fit_resample(self.train_x, self.train_y)
 
         train_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.train_y).type(torch.float32))
         valid_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.valid_x).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32))

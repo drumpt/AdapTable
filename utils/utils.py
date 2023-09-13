@@ -255,6 +255,7 @@ def get_mask_by_feature_importance(args, test_data, importance):
 ##################################################################
 # for visualization
 def draw_entropy_distribution(args, entropy_list, title):
+    # TODO: set x-axis to [0, 1]
     plt.clf()
     plt.hist(entropy_list, bins=50)
     plt.title(title)
@@ -273,6 +274,8 @@ def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
 
 
 def draw_label_distribution_plot(args, label_list, title):
+    # TODO: set x label
+
     # TODO: change this
     plt.clf()
     # sns.distplot(label_list)

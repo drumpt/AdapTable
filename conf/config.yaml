@@ -18,15 +18,15 @@ benchmark: openml-cc18 # tableshift, openml-cc18, openml-regression, scikit-lear
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
 dataset: cmc
-shift_type: random_drop # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0.6
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_severity: 0
 normalizer: StandardScaler
 missing_imputation_method: emd # for missing data | currently supported: zero, mean, emd(from empirical marginal distribution)
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
 
 ### hyperparameters for MAE pretraining
-pretrain_epochs: 200
+pretrain_epochs: 300
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
 pretrain_lr: 1e-4
@@ -34,7 +34,7 @@ pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
 retrain: true
-epochs: 200
+epochs: 100
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4

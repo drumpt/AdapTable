@@ -44,9 +44,9 @@ def pretrain(args, model, optimizer, dataset):
     device = args.device
     source_model, best_loss = None, float('inf')
     loss_fn = partial(cat_aware_recon_loss, model=model)
+    model.train()
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
-        model.train()
         for train_x, _ in dataset.train_loader:
             train_x = train_x.to(device)
 
@@ -69,31 +69,35 @@ def pretrain(args, model, optimizer, dataset):
             train_len += train_cor_x.shape[0]
 
         valid_loss, valid_len = 0, 0
-        model.eval()
-        with torch.no_grad():
-            for valid_x, _ in dataset.valid_loader:
-                valid_x = valid_x.to(device)
+        for valid_x, _ in dataset.valid_loader:
+            valid_x = valid_x.to(device)
 
-                if len(dataset.cat_indices_groups):
-                    valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                    valid_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(valid_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                    valid_cor_x = torch.Tensor(np.concatenate([valid_cont_cor_x, dataset.input_one_hot_encoder.transform(valid_cat_cor_x)], axis=-1)).to(args.device)
-                else:
-                    valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                    valid_cor_x = torch.Tensor(valid_cont_cor_x).float().to(args.device)
-                estimated_x = model.get_recon_out(valid_cor_x)
+            if len(dataset.cat_indices_groups):
+                valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
+                valid_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(valid_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
+                valid_cor_x = torch.Tensor(np.concatenate([valid_cont_cor_x, dataset.input_one_hot_encoder.transform(valid_cat_cor_x)], axis=-1)).to(args.device)
+            else:
+                valid_cont_cor_x, _ = Dataset.get_corrupted_data(valid_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
+                valid_cor_x = torch.Tensor(valid_cont_cor_x).float().to(args.device)
+            estimated_x = model.get_recon_out(valid_cor_x)
 
-                loss = loss_fn(estimated_x, valid_x)
+            loss = loss_fn(estimated_x, valid_x)
+        
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-                valid_loss += loss.item() * valid_cor_x.shape[0]
-                valid_len += valid_cor_x.shape[0]
+            valid_loss += loss.item() * valid_cor_x.shape[0]
+            valid_len += valid_cor_x.shape[0]
 
-        if valid_loss < best_loss:
-            best_loss = valid_loss
-            source_model = deepcopy(model)
-            torch.save(source_model.state_dict(), os.path.join(args.out_dir, "best_pretrained_model.pth"))
+        # if valid_loss < best_loss:
+        #     best_loss = valid_loss
+        #     source_model = deepcopy(model)
+        #     torch.save(source_model.state_dict(), os.path.join(args.out_dir, "best_pretrained_model.pth"))
+        source_model = deepcopy(model)
 
-        logger.info(f"pretrain epoch {epoch} | train_loss {train_loss / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}")
+        # logger.info(f"pretrain epoch {epoch} | train_loss {train_loss / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}")
+        logger.info(f"pretrain epoch {epoch} | train + valid loss {(train_loss + valid_loss) / (train_len + valid_len):.4f}")
     return source_model
 
 
