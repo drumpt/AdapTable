@@ -86,8 +86,8 @@ img_dir: imgs
 log_dir: log
 log_prefix: log_final
 
-### tsne
-tsne: false
+### visualization
+visual: false
 tsne_dir: tsne
 
 ### wandb

@@ -200,9 +200,27 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
             loss_second.backward(retain_graph=True)
             optimizer.second_step()
             return
-        # elif '':
-        #     estimated_test_x = Dataset.torch_revert_recon_to_onehot(estimated_test_x, dataset.input_one_hot_encoder)
-        #     loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none').mean()
+        elif 'double_masking' in args.method:
+            with torch.no_grad():
+                recon_out = model.get_recon_out(x)
+                recon_loss = F.mse_loss(recon_out, x, reduction='none').mean(0)
+                recon_sorted_idx = torch.argsort(recon_loss, descending=True)
+                recon_sorted_idx = recon_sorted_idx[:int(len(recon_sorted_idx) * 0.1)]
+
+            mask = torch.zeros_like(x[0]).to(args.device)
+            mask[recon_sorted_idx] = 1
+
+            recon_x = model.get_recon_out(x * mask) # ones with high reconstruction error
+            recon_adverse_x = model.get_recon_out(x * (1 - mask)) # ones with low reconstruction error
+
+            m = F.normalize(recon_x, dim=1) @ F.normalize(recon_adverse_x, dim=1).T
+            id = torch.eye(m.shape[0]).to(args.device) - 1
+
+
+            pos_loss = F.mse_loss(recon_x, recon_adverse_x, reduction='none').mean()
+            neg_loss = F.mse_loss(m, id, reduction='none').mean()
+            # neg_loss = 0
+            loss = pos_loss + neg_loss
         else:
             from utils.mae_util import cat_aware_recon_loss
             loss = cat_aware_recon_loss(estimated_test_x, x, model)
@@ -371,22 +389,23 @@ def main(args):
         batch_idx += 1
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
-
+            print('reset model!')
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
         # for entropy vs gradient norm visualization
-        for test_instance in test_x:
-            test_optimizer.zero_grad()
-            outputs = source_model(test_instance.unsqueeze(0))
-            if 'mae' in args.method:
-                recon_out = source_model.get_recon_out(test_instance.unsqueeze(0))
-                loss = F.mse_loss(recon_out * test_mask_x, test_instance.unsqueeze(0) * test_mask_x).mean()
-            else:
-                loss = softmax_entropy(outputs / args.temp).mean()
-            loss.backward(retain_graph=True)
-            gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
-            GRADIENT_NORM_LIST.append(gradient_norm)
+        if args.visual:
+            for test_instance in test_x:
+                test_optimizer.zero_grad()
+                outputs = source_model(test_instance.unsqueeze(0))
+                if 'mae' in args.method:
+                    recon_out = source_model.get_recon_out(test_instance.unsqueeze(0))
+                    loss = F.mse_loss(recon_out * test_mask_x, test_instance.unsqueeze(0) * test_mask_x).mean()
+                else:
+                    loss = softmax_entropy(outputs / args.temp).mean()
+                loss.backward(retain_graph=True)
+                gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
+                GRADIENT_NORM_LIST.append(gradient_norm)
 
         estimated_y = original_source_model(test_x)
         loss = loss_fn(estimated_y, test_y)
@@ -512,20 +531,19 @@ def main(args):
 
     logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
     logger.info(f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
-    if 'mae' in args.method:
-        draw_entropy_distribution(args, RECON_LOSS_LIST_BEFORE_ADAPTATION, "Recon loss Distribution Before Adaptation")
-        draw_entropy_distribution(args, RECON_LOSS_LIST_AFTER_ADAPTATION, "Recon loss Distribution After Adaptation")
-        draw_entropy_gradient_plot(args, RECON_LOSS_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST,
-                                   "Recon Loss vs. Gradient Norm")
-    else:
-        draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
-        draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
-        draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST,
-                                   "Entropy vs. Gradient Norm")
+    if args.visual:
+        if 'mae' in args.method:
+            draw_entropy_distribution(args, RECON_LOSS_LIST_BEFORE_ADAPTATION, "Recon loss Distribution Before Adaptation")
+            draw_entropy_distribution(args, RECON_LOSS_LIST_AFTER_ADAPTATION, "Recon loss Distribution After Adaptation")
+            draw_entropy_gradient_plot(args, RECON_LOSS_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST,
+                                       "Recon Loss vs. Gradient Norm")
+        else:
+            draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
+            draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
+            draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST,
+                                       "Entropy vs. Gradient Norm")
 
-
-
-    draw_tsne(args, FEATURE_LIST, LABEL_LIST, "Latent Space Visualization with t-SNE")
+        draw_tsne(args, FEATURE_LIST, LABEL_LIST, "Latent Space Visualization with t-SNE")
 
 
 if __name__ == "__main__":
