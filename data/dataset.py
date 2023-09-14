@@ -344,7 +344,7 @@ class Dataset():
 
 
     @staticmethod
-    def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
+    def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method): #TODO: change this to per-sample masking
         mask = np.ones(test_data.shape, dtype=np.int32)
         if shift_type in ["Gaussian", "uniform"] and data_type == "numerical":
             scaler = StandardScaler()
@@ -376,7 +376,7 @@ class Dataset():
     @staticmethod
     def get_imputed_data(test_data, train_data, data_type, imputation_method):
         if data_type == "numerical":
-            if imputation_method == "zero":
+            if imputation_method == "zero": # TODO: check this
                 # if isinstance(test_data, torch.Tensor):
                 #     test_data = test_data.cpu()
                 # imputed_data = np.zeros_like(test_data)
@@ -403,7 +403,7 @@ class Dataset():
             #         unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
             #         imputed_data.append(np.array([unique[np.argmax(counts)] for _ in range(len(test_data))]))
             #     imputed_data = np.stack(imputed_data, axis=-1)
-            elif imputation_method == "emd":
+            elif imputation_method == "emd": # TODO: fix this
                 imputed_data = []
                 for train_col in train_data.T:
                     imputed_data.append(np.random.choice(train_col, len(test_data)))

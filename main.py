@@ -44,7 +44,6 @@ def get_source_model(args, dataset):
 
 def pretrain(args, model, optimizer, dataset):
     device = args.device
-    source_model, best_loss = None, float('inf')
     loss_fn = partial(cat_aware_recon_loss, model=model)
     for epoch in range(1, args.pretrain_epochs + 1):
         train_loss, train_len = 0, 0
@@ -69,10 +68,8 @@ def pretrain(args, model, optimizer, dataset):
 
             train_loss += loss.item() * train_cor_x.shape[0]
             train_len += train_cor_x.shape[0]
-
-        source_model = deepcopy(model)
         logger.info(f"pretrain epoch {epoch} | train_loss {train_loss / train_len:.4f}")
-    return source_model
+    return model
 
 
 def train(args, model, optimizer, dataset, with_mae=False):
@@ -142,6 +139,11 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * cor_x
 
         estimated_test_x = source_model.get_recon_out(test_cor_x)
+
+        print(f"estimated_test_x: {estimated_test_x}")
+        print(f"estimated_test_x: {test_cor_x}")
+
+
         if 'threshold' in args.method:
             grad_list = []
             for idx, test_instance in enumerate(x):
@@ -492,6 +494,8 @@ def main(args):
         test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         logger.info(f'online batch [{batch_idx}]: acc before {test_acc_before / test_len:.4f}, acc after {test_acc_after / test_len:.4f}')
 
+    print(f"final pseudo target dist: {target_label_dist}")
+    print(f"final gt target dist: {gt_target_label_dist}")
     for key, item in kl_divergence_dict.items():
         print(f"{key}: {item / (test_len / args.test_batch_size)}")
 

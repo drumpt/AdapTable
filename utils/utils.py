@@ -216,7 +216,7 @@ def generate_augmentation(x, args): # MEMO with dropout
     return x_aug
 
 
-def get_feature_importance(args, dataset, test_data, test_mask, source_model):
+def get_feature_importance(args, dataset, test_data, test_mask, source_model): # TODO: do we consider categorical variables?
     if 'random_mask' in args.method:
         feature_importance = torch.ones_like(test_x[0])
     else:
@@ -231,7 +231,7 @@ def get_feature_importance(args, dataset, test_data, test_mask, source_model):
     return feature_importance
 
 
-def get_mask_by_feature_importance(args, test_data, importance):
+def get_mask_by_feature_importance(args, test_data, importance): # TODO: change this to per-sample masking
     mask = torch.ones_like(test_data, dtype=torch.float32)
     selected_rows = np.random.choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.test_mask_ratio))
     selected_columns = np.random.choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.test_mask_ratio), p=importance.cpu().numpy())
@@ -332,6 +332,7 @@ def draw_calibration(args, pred, gt):
     ax_calibration_curve.set_title("Calibration plots")
     plt.show()
 
+
 def draw_feature_change(feat1, feat2):
     tsne = TSNE(n_components=2, verbose=1, random_state=0)
 
@@ -350,6 +351,7 @@ def draw_feature_change(feat1, feat2):
     plt.legend(['Before', 'After'])
     plt.show()
 
+
 def draw_input_change(input1, input2):
     if isinstance(input1, torch.Tensor) or isinstance(input2, torch.Tensor):
         input1_np = input1.detach().cpu().numpy()
@@ -366,6 +368,7 @@ def draw_input_change(input1, input2):
     plt.bar(np.arange(len(input2_np[0])), input2_np[0], color='r')
     plt.tight_layout()
     plt.show()
+
 
 def ece_score(py, y_test, n_bins=10):
     py = np.array(py)
