@@ -203,10 +203,7 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         else:
             from utils.mae_util import cat_aware_recon_loss
             loss = cat_aware_recon_loss(estimated_test_x, x, model)
-<<<<<<< HEAD
-=======
             print('loss', loss)
->>>>>>> 1b62056718582ef3afc7e7a6dde499db71d27085
         loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
