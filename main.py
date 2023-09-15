@@ -372,7 +372,7 @@ def main(args):
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
-        estimated_y = source_model(test_x)
+        estimated_y = original_source_model(test_x)
 
         gt_target_label_dist = torch.mean(test_y, dim=0)
         gt_target_label_dist = target_label_dist.to(args.device)
