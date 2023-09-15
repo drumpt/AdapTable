@@ -6,6 +6,7 @@ def cat_aware_recon_loss(estimated_x, orig_x, model, reduction='mean', cat_loss=
     cont_part_recon = estimated_x[:, :model.cat_start_index]
     cont_part_orig = orig_x[:, :model.cat_start_index]
     cat_loss_fn = F.cross_entropy if cat_loss == 'ce' else F.mse_loss
+
     if reduction == 'none':
         recon_loss = F.mse_loss(cont_part_recon, cont_part_orig, reduction=reduction).mean(0)
         for cat_start_idx, cat_end_idx in zip(model.cat_start_indices, model.cat_end_indices):

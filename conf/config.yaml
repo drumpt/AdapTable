@@ -18,7 +18,7 @@ mlp:
 # folktables: state, time, time_state
 benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 dataset: cmc
-shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_type: random_drop # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0.5
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd(from empirical marginal distribution)
@@ -32,7 +32,7 @@ pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
 retrain: true
-epochs: 10
+epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
@@ -49,7 +49,7 @@ test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-method: []
+method: [mae]
 
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: emd, zero, mean

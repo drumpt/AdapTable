@@ -320,6 +320,9 @@ def main(args):
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
 
     source_model = get_source_model(args, dataset)
+
+    print(f"source_model: {source_model}")
+
     source_model.eval().requires_grad_(True)
     original_source_model = deepcopy(source_model)
     original_source_model.eval().requires_grad_(False)
@@ -538,12 +541,12 @@ def main(args):
         # kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
         kl_divergence_dict['ma'] = kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
 
-        # loss = loss_fn(estimated_y, test_y)
-        loss = loss_fn(torch.log(calibrated_probability), test_y)
+        loss = loss_fn(estimated_y, test_y)
+        # loss = loss_fn(torch.log(calibrated_probability), test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         logger.info(f'online batch [{batch_idx}]: acc before {test_acc_before / test_len:.4f}, acc after {test_acc_after / test_len:.4f}')
 
     print(f"final pseudo target dist: {target_label_dist}")

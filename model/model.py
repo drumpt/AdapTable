@@ -41,13 +41,13 @@ class MLP(nn.Module):
             ])
         self.encoder.append(nn.Linear(hidden_dim_list[-2], hidden_dim_list[-1]))
         self.main_head = nn.Sequential(
-            # nn.LayerNorm(hidden_dim_list[-1]),
-            # nn.ReLU(),
+            nn.Linear(hidden_dim_list[-1], hidden_dim_list[-1]),
+            nn.ReLU(),
             nn.Linear(hidden_dim_list[-1], output_dim),
         )
         self.recon_head = nn.Sequential(
-            # nn.LayerNorm(hidden_dim_list[-1]),
-            # nn.ReLU(),
+            nn.Linear(hidden_dim_list[-1], hidden_dim_list[-1]),
+            nn.ReLU(),
             nn.Linear(hidden_dim_list[-1], dataset.in_dim),
         )
 
@@ -66,8 +66,8 @@ class MLP(nn.Module):
         inputs = self.get_embedding(inputs)
         hidden_repr = self.encoder(inputs)
         recon_out = self.recon_head(hidden_repr)
-        if len(self.cat_indices_groups):
-            recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
+        # if len(self.cat_indices_groups):
+        #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -151,7 +151,8 @@ class TabNet(nn.Module):
         )
         self.main_head = nn.Sequential(
             # nn.LayerNorm(self.n_d),
-            # nn.ReLU(),
+            nn.Linear(self.n_d, self.n_d),
+            nn.ReLU(),
             nn.Linear(self.n_d, self.output_dim),
         )
 
@@ -249,17 +250,18 @@ class TabTransformer(nn.Module):
         l = input_size // 8
         hidden_dimensions = list(map(lambda t: l * t, self.mlp_hidden_mults))
         all_dimensions = [input_size, *hidden_dimensions, self.dim_out]
-        self.encoder = nn.Sequential()
-        for enc_input_dim, enc_output_dim in zip(all_dimensions[:-2], all_dimensions[1:-1]):
-            self.encoder.extend([
-                nn.Linear(enc_input_dim, enc_output_dim),
-                nn.ReLU(),
-            ])
-        self.encoder.append(nn.Linear(all_dimensions[-2], all_dimensions[-1]))
+        # self.encoder = nn.Sequential()
+        # for enc_input_dim, enc_output_dim in zip(all_dimensions[:-2], all_dimensions[1:-1]):
+        #     self.encoder.extend([
+        #         nn.Linear(enc_input_dim, enc_output_dim),
+        #         nn.ReLU(),
+        #     ])
+        # self.encoder.append(nn.Linear(all_dimensions[-2], all_dimensions[-1]))
+        self.encoder = nn.Identity()
         self.main_head = nn.Sequential(
-            # nn.LayerNorm(all_dimensions[-1]),
-            # nn.ReLU(),
-            nn.Linear(all_dimensions[-1], self.dim_out),
+            nn.Linear(226, 226),
+            nn.ReLU(),
+            nn.Linear(226, self.dim_out),
         )
         self.recon_head = nn.Sequential(
             # Transformer(
@@ -272,8 +274,9 @@ class TabTransformer(nn.Module):
             #     ff_dropout=self.ff_dropout
             # ),
             # nn.LayerNorm(all_dimensions[-1]),
-            # nn.ReLU(),
-            nn.Linear(all_dimensions[-1], dataset.in_dim),
+            nn.Linear(226, 226),
+            nn.ReLU(),
+            nn.Linear(226, dataset.in_dim),
         )
 
 
@@ -287,8 +290,8 @@ class TabTransformer(nn.Module):
         inputs_emb = self.get_embedding(inputs)
         enc_out = self.encoder(inputs_emb)
         recon_out = self.recon_head(enc_out)
-        if len(self.cat_indices_groups):
-            recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
+        # if len(self.cat_indices_groups):
+        #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -377,12 +380,14 @@ class FTTransformer(nn.Module):
         )
         self.main_head = nn.Sequential(
             # nn.LayerNorm(self.dim),
-            # nn.ReLU(),
+            nn.Linear(self.dim, self.dim),
+            nn.ReLU(),
             nn.Linear(self.dim, self.dim_out)
         )
         self.recon_head = nn.Sequential(
             # nn.LayerNorm(self.dim),
-            # nn.ReLU(),
+            nn.Linear(self.dim, self.dim),
+            nn.ReLU(),
             nn.Linear(self.dim, dataset.in_dim)
         )
 
