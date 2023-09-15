@@ -18,7 +18,7 @@ mlp:
 # folktables: state, time, time_state
 benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 dataset: cmc
-shift_type: column_drop # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0.5
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd(from empirical marginal distribution)
@@ -27,29 +27,29 @@ missing_imputation_method: emd # currently supported: zero, mean, emd(from empir
 pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
-pretrain_lr: 1e-3
+pretrain_lr: 1e-4
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
 retrain: true
-epochs: 50
+epochs: 10
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-3
+train_lr: 1e-4
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 30 # optimization steps for each batch
+num_steps: 10 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
-test_lr: 1e-3
+test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-method: [mae]
+method: []
 
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: emd, zero, mean

@@ -120,7 +120,6 @@ class Dataset():
             self.cat_indices_groups = [list(range(self.cont_dim + cat_start_index, self.cont_dim + cat_end_index)) for cat_start_index, cat_end_index in zip(self.cat_start_indices, self.cat_end_indices)]
         else:
             self.emb_dim_list, self.cat_end_indices, self.cat_start_indices, self.cat_indices_groups = [], np.array([]), np.array([]), []
-
         self.shift_at = -1
 
         # print dataset info
@@ -133,15 +132,14 @@ class Dataset():
         logger.info(f"Class distribution - valid {np.round(valid_counts[1] / np.sum(valid_counts[1]), 2)}, {valid_counts}")
         logger.info(f"Class distribution - test {np.round(test_counts[1] / np.sum(test_counts[1]), 2)}, {test_counts}")
 
-    def get_shifted_column(self, args):
 
+    def get_shifted_column(self, args):
         if self.shift_at == -1:
             from utils.shift_severity import calculate_columnwise_kl_divergence
-
             kl_div_per_column = calculate_columnwise_kl_divergence(self.train_x, self.test_x)
             self.shift_at = np.argmax(kl_div_per_column)
-
         return self.shift_at
+
 
     def get_openml_cc18_dataset(self, args):
         benchmark_list_path = "data/OpenML-CC18/benchmark_list.csv"
