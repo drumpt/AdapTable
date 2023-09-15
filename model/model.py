@@ -52,10 +52,13 @@ class MLP(nn.Module):
         )
 
 
-    def forward(self, inputs):
+    def forward(self, inputs, graph_embedding=None):
         inputs = self.get_embedding(inputs)
         hidden_repr = self.encoder(inputs)
-        outputs = self.main_head(hidden_repr)
+        if graph_embedding is not None:
+            outputs = self.graph_embed_head(torch.cat([hidden_repr, graph_embedding.repeat(hidden_repr.shape[0], 1)], dim=-1))
+        else:
+            outputs = self.main_head(hidden_repr)
         return outputs
 
 

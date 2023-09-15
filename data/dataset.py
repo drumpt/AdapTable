@@ -38,9 +38,11 @@ class Dataset():
             train_y = train_y.iloc[:int(len(train_y) * float(args.train_ratio)), :]
 
         if args.smote:
-            from imblearn.over_sampling import SMOTENC
-            train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
-
+            from imblearn.over_sampling import SMOTENC, SMOTE
+            if len(cat_indices):
+                train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
+            else:
+                train_x, train_y = SMOTE(random_state=args.seed).fit_resample(train_x, train_y)
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
         self.emb_dim = []
@@ -120,6 +122,8 @@ class Dataset():
         else:
             self.emb_dim_list, self.cat_end_indices, self.cat_start_indices, self.cat_indices_groups = [], np.array([]), np.array([]), []
 
+        self.shift_at = -1
+
         # print dataset info
         train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
         valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
@@ -130,6 +134,15 @@ class Dataset():
         logger.info(f"Class distribution - valid {np.round(valid_counts[1] / np.sum(valid_counts[1]), 2)}, {valid_counts}")
         logger.info(f"Class distribution - test {np.round(test_counts[1] / np.sum(test_counts[1]), 2)}, {test_counts}")
 
+    def get_shifted_column(self, args):
+
+        if self.shift_at == -1:
+            from utils.shift_severity import calculate_columnwise_kl_divergence
+
+            kl_div_per_column = calculate_columnwise_kl_divergence(self.train_x, self.test_x)
+            self.shift_at = np.argmax(kl_div_per_column)
+
+        return self.shift_at
 
     def get_openml_cc18_dataset(self, args):
         benchmark_list_path = "data/OpenML-CC18/benchmark_list.csv"
