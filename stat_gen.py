@@ -2091,6 +2091,298 @@ def draw_feature_difference(args, dataset, model):
     # plt.savefig('feature_difference.png')
     plt.show()
 
+def use_recon_loss_adapt(args, dataset, model):
+    import torch
+    train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
+        args.device)
+    test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
+        args.device)
+
+    model.requires_grad_(True)
+    model.eval()
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.1)
+    for epoch in range(30):
+        with torch.no_grad():
+            recon_out = model.get_recon_out(test_x)
+            recon_loss = F.mse_loss(recon_out, test_x, reduction='none').mean(0)
+            recon_sorted_idx = torch.argsort(recon_loss, descending=True)
+            recon_sorted_idx = recon_sorted_idx[:int(len(recon_sorted_idx) * 0.1)]
+
+        mask = torch.zeros_like(test_x[0]).to(args.device)
+        mask[recon_sorted_idx] = 1
+
+        recon_x = model.get_recon_out(test_x * mask)
+        recon_x = recon_x * (1 - mask)
+        F.mse_loss(recon_x, test_x * (1 - mask), reduction='mean').backward()
+        optimizer.step()
+
+        # accuracy
+        with torch.no_grad():
+            out = model(test_x)
+            pred = torch.argmax(out, dim=-1)
+            acc = torch.mean((pred == torch.argmax(test_y, dim=-1)).float())
+            print(f'epoch {epoch} acc is {acc}')
+
+def using_shap_values(args, model, dataset):
+    import shap
+    from shap import DeepExplainer
+    import torch
+    train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
+        args.device)
+    test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
+        args.device)
+
+    model.requires_grad_(False)
+    model.eval()
+
+    with torch.no_grad():
+        recon_out = model.get_recon_out(test_x)
+        recon_loss = F.mse_loss(recon_out, test_x, reduction='none').mean(0)
+        recon_sorted_idx = torch.argsort(recon_loss, descending=True)
+        recon_sorted_idx = recon_sorted_idx[:int(len(recon_sorted_idx))]
+        print(recon_sorted_idx)
+        recon_sorted_idx = recon_sorted_idx.detach().cpu().numpy()
+
+    explainer = DeepExplainer(model, train_x)
+    shap_values = explainer.shap_values(test_x)
+    # shap.summary_plot(shap_values, train_x[:1])
+    #
+    # shap_values = explainer.shap_values(test_x[:1])
+    # shap.summary_plot(shap_values, test_x[:1])
+
+    from sklearn.feature_selection import mutual_info_regression
+    num_samples = min(len(dataset.train_x), len(dataset.test_x))
+    subset_train_x = dataset.train_x[:num_samples]
+    subset_train_y = np.argmax(dataset.train_y, axis=1)[:num_samples]
+    subset_test_x = dataset.test_x[:num_samples]
+    subset_test_y = np.argmax(dataset.test_y, axis=1)[:num_samples]
+
+    # idx_at_hand = 0
+
+    for idx_at_hand in recon_sorted_idx[:10]:
+        shap.dependence_plot(idx_at_hand, shap_values[0], dataset.test_x)
+
+        mask = np.ones(subset_train_x[0].shape, dtype=bool)
+        mask[idx_at_hand] = False
+
+        mi_train = sklearn.feature_selection.mutual_info_regression(subset_train_x[:, mask], subset_train_x[:, idx_at_hand])
+        mi_test = sklearn.feature_selection.mutual_info_regression(subset_test_x[:, mask], subset_test_x[:, idx_at_hand])
+
+        plt.figure(figsize=(10, 10))
+        plt.subplot(2, 1, 1)
+        plt.bar(range(len(mi_train)), mi_train)
+        plt.title(f'[TRAIN] mutual information of column {idx_at_hand}')
+
+        plt.subplot(2, 1, 2)
+        plt.bar(range(len(mi_test)), mi_test)
+        plt.title(f'[TEST] mutual information of column {idx_at_hand}')
+        plt.tight_layout()
+        plt.show()
+
+def train_graph_embedding(args, init_model, dataset):
+    init_model.eval()
+    init_model.requires_grad_(True)
+    init_model.to(args.device)
+
+    train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
+        args.device)
+    test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
+        args.device)
+    optimizer = torch.optim.AdamW(init_model.parameters(), lr=0.001)
+
+    from sklearn.feature_selection import mutual_info_regression
+    from utils.graph_embedding import get_mi_matrix, get_node2vec_embedding
+
+    mi_matrix_train = get_mi_matrix(args, dataset, 'train')
+    mi_matrix_test = get_mi_matrix(args, dataset, 'test')
+
+    mi_matrix_train = torch.tensor(mi_matrix_train).float().to(args.device)
+    mi_matrix_test = torch.tensor(mi_matrix_test).float().to(args.device)
+
+    node2vec_train = get_node2vec_embedding(args, mi_matrix_train, 'train')
+    node2vec_test = get_node2vec_embedding(args, mi_matrix_test, 'test')
+
+    diff = F.l1_loss(mi_matrix_train, mi_matrix_test, reduction='none').sum(1)
+    diff_sorted_idx = torch.argsort(diff, descending=True)
+    print(diff_sorted_idx)
+    print(diff[diff_sorted_idx])
+    if args.dataset == 'cmc' and args.shift_type == 'numerical':
+        idx_at_hand = 1
+    elif args.benchmark == 'tableshift':
+        from utils.shift_severity import calculate_columnwise_kl_divergence
+        kl_div = calculate_columnwise_kl_divergence(dataset.train_x, dataset.test_x)
+        idx_at_hand = np.argmax(kl_div)
+    else:
+        idx_at_hand = diff_sorted_idx[0]
+
+    print(f'current idx at hand is : {idx_at_hand}')
+    embed_vector_train = torch.tensor(node2vec_train[idx_at_hand]).float().to(args.device)
+    embed_vector_test = torch.tensor(node2vec_test[idx_at_hand]).float().to(args.device)
+
+    print(embed_vector_train - embed_vector_test)
+
+    for epoch in range(20):
+        out = init_model(train_x, embed_vector_train)
+        loss = F.cross_entropy(out, torch.argmax(train_y, dim=-1))
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # accuracy
+        with torch.no_grad():
+            out = init_model(train_x, embed_vector_train)
+            pred = torch.argmax(out, dim=-1)
+            acc = torch.mean((pred == torch.argmax(train_y, dim=-1)).float())
+            print(f'[TRAIN] epoch {epoch} acc is {acc}')
+    print('\n')
+
+    with torch.no_grad():
+        print('diff of mi_matrix_train and mi_matrix_test')
+        plt.subplot(2, 1, 1)
+        plt.bar(range(len(embed_vector_train.detach().cpu())), embed_vector_train.detach().cpu())
+        plt.subplot(2, 1, 2)
+        plt.bar(range(len(embed_vector_test.detach().cpu())),embed_vector_test.detach().cpu())
+        plt.show()
+
+        out = init_model(test_x, embed_vector_train)
+        pred = torch.argmax(out, dim=-1)
+        pred_train = out
+        acc = torch.mean((pred == torch.argmax(test_y, dim=-1)).float())
+        print(f'[TEST - train matrix] acc is {acc}')
+
+        out = init_model(test_x, embed_vector_test)
+        pred = torch.argmax(out, dim=-1)
+        pred_test = out
+        acc = torch.mean((pred == torch.argmax(test_y, dim=-1)).float())
+        print(f'[TEST - test matrix] acc is {acc}')
+
+        print(f'pred_train {pred_train[0]}')
+        print(f'pred_test {pred_test[0]}')
+
+
+def train_adv_bias(args, init_model, dataset):
+    from utils.shift_severity import calculate_columnwise_kl_divergence
+    kl_div = calculate_columnwise_kl_divergence(dataset.train_x, dataset.test_x)
+    shift_at = np.argmax(kl_div)
+
+    init_model.requires_grad_(False)
+    init_model.eval()
+
+
+
+    train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(args.device)
+    test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(args.device)
+
+    for single_test_x, single_test_y in zip(test_x, test_y):
+
+        bias = torch.zeros(1).squeeze().to(args.device)
+        bias.requires_grad_(True)
+        optimizer = torch.optim.Adam([bias], lr=0.001)
+        orig_single_test_x = single_test_x.clone()
+
+        for epoch in range(10):
+            single_test_x = orig_single_test_x
+            single_test_x[shift_at] += bias
+            recon_single = init_model.get_recon_out(single_test_x)
+
+            optimizer.zero_grad()
+            F.mse_loss(recon_single, single_test_x).backward()
+            optimizer.step()
+
+        print(f'cur bias is : {bias}')
+        print(f'cur prediction is : {init_model(orig_single_test_x)}')
+        print(f'corrected prediction is : {init_model(single_test_x)}')
+        print(f'true_label is : {single_test_y}')
+        print('\n')
+
+def train_gnn_bias(args, init_model, dataset):
+    init_model.eval()
+    init_model.requires_grad_(True)
+    init_model.to(args.device)
+
+    train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
+        args.device)
+    test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
+        args.device)
+    optimizer = torch.optim.AdamW(init_model.parameters(), lr=0.001)
+
+    from sklearn.feature_selection import mutual_info_regression
+    from utils.graph_embedding import get_mi_matrix, get_node2vec_embedding, get_nx_graph
+
+    mi_matrix_train = get_mi_matrix(args, dataset, 'train')
+    mi_matrix_test = get_mi_matrix(args, dataset, 'test')
+
+    mi_matrix_train = torch.tensor(mi_matrix_train).float().to(args.device)
+    mi_matrix_test = torch.tensor(mi_matrix_test).float().to(args.device)
+
+    from torch_geometric.utils import from_networkx
+    from model.graph import GraphNet
+
+    graph_train_input = get_nx_graph(mi_matrix_train)
+    graph_test_input = get_nx_graph(mi_matrix_test)
+
+    # graph_train_input.x = torch.stack([torch.mean(train_x[i]), torch.std(train_x[i])])
+    # graph_test_input.x = torch.stack([torch.mean(test_x[i]), torch.std(test_x[i])])
+    # # set values for train groph and test graph
+    for i in range(len(graph_train_input.nodes)):
+        with torch.no_grad():
+            mask = torch.zeros_like(train_x[0])
+            mask[i] = 1
+            train_x_masked = train_x * mask
+            feat_dim = init_model.get_feature(train_x_masked).shape[-1]
+            graph_train_input.nodes[i]['x'] = torch.mean(init_model.get_feature(train_x_masked), dim=0) # Replace num_features with the actual number of features per node
+
+    for i in range(len(graph_test_input.nodes)):
+        with torch.no_grad():
+            mask = torch.zeros_like(train_x[0])
+            mask[i] = 1
+            test_x_masked = test_x * mask
+            graph_test_input.nodes[i]['x'] = torch.mean(init_model.get_feature(test_x_masked), dim=0) # Replace num_features with the actual number of features per node
+
+    #
+
+    graph_train_input = from_networkx(graph_train_input)
+    graph_test_input = from_networkx(graph_test_input)
+
+    graph_train_input = graph_train_input.to(args.device)
+    graph_test_input = graph_test_input.to(args.device)
+
+
+    gnn = GraphNet(num_features=feat_dim, num_classes=dataset.train_y.shape[1]).to(args.device)
+    gnn.requires_grad_(True)
+    gnn.train()
+    optimizer = torch.optim.AdamW(gnn.parameters(), lr=0.001)
+    init_model.requires_grad_(False)
+
+    for epoch in range(100):
+        vanilla_out = F.softmax(init_model(train_x), dim=-1).detach()
+        gnn_out = gnn(graph_train_input).squeeze()
+        out = F.softmax(vanilla_out + gnn_out, dim=-1)
+        loss = F.cross_entropy(out, torch.argmax(train_y, dim=-1))
+        optimizer.zero_grad()
+        loss.backward()
+        if epoch % 100 == 0:
+            print(f'orig_label is : {train_y[0]}')
+            print(f'orig_pred is : {vanilla_out[0]}')
+            print(f'gnn_pred is : {gnn_out}')
+            print(f'bef acc is : {torch.mean((torch.argmax(vanilla_out.detach(), dim=-1) == torch.argmax(train_y, dim=-1)).float())}')
+            print(f'aft acc is : {torch.mean((torch.argmax(vanilla_out.detach() + gnn_out, dim=-1) == torch.argmax(train_y, dim=-1)).float())}')
+            print(loss)
+        optimizer.step()
+
+    # accuracy on test:
+    vanilla_out = F.softmax(init_model(test_x), dim=-1).detach()
+    gnn_out = gnn(graph_test_input)
+    out = F.softmax(vanilla_out + gnn_out, dim=-1)
+
+    loss = F.cross_entropy(out, torch.argmax(test_y, dim=-1))
+    print(f'loss is {loss}')
+    print(f'origial acc is : {torch.mean((torch.argmax(vanilla_out.detach(), dim=-1) == torch.argmax(test_y, dim=-1)).float())}')
+    print(f'acc is : {torch.mean((torch.argmax(out, dim=-1) == torch.argmax(test_y, dim=-1)).float())}')
+
+
+
+
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
@@ -2111,38 +2403,48 @@ def main(args):
         source_model.to(args.device)
     else:
         raise FileNotFoundError
+        source_model = deepcopy(init_model)
+        source_model.eval()
+        source_model.requires_grad_(False)
+        source_model.to(args.device)
+        print('source model is not loaded')
+
+    # source_model = deepcopy(init_model)
+    source_model.eval()
+    source_model.requires_grad_(False)
+    source_model.to(args.device)
 
     orig_model.train()
     orig_model.requires_grad_(True)
     orig_model.to(device)
 
-    train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
-        args.device)
-    test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
-        args.device)
-    optimizer = torch.optim.AdamW(orig_model.parameters(), lr=0.01)
+    # train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
+    #     args.device)
+    # test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
+    #     args.device)
+    # optimizer = torch.optim.AdamW(orig_model.parameters(), lr=0.01)
 
     # test_cont_rescaled = dataset.test_cont_x_scaled
     # # replace the first n columns with test_rescaled
     # test_x_rescaled = test_x.clone().float().to(args.device)
     # test_x_rescaled[:, :test_cont_rescaled.shape[1]] = torch.tensor(test_cont_rescaled).float().to(args.device)
 
-    for epoch in range(20):
-        estim_y = orig_model(test_x)
-        optimizer.zero_grad()
-        F.cross_entropy(estim_y, torch.argmax(test_y, dim=-1)).mean().backward()
-        optimizer.step()
-
-        with torch.no_grad():
-            estim_y = orig_model(test_x)
-            # print(f"epoch {epoch}, loss {F.cross_entropy(estim_y, torch.argmax(test_y, dim=-1)).mean().item()}")
-            print(f"epoch {epoch}, acc {(torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).float().mean().item()}")
-
-    test_model = orig_model
-
-    with torch.no_grad():
-        estim_y = source_model(test_x)
-        print(f"epoch {epoch}, acc {(torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).float().mean().item()}")
+    # for epoch in range(20):
+    #     estim_y = orig_model(test_x)
+    #     optimizer.zero_grad()
+    #     F.cross_entropy(estim_y, torch.argmax(test_y, dim=-1)).mean().backward()
+    #     optimizer.step()
+    #
+    #     with torch.no_grad():
+    #         estim_y = orig_model(test_x)
+    #         # print(f"epoch {epoch}, loss {F.cross_entropy(estim_y, torch.argmax(test_y, dim=-1)).mean().item()}")
+    #         print(f"epoch {epoch}, acc {(torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).float().mean().item()}")
+    #
+    # test_model = orig_model
+    #
+    # with torch.no_grad():
+    #     estim_y = source_model(test_x)
+    #     print(f"epoch {epoch}, acc {(torch.argmax(estim_y, dim=-1) == torch.argmax(test_y, dim=-1)).float().mean().item()}")
     # plot_mean_std_column(args, dataset)
     # plot_feature_output(args, dataset, source_model, test_model)
     # plot_recon_feature(args, dataset, source_model)
@@ -2171,8 +2473,12 @@ def main(args):
     # subtract_emd(args, source_model, dataset)
     # plot_distance_over_acc(args, dataset, source_model)
     # recon_wise_correction(args, dataset, source_model)
-    draw_feature_difference(args, dataset, source_model)
+    # draw_feature_difference(args, dataset, source_model)
     # mmd_loss(args, dataset, source_model)
+    # use_recon_loss_adapt(args, dataset, source_model)
+    # using_shap_values(args, source_model, dataset)
+    # train_graph_embedding(args, init_model, dataset)
+    train_gnn_bias(args, source_model, dataset)
 
 if __name__ == "__main__":
     set_seed(0)

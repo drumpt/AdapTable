@@ -313,6 +313,10 @@ def main(args):
 
     device = args.device
     dataset = Dataset(args, logger)
+
+    # get shifted column
+    SHIFTED_COLUMN = dataset.get_shifted_column(args)
+
     regression = True if dataset.out_dim == 1 else False
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
 
@@ -360,6 +364,12 @@ def main(args):
 
     kl_divergence_dict = defaultdict(int)
     kl_div_loss = nn.KLDivLoss()
+
+    if 'use_graphnet' in args.method:
+        from utils.graph import get_pretrained_graphnet, get_pretrained_graphnet_rowwise
+        # gnn, graph_test_input = get_pretrained_graphnet(args, dataset, source_model)
+        gnn = get_pretrained_graphnet_rowwise(args, dataset, source_model)
+        gnn.eval().requires_grad_(False)
 
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
@@ -421,7 +431,103 @@ def main(args):
             import utils.lame as lame
             # feats = source_model.get_feature(test_x)
             estimated_y = lame.batch_evaluation(args, source_model, test_x)
-            ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
+
+        elif 'use_graphnet' in args.method and len(test_x) == args.test_batch_size:
+            from utils.graph import get_graphnet_out_rowwise
+            estimated_y = get_graphnet_out_rowwise(args, test_x, source_model, gnn)
+
+        elif 'label_shift_gt' in args.method:
+            estimated_y = source_model(test_x)
+
+            if 'mae' in args.method:
+
+                do = nn.Dropout(p=0.75)
+                imputation_value_list = [-3, 0, 3]
+
+                from utils.mae_util import cat_aware_recon_loss, expand_mask
+                estimated_x = source_model.get_recon_out(do(test_x))
+                recon_loss = cat_aware_recon_loss(estimated_x, test_x, source_model, reduction='none')
+                sorted_recon_loss_idx = torch.argsort(recon_loss, dim=0, descending=True)
+
+                mask = torch.zeros_like(recon_loss)
+                mask[sorted_recon_loss_idx[int(len(sorted_recon_loss_idx) * 0.1):]] = 1
+                mask = expand_mask(mask, source_model).detach()
+
+                # test sample pulled to source
+                imputed_recon = []
+                for imputation_value in imputation_value_list:
+                    corrected_test = test_x * mask + imputation_value * (1 - mask)
+                    imputed_recon_test = source_model.get_recon_out(corrected_test)
+                    imputed_recon.append(imputed_recon_test)
+                imputed_recon = torch.stack(imputed_recon)
+                imputed_recon = torch.mean(imputed_recon, dim=0)
+
+                corrected_test = test_x * mask + imputed_recon * (1 - mask)
+
+
+                # from utils.utils import draw_input_change
+                # draw_input_change(test_x, corrected_test)
+
+                # orig_feat_tsne = source_model.get_feature(test_x).detach().cpu().numpy()
+                # imputed_feat_tsne = source_model.get_feature(corrected_test).detach().cpu().numpy()
+                # from utils.utils import draw_feature_change
+                # draw_feature_change(orig_feat_tsne, imputed_feat_tsne)
+
+                estimated_y = source_model(corrected_test)
+
+            # label_counts = np.unique(np.argmax(dataset.test_y.detach().cpu().numpy(), axis=-1), return_counts=True)[1]
+            if args.smote:
+                source_label_dist = torch.ones_like(torch.tensor(dataset.train_y[0])).to(args.device)
+                source_label_dist = source_label_dist / torch.sum(source_label_dist)
+            else:
+                source_label_dist = np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]
+                source_label_dist = torch.from_numpy(source_label_dist / np.sum(source_label_dist)).to(args.device)
+
+            np_label_list = np.array(LABEL_LIST)
+            target_label_dist = np.sum(np_label_list, axis=0) / np.sum(np_label_list)
+            target_label_dist = torch.from_numpy(target_label_dist).to(args.device)
+            # target_label_dist = torch.sum(test_y, dim=0)
+            # target_label_dist = target_label_dist / torch.sum(target_label_dist)
+            # target_label_dist = target_label_dist.to(args.device)
+
+            print(f'before calibration : {F.softmax(estimated_y / args.temp, dim=-1)[0]}')
+            calibrated_probability = (F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
+            print(f'after calibration : {calibrated_probability[0]}')
+            estimated_y = calibrated_probability
+        elif 'mae' in args.method:
+
+            do = nn.Dropout(p=0.75)
+            imputation_value_list = [-3, 0, 3]
+
+            from utils.mae_util import cat_aware_recon_loss, expand_mask
+            estimated_x = source_model.get_recon_out(do(test_x))
+            recon_loss = cat_aware_recon_loss(estimated_x, test_x, source_model, reduction='none')
+            sorted_recon_loss_idx = torch.argsort(recon_loss, dim=0, descending=True)
+
+            mask = torch.zeros_like(recon_loss)
+            mask[sorted_recon_loss_idx[int(len(sorted_recon_loss_idx) * 0.1):]] = 1
+            mask = expand_mask(mask, source_model).detach()
+
+            # test sample pulled to source
+            imputed_recon = []
+            for imputation_value in imputation_value_list:
+                corrected_test = test_x * mask + imputation_value * (1 - mask)
+                imputed_recon_test = source_model.get_recon_out(corrected_test)
+                imputed_recon.append(imputed_recon_test)
+            imputed_recon = torch.stack(imputed_recon)
+            imputed_recon = torch.mean(imputed_recon, dim=0)
+
+            corrected_test = test_x * mask + imputed_recon * (1 - mask)
+
+            # from utils.utils import draw_input_change
+            # draw_input_change(test_x, corrected_test)
+
+            # orig_feat_tsne = source_model.get_feature(test_x).detach().cpu().numpy()
+            # imputed_feat_tsne = source_model.get_feature(corrected_test).detach().cpu().numpy()
+            # from utils.utils import draw_feature_change
+            # draw_feature_change(orig_feat_tsne, imputed_feat_tsne)
+
+            estimated_y = source_model(corrected_test)
         else:
             estimated_y = source_model(test_x)
             ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
@@ -488,7 +594,7 @@ def main(args):
 
         kl_divergence_dict['ori'] += kl_div_loss(torch.log(original_estimated_target_label_dist), gt_target_label_dist)
         kl_divergence_dict['ori_div_src'] += kl_div_loss(torch.log(before_div_source), gt_target_label_dist)
-        kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
+        # kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
         kl_divergence_dict['ada_div_src'] += kl_div_loss(torch.log(after_div_source), gt_target_label_dist)
         # kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
         kl_divergence_dict['ma'] = kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
