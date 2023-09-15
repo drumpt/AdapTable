@@ -20,6 +20,7 @@ class AffinityMatrix:
         return 1 / 2 * (mat + mat.t())
 
 
+
 class kNN_affinity(AffinityMatrix):
     def __init__(self, knn: int, **kwargs):
         self.knn = knn
@@ -33,6 +34,7 @@ class kNN_affinity(AffinityMatrix):
         W = torch.zeros(N, N, device=X.device)
         W.scatter_(dim=-1, index=knn_index, value=1.0)
         return W
+
 
 
 class rbf_affinity(AffinityMatrix):
@@ -51,6 +53,7 @@ class rbf_affinity(AffinityMatrix):
         # mask = torch.eye(X.size(0)).to(X.device)
         # rbf = rbf * (1 - mask)
         return rbf
+
 
 
 class linear_affinity(AffinityMatrix):

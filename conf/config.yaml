@@ -9,27 +9,25 @@ mlp:
   dropout_rate: 0
   bn: false
 
-### dataset
-benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
+### dataset and preprocessing
 ## currently available dataset list
 # openml-cc18: adult, cmc, mfeat-karhunen, optdigits, diabetes, semeion, mfeat-pixel, dna
 # tableshift: heloc(O), diabetes_readmission(O), anes(O), mooc(O), acsincome(O, 매우 느림), acsfoodstamps(X), acspubcov(X), acsunemployment(O, 매우 느림), brfss_diabetes, brfss_blood_pressure(X), communities_and_crime(X), compas(X/test를 써야함), german(X/test를 써야함), nhanes_cholesterol(X), nhanes_lead(X), physionet, mimic_extract_los_3, mimic_extract_mort_hosp
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
+benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 dataset: cmc
-shift_type: random_drop # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_type: column_drop # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0.5
 normalizer: StandardScaler
-missing_imputation_method: emd # for missing data | currently supported: zero, mean, emd(from empirical marginal distribution)
-train_ratio: 1 # for evaluating on limited number of train instances
-smote: true
+missing_imputation_method: emd # currently supported: zero, mean, emd(from empirical marginal distribution)
 
 ### hyperparameters for MAE pretraining
-pretrain_epochs: 300
+pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
-pretrain_lr: 1e-4
+pretrain_lr: 1e-3
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
@@ -37,7 +35,9 @@ retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-5
+train_lr: 1e-3
+train_ratio: 1 # for evaluating on limited number of train instances
+smote: false
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
@@ -45,15 +45,14 @@ num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
-test_lr: 1e-4
+test_lr: 1e-3
 
 ##################################################################
 ### methods & other hyperparameters
-## currently no baselines: em, sar, memo, sgem(gem + ns)
-method: [mae] # currently supported: mae, em, sar, memo, dem, gem, ns, dm, kld, lame
+method: [mae]
 
 # for masked autoencoders
-mae_imputation_method: emd
+mae_imputation_method: emd # imputation for unnormalized data: emd, zero, mean
 test_mask_ratio: 0.75
 delta: 1e-4
 

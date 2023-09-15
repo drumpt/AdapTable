@@ -65,12 +65,8 @@ def get_logger(args):
     if float(args.train_ratio) != 1:
         log_path += f'_train_ratio_{args.train_ratio}'
     if args.test_batch_size != 64:
-        log_path += f'_test_batch_size{args.test_batch_size}'
+        log_path += f'_test_batch_size_{args.test_batch_size}'
     log_path += '.txt'
-
-    # console_handler = logging.StreamHandler()
-    # console_handler.setFormatter(formatter)
-    # logger.addHandler(console_handler)
 
     file_handler = logging.FileHandler(os.path.join(args.log_dir, log_path))
     file_handler.setFormatter(formatter)
@@ -150,12 +146,10 @@ def collect_params(model, train_params):
                     continue
                 params.append(p)
                 names.append(f"{nm}.{np}")
-    print(f"names: {names}")
+    print(f"parameters to adapt: {names}")
     return params, names
 
 
-##################################################################
-# for loss functions
 def safe_log(x, ver):
     if ver == 1:
         return torch.log(x + 1e-5)
@@ -180,6 +174,12 @@ def renyi_entropy(x, alpha, dim=-1):
     entropy = torch.log(torch.pow(x.softmax(dim), alpha).sum(dim))
     entropy = entropy / (1 - alpha)
     return torch.mean(entropy)
+
+
+def js_divergence(p1, p2):
+    total_m = 0.5 * (p1 + p2)
+    loss = 0.5 * F.kl_div(torch.log(p1), total_m, reduction="batchmean") + 0.5 * F.kl_div(torch.log(p2), total_m, reduction="batchmean")
+    return loss
 
 
 def softmax_diversity_regularizer(x):
@@ -216,49 +216,44 @@ def generate_augmentation(x, args): # MEMO with dropout
     return x_aug
 
 
-def get_feature_importance(args, dataset, test_data, test_mask, source_model): # TODO: do we consider categorical variables?
-    if 'random_mask' in args.method:
-        feature_importance = torch.ones_like(test_x[0])
-    else:
+def get_feature_importance(args, dataset, test_data, test_mask, model):
+    if 'gradient_mask' in args.method:
         test_data.requires_grad = True
         test_data.grad = None
-        estimated_test_x = source_model.get_recon_out(test_data)
+        estimated_test_x = model.get_recon_out(test_data)
         loss = F.mse_loss(estimated_test_x * test_mask, test_data * test_mask)
         loss.backward(retain_graph=True)
-        feature_grads = torch.mean(test_data.grad, dim=0) # TODO: fix this (use instance-wise gradient)
-        feature_importance = torch.reciprocal(torch.abs(feature_grads) + args.delta)
-    feature_importance = feature_importance / torch.sum(feature_importance)
+        feature_importance = torch.reciprocal(torch.abs(test_data.grad) + args.delta)
+    else:
+        feature_importance = torch.ones_like(test_data)
+    feature_importance = feature_importance / torch.sum(feature_importance, dim=-1, keepdim=True)
     return feature_importance
 
 
-def get_mask_by_feature_importance(args, test_data, importance): # TODO: change this to per-sample masking
-    mask = torch.ones_like(test_data, dtype=torch.float32)
-    selected_rows = np.random.choice(test_data.shape[0], size=int(len(test_data.flatten()) * args.test_mask_ratio))
-    selected_columns = np.random.choice(test_data.shape[-1], size=int(len(test_data.flatten()) * args.test_mask_ratio), p=importance.cpu().numpy())
-    mask[selected_rows, selected_columns] = 0
+def get_mask_by_feature_importance(args, dataset, test_data, importance): # TODO: implement importance-aware masking and per-sample masking
+    input_dim = dataset.cont_dim + len(dataset.cat_start_indices)
+    len_keep = int(input_dim * (1 - args.test_mask_ratio))
+    idx = np.random.randn(test_data.shape[0], input_dim).argsort(axis=1)
+    mask = np.take_along_axis(np.concatenate([np.ones((test_data.shape[0], len_keep)), np.zeros((test_data.shape[0], input_dim - len_keep))], axis=1), idx, axis=1)   
+    if dataset.cont_dim and len(dataset.cat_indices_groups):
+        cont_mask = mask[:, :dataset.cont_dim]
+        cat_mask = np.concatenate([np.repeat(mask[:, dataset.cont_dim:][:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(dataset.input_one_hot_encoder.categories_)], axis=1)
+        mask = torch.FloatTensor(np.concatenate([cont_mask, cat_mask], axis=-1)).to(test_data.device)
+    elif self.cont_dim:
+        mask = torch.FloatTensor(mask).to(test_data.device)
+    else:
+        mask = torch.FloatTensor(np.concatenate([np.repeat(cat_mask[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(dataset.input_one_hot_encoder.categories_)], axis=1)).to(test_data.device)
     return mask
-
-
-# def get_embedding_mask(args, mask, model): # TODO: implement this
-#     embedding_mask = []
-#     if self.use_embedding:
-#         inputs_cont = inputs[:, :self.cat_start_index]
-#         inputs_cat = inputs[:, self.cat_start_index:]
-#         inputs_cat_emb = []
-#         for i, emb_layer in enumerate(self.emb_layers):
-#             inputs_cat_emb.append(emb_layer(torch.argmax(inputs_cat[:, self.cat_start_indices[i]:self.cat_end_indices[i]], dim=-1)))
-#         inputs_cat = torch.cat(inputs_cat_emb, dim=-1)
-#         inputs = torch.cat([inputs_cont, inputs_cat], 1)
-#     return mask
 
 
 ##################################################################
 # for visualization
 def draw_entropy_distribution(args, entropy_list, title):
-    # TODO: set x-axis to [0, 1]
     plt.clf()
     plt.hist(entropy_list, bins=50)
+
     plt.title(title)
+    plt.xlim([0, 1])
     plt.xlabel('Entropy')
     plt.ylabel('Number of Instances')
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
@@ -268,35 +263,27 @@ def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
     plt.clf()
     plt.scatter(entropy_list, gradient_list)
     plt.title(title)
+
     plt.xlabel('Entropy')
     plt.ylabel('Gradient Norm')
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
 def draw_label_distribution_plot(args, label_list, title):
-    # TODO: set x label
     plt.clf()
-    # sns.distplot(label_list)
+    uniq, count = np.unique(label_list, return_counts=True)
+    ratio = count / np.sum(count)
+    category = list(map(str, list(range(len(uniq)))))
+    plt.bar(category, ratio, width=0.5)
+
     plt.title(title)
     plt.xlabel('Class')
     plt.ylabel('Ratio')
-
-    uniq, count = np.unique(label_list, return_counts=True)
-    ratio = count / np.sum(count)
-
-    plt.bar(range(len(uniq)), ratio)
-    # plt.set_xticks(range(len(uniq)))
-    # plt.set_xticklabels(range(len(uniq)))
-
-    # bins_labels = [i for i in range(len(idx))]
-    # plt.hist(idx - 0.5, bins=np.arange(0, idx.max() + 2, 1) - 0.5, density=True)
     plt.savefig(f"{args.img_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
 
 
 def draw_tsne(args, feats, cls, title):
     tsne = TSNE(n_components=2, verbose=1, random_state=args.seed)
-
-    # cls = np.array(cls).argmax(1)
     feats = np.array(feats)
     z = tsne.fit_transform(feats)
 
@@ -332,40 +319,6 @@ def draw_calibration(args, pred, gt):
     ax_calibration_curve.set_title("Calibration plots")
     plt.show()
 
-def draw_feature_change(feat1, feat2):
-    tsne = TSNE(n_components=2, verbose=1, random_state=0)
-
-    if isinstance(feat1, torch.Tensor) or isinstance(feat2, torch.Tensor):
-        feat1_np = feat1.detach().cpu().numpy()
-        feat2_np = feat2.detach().cpu().numpy()
-    else:
-        feat1_np = feat1
-        feat2_np = feat2
-
-
-    X = tsne.fit_transform(np.concatenate([feat1_np, feat2_np], axis=0))
-    plt.scatter(X[:len(feat1_np), 0], X[:len(feat1_np), 1], color='b')
-    plt.scatter(X[len(feat1_np):, 0], X[len(feat1_np):, 1], color='r')
-    plt.title('Feature Change')
-    plt.legend(['Before', 'After'])
-    plt.show()
-
-def draw_input_change(input1, input2):
-    if isinstance(input1, torch.Tensor) or isinstance(input2, torch.Tensor):
-        input1_np = input1.detach().cpu().numpy()
-        input2_np = input2.detach().cpu().numpy()
-    else:
-        input1_np = input1
-        input2_np = input2
-
-    plt.subplot(2, 1, 1)
-    plt.gca().set_title('Original input')
-    plt.bar(np.arange(len(input1_np[0])), input1_np[0], color='b')
-    plt.subplot(2, 1, 2)
-    plt.gca().set_title('Changed input')
-    plt.bar(np.arange(len(input2_np[0])), input2_np[0], color='r')
-    plt.tight_layout()
-    plt.show()
 
 def draw_feature_change(feat1, feat2):
     tsne = TSNE(n_components=2, verbose=1, random_state=0)
@@ -401,6 +354,25 @@ def draw_input_change(input1, input2):
     plt.gca().set_title('Changed input')
     plt.bar(np.arange(len(input2_np[0])), input2_np[0], color='r')
     plt.tight_layout()
+    plt.show()
+
+
+def draw_feature_change(feat1, feat2):
+    tsne = TSNE(n_components=2, verbose=1, random_state=0)
+
+    if isinstance(feat1, torch.Tensor) or isinstance(feat2, torch.Tensor):
+        feat1_np = feat1.detach().cpu().numpy()
+        feat2_np = feat2.detach().cpu().numpy()
+    else:
+        feat1_np = feat1
+        feat2_np = feat2
+
+
+    X = tsne.fit_transform(np.concatenate([feat1_np, feat2_np], axis=0))
+    plt.scatter(X[:len(feat1_np), 0], X[:len(feat1_np), 1], color='b')
+    plt.scatter(X[len(feat1_np):, 0], X[len(feat1_np):, 1], color='r')
+    plt.title('Feature Change')
+    plt.legend(['Before', 'After'])
     plt.show()
 
 
@@ -447,4 +419,3 @@ def save_pickle(saving_object, title,args):
     file_name = f'{title}_model{args.model}_dataset{args.dataset}_shift_type{args.shift_type}_method{args.method}.pkl'
     with open(os.path.join(args.tsne_dir, file_name), 'wb') as f:
         pickle.dump(saving_object, f, pickle.HIGHEST_PROTOCOL)
-##################################################################

@@ -49,9 +49,9 @@ class Dataset():
             self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # TODO (important!) add new synthetic corruption benchmarks
+            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
                 args.shift_type = None
-            test_cont_x, test_cont_mask_x = Dataset.get_corrupted_data(
+            test_cont_x, test_cont_mask_x = Dataset.get_corrupted_data_by_modality(
                 np.array(test_x.iloc[:, cont_indices]),
                 np.array(train_x.iloc[:, cont_indices]),
                 data_type="numerical",
@@ -62,15 +62,14 @@ class Dataset():
             test_cont_x = self.input_scaler.transform(test_cont_x)
         else:
             train_cont_x, test_cont_mask_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([]), np.array([])
-
         if len(cat_indices):
             self.input_one_hot_encoder = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
             self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # TODO (important!) add new synthetic corruption benchmarks
+            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
                 args.shift_type = None
-            test_cat_x, test_cat_mask_x = Dataset.get_corrupted_data(
+            test_cat_x, test_cat_mask_x = Dataset.get_corrupted_data_by_modality(
                 np.array(test_x.iloc[:, cat_indices]),
                 np.array(train_x.iloc[:, cat_indices]),
                 data_type="categorical",
@@ -251,7 +250,6 @@ class Dataset():
             test_x = pd.DataFrame(np.concatenate(test_x_list, axis=0))
             test_y = pd.DataFrame(np.concatenate(test_y_list, axis=0))
         train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
-        print(f"train_y: {train_y}" )
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
 
@@ -343,8 +341,33 @@ class Dataset():
         return train_pd, eval_pd, test_pd
 
 
+    def get_corrupted_data(self, x, train_x, shift_type, shift_severity, imputation_method):
+        if self.cont_dim and len(self.cat_indices_groups):
+            cor_cont_x, cont_mask = Dataset.get_corrupted_data_by_modality(x[:, :self.cont_dim], train_x[:, :self.cont_dim], data_type="numerical", shift_type=shift_type, shift_severity=shift_severity, imputation_method=imputation_method)
+
+            cor_cat_x, cat_mask = Dataset.get_corrupted_data_by_modality(self.input_one_hot_encoder.inverse_transform(x[:, self.cont_dim:].detach().cpu()), self.input_one_hot_encoder.inverse_transform(train_x[:, self.cont_dim:]), data_type="categorical", shift_type=shift_type, shift_severity=shift_severity, imputation_method=imputation_method)
+            cor_cat_x = self.input_one_hot_encoder.transform(cor_cat_x)
+            cat_mask = np.concatenate([np.repeat(cat_mask[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
+
+            cor_x = torch.FloatTensor(np.concatenate([cor_cont_x, cor_cat_x], axis=-1)).to(x.device)
+            mask_x = torch.FloatTensor(np.concatenate([cont_mask, cat_mask], axis=-1)).to(x.device)
+        elif self.cont_dim:
+            cor_cont_x, cont_mask = Dataset.get_corrupted_data_by_modality(x[:, :self.cont_dim], train_x[:, :self.cont_dim], data_type="numerical", shift_type=shift_type, shift_severity=shift_severity, imputation_method=imputation_method)
+
+            cor_x = torch.FloatTensor(cor_cont_x).to(x.device)
+            mask_x = torch.FloatTensor(cont_mask).to(x.device)
+        else:
+            cor_cat_x, cat_mask = Dataset.get_corrupted_data_by_modality(self.input_one_hot_encoder.inverse_transform(x[:, self.cont_dim:].cpu()), self.input_one_hot_encoder.inverse_transform(train_x[:, self.cont_dim:]), data_type="categorical", shift_type=shift_type, shift_severity=shift_severity, imputation_method=imputation_method)
+            cor_cat_x = self.input_one_hot_encoder.transform(cor_cat_x)
+            cat_mask = np.concatenate([np.repeat(cat_mask[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(self.input_one_hot_encoder.categories_)], axis=1)
+
+            cor_x = torch.FloatTensor(cor_cat_x).to(x.device)
+            mask_x = torch.FloatTensor(cat_mask).to(x.device)
+        return cor_x, mask_x
+
+
     @staticmethod
-    def get_corrupted_data(test_data, train_data, data_type, shift_type, shift_severity, imputation_method): #TODO: change this to per-sample masking
+    def get_corrupted_data_by_modality(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
         mask = np.ones(test_data.shape, dtype=np.int32)
         if shift_type in ["Gaussian", "uniform"] and data_type == "numerical":
             scaler = StandardScaler()
@@ -353,11 +376,15 @@ class Dataset():
             test_data = test_data.astype(np.float32) + shift_severity * noise * np.sqrt(scaler.var_)
         elif shift_type in ["random_drop", "column_drop"]:
             assert 0 <= shift_severity <= 1
-
             if shift_type == "random_drop":
-                mask = (np.random.rand(*test_data.shape) >= shift_severity).astype(np.int32)
+                len_keep = int(test_data.shape[-1] * (1 - shift_severity))
+                idx = np.random.randn(*test_data.shape).argsort(axis=1)
+                mask = np.take_along_axis(np.concatenate([np.ones((test_data.shape[0], len_keep)), np.zeros((test_data.shape[0], test_data.shape[-1] - len_keep))], axis=1), idx, axis=1)
             elif shift_type == "column_drop":
-                mask = np.repeat((np.random.rand(*test_data.shape[1:]) >= shift_severity).astype(np.int32)[None, :], test_data.shape[0], axis=0)
+                len_keep = int(test_data.shape[-1] * (1 - shift_severity))
+                mask = np.concatenate([np.ones(len_keep), np.zeros(test_data.shape[-1] - len_keep)])
+                np.random.shuffle(mask)
+                mask = np.repeat(mask[None, :], test_data.shape[0], axis=0)
             imputed_data = Dataset.get_imputed_data(test_data, train_data, data_type, imputation_method)
 
             if not isinstance(test_data, np.ndarray):
@@ -376,13 +403,12 @@ class Dataset():
     @staticmethod
     def get_imputed_data(test_data, train_data, data_type, imputation_method):
         if data_type == "numerical":
-            if imputation_method == "zero": # TODO: check this
-                # if isinstance(test_data, torch.Tensor):
-                #     test_data = test_data.cpu()
-                # imputed_data = np.zeros_like(test_data)
+            if imputation_method == "zero": 
+                if isinstance(test_data, torch.Tensor):
+                    test_data = test_data.cpu()
+                imputed_data = np.zeros_like(test_data)
+            elif imputation_method == "mean":
                 imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], len(test_data), axis=0)
-            # elif imputation_method == "mean":
-            #     imputed_data = np.repeat(np.mean(train_data, axis=0)[None, :], len(test_data), axis=0)
             elif imputation_method == "emd":
                 imputed_data = []
                 if isinstance(test_data, torch.Tensor):
@@ -397,13 +423,13 @@ class Dataset():
                     train_col = set([str(train_col_elem) for train_col_elem in train_col])
                     imputed_data.append(np.array([max(train_col) + "." for _ in range(len(test_data))]))
                 imputed_data = np.stack(imputed_data, axis=-1)
-            # elif imputation_method == "mean":  # mode (most frequent value) for categorical variable
-            #     imputed_data = []
-            #     for train_col in train_data.T:
-            #         unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
-            #         imputed_data.append(np.array([unique[np.argmax(counts)] for _ in range(len(test_data))]))
-            #     imputed_data = np.stack(imputed_data, axis=-1)
-            elif imputation_method == "emd": # TODO: fix this
+            elif imputation_method == "mean":  # mode (most frequent value) for categorical variable
+                imputed_data = []
+                for train_col in train_data.T:
+                    unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
+                    imputed_data.append(np.array([unique[np.argmax(counts)] for _ in range(len(test_data))]))
+                imputed_data = np.stack(imputed_data, axis=-1)
+            elif imputation_method == "emd":
                 imputed_data = []
                 for train_col in train_data.T:
                     imputed_data.append(np.random.choice(train_col, len(test_data)))
