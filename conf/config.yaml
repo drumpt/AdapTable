@@ -4,8 +4,8 @@
 model: MLP
 mlp:
   embedding: false
-  num_layers: 4
-  hidden_dim: [256, 256, 256] # either int or list of int
+  num_enc_layers: 2
+  hidden_dim: [256, 256] # either int or list of int
   dropout_rate: 0
   bn: false
 
@@ -16,10 +16,10 @@ mlp:
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
-dataset: cmc
-shift_type: random_drop # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0.5
+benchmark: tableshift # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
+dataset: heloc
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_severity: 0.2
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd(from empirical marginal distribution)
 
@@ -41,7 +41,7 @@ smote: false
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 10 # optimization steps for each batch
+num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN

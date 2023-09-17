@@ -8,8 +8,61 @@ from einops import rearrange, repeat
 from pytorch_tabnet.tab_network import TabNetEncoder, TabNetDecoder, EmbeddingGenerator, RandomObfuscator
 from tab_transformer_pytorch.tab_transformer_pytorch import Transformer as TabTransformerBlock
 from tab_transformer_pytorch.ft_transformer import NumericalEmbedder, Transformer as FTTransformerBlock
+from tab_transformer_pytorch.tab_transformer_pytorch import MLP as TabTransformerMLP
 
 from data.dataset import Dataset
+
+
+
+# class MLP(nn.Module):
+#     def __init__(self, args, dataset):
+#         super().__init__()
+
+#         self.embedding = args.mlp.embedding
+#         self.cat_start_index = dataset.cont_dim
+#         self.cat_end_indices = np.cumsum([num_category for num_category, _ in dataset.emb_dim_list])
+#         self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+#         self.cat_indices_groups = dataset.cat_indices_groups
+
+#         self.encoder = nn.Sequential()
+#         self.recon_head = nn.Sequential()
+#         self.main_head = nn.Sequential()
+#         self.cls_main_head = nn.Sequential()
+
+#         in_dim = dataset.in_dim
+#         hidden_dim = 256
+#         # self.encoder.append(nn.LayerNorm(in_dim))
+#         for _ in range(4 - 3):
+#             self.encoder.append(nn.Linear(in_dim, hidden_dim))
+#             self.encoder.append(nn.ReLU())
+#             self.encoder.append(nn.Dropout(0))
+#             in_dim = hidden_dim
+#         self.encoder.append(nn.Linear(in_dim, hidden_dim))
+
+#         self.recon_head.append(nn.Linear(hidden_dim, dataset.in_dim))
+#         self.main_head.append(nn.Linear(hidden_dim, hidden_dim))
+#         self.main_head.append(nn.ReLU())
+#         self.main_head.append(nn.Dropout(0))
+#         self.main_head.append(nn.Linear(hidden_dim, dataset.out_dim))
+
+
+#     def forward(self, inputs):
+#         hidden_repr = self.encoder(inputs)
+#         main_out = self.main_head(hidden_repr)
+#         return main_out
+
+
+#     def get_recon_out(self, inputs):
+#         hidden_repr = self.encoder(inputs)
+#         recon_out = self.recon_head(hidden_repr)
+#         return recon_out
+
+
+#     def get_feature(self, inputs):
+#         hidden_repr = self.encoder(inputs)
+#         recon_out = self.recon_head(hidden_repr)
+#         main_out = self.main_head(hidden_repr)
+#         return main_out
 
 
 
@@ -25,14 +78,14 @@ class MLP(nn.Module):
 
         input_dim = dataset.in_dim if not self.embedding else dataset.cont_dim + sum([dim for _, dim in dataset.emb_dim_list])
         if isinstance(args.mlp.hidden_dim, list):
-            assert len(args.mlp.hidden_dim) == num_layers - 1
-        hidden_dim_list = args.mlp.hidden_dim if isinstance(args.mlp.hidden_dim, omegaconf.listconfig.ListConfig) else [args.mlp.hidden_dim for _ in range(args.mlp.num_layers - 1)]
+            assert len(args.mlp.hidden_dim) == num_enc_layers
+        hidden_dim_list = args.mlp.hidden_dim if isinstance(args.mlp.hidden_dim, omegaconf.listconfig.ListConfig) else [args.mlp.hidden_dim for _ in range(args.mlp.num_enc_layers)]
         output_dim = dataset.out_dim
 
         if self.embedding:
             self.emb_layers = nn.ModuleList([nn.Embedding(x, y) for x, y in dataset.emb_dim_list])
         self.encoder = nn.Sequential()
-        for layer_idx, hidden_dim in zip(range(args.mlp.num_layers - 2), hidden_dim_list):
+        for layer_idx, hidden_dim in zip(range(args.mlp.num_enc_layers - 1), hidden_dim_list):
             self.encoder.extend([
                 nn.Linear(input_dim if layer_idx == 0 else hidden_dim_list[layer_idx - 1], hidden_dim),
                 nn.BatchNorm1d(hidden_dim) if args.mlp.bn else nn.Identity(),
@@ -87,6 +140,83 @@ class MLP(nn.Module):
             inputs_cat = torch.cat(inputs_cat_emb, dim=-1)
             inputs = torch.cat([inputs_cont, inputs_cat], 1)
         return inputs
+
+
+
+# class MLP(nn.Module):
+#     def __init__(self, args, dataset):
+#         super().__init__()
+
+#         self.embedding = args.mlp.embedding
+#         self.cat_start_index = dataset.cont_dim
+#         self.cat_end_indices = np.cumsum([num_category for num_category, _ in dataset.emb_dim_list])
+#         self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+#         self.cat_indices_groups = dataset.cat_indices_groups
+
+#         input_dim = dataset.in_dim if not self.embedding else dataset.cont_dim + sum([dim for _, dim in dataset.emb_dim_list])
+#         if isinstance(args.mlp.hidden_dim, list):
+#             assert len(args.mlp.hidden_dim) == num_enc_layers
+#         hidden_dim_list = args.mlp.hidden_dim if isinstance(args.mlp.hidden_dim, omegaconf.listconfig.ListConfig) else [args.mlp.hidden_dim for _ in range(args.mlp.num_enc_layers)]
+#         output_dim = dataset.out_dim
+
+#         if self.embedding:
+#             self.emb_layers = nn.ModuleList([nn.Embedding(x, y) for x, y in dataset.emb_dim_list])
+#         self.encoder = nn.Sequential()
+#         for layer_idx, hidden_dim in zip(range(args.mlp.num_enc_layers - 1), hidden_dim_list):
+#             self.encoder.extend([
+#                 nn.Linear(input_dim if layer_idx == 0 else hidden_dim_list[layer_idx - 1], hidden_dim),
+#                 nn.BatchNorm1d(hidden_dim) if args.mlp.bn else nn.Identity(),
+#                 nn.ReLU(),
+#                 nn.Dropout(args.mlp.dropout_rate),
+#             ])
+#         self.encoder.append(nn.Linear(hidden_dim_list[-2], hidden_dim_list[-1]))
+#         self.main_head = nn.Sequential(
+#             nn.Linear(hidden_dim_list[-1], hidden_dim_list[-1]),
+#             nn.BatchNorm1d(hidden_dim) if args.mlp.bn else nn.Identity(),
+#             nn.ReLU(),
+#             nn.Dropout(args.mlp.dropout_rate),
+#             nn.Linear(hidden_dim_list[-1], output_dim),
+#         )
+#         self.recon_head = nn.Sequential(
+#             nn.Linear(hidden_dim_list[-1], dataset.in_dim),
+#         )
+
+
+#     def forward(self, inputs, graph_embedding=None):
+#         inputs = self.get_embedding(inputs)
+#         hidden_repr = self.encoder(inputs)
+#         if graph_embedding is not None:
+#             outputs = self.graph_embed_head(torch.cat([hidden_repr, graph_embedding.repeat(hidden_repr.shape[0], 1)], dim=-1))
+#         else:
+#             outputs = self.main_head(hidden_repr)
+#         return outputs
+
+
+#     def get_recon_out(self, inputs):
+#         inputs = self.get_embedding(inputs)
+#         hidden_repr = self.encoder(inputs)
+#         recon_out = self.recon_head(hidden_repr)
+#         # if len(self.cat_indices_groups):
+#         #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
+#         return recon_out
+
+
+#     def get_feature(self, inputs):
+#         inputs = self.get_embedding(inputs)
+#         hidden_repr = self.encoder(inputs)
+#         return hidden_repr
+
+
+#     def get_embedding(self, inputs):
+#         if self.embedding and len(self.emb_layers):
+#             inputs_cont = inputs[:, :self.cat_start_index]
+#             inputs_cat = inputs[:, self.cat_start_index:]
+#             inputs_cat_emb = []
+#             for i, emb_layer in enumerate(self.emb_layers):
+#                 inputs_cat_emb.append(emb_layer(torch.argmax(inputs_cat[:, self.cat_start_indices[i]:self.cat_end_indices[i]], dim=-1)))
+#             inputs_cat = torch.cat(inputs_cat_emb, dim=-1)
+#             inputs = torch.cat([inputs_cont, inputs_cat], 1)
+#         return inputs
 
 
 
@@ -150,7 +280,6 @@ class TabNet(nn.Module):
             momentum=self.momentum,
         )
         self.main_head = nn.Sequential(
-            # nn.LayerNorm(self.n_d),
             nn.Linear(self.n_d, self.n_d),
             nn.ReLU(),
             nn.Linear(self.n_d, self.output_dim),
@@ -159,8 +288,8 @@ class TabNet(nn.Module):
 
     def forward(self, inputs):
         embedded_inputs = self.get_embedding(inputs)
-        steps_output, M_loss = self.encoder(embedded_inputs)
-        res = torch.sum(torch.stack(steps_output, dim=0), dim=0)
+        steps_out, _ = self.encoder(embedded_inputs)
+        res = torch.sum(torch.stack(steps_out, dim=0), dim=0)
         outputs = self.main_head(res)
         return outputs
 
@@ -177,7 +306,7 @@ class TabNet(nn.Module):
     def get_feature(self, inputs):
         embedded_inputs = self.get_embedding(inputs)
         steps_out, _ = self.encoder(embedded_inputs)
-        steps_out = torch.cat(steps_out, dim=-1) # for visualization
+        steps_out = torch.sum(torch.stack(steps_out, dim=0), dim=0)
         return steps_out
 
 
@@ -249,47 +378,22 @@ class TabTransformer(nn.Module):
         input_size = (self.dim * self.num_categories) + num_continuous
         l = input_size // 8
         hidden_dimensions = list(map(lambda t: l * t, self.mlp_hidden_mults))
-        all_dimensions = [input_size, *hidden_dimensions, self.dim_out]
-        # self.encoder = nn.Sequential()
-        # for enc_input_dim, enc_output_dim in zip(all_dimensions[:-2], all_dimensions[1:-1]):
-        #     self.encoder.extend([
-        #         nn.Linear(enc_input_dim, enc_output_dim),
-        #         nn.ReLU(),
-        #     ])
-        # self.encoder.append(nn.Linear(all_dimensions[-2], all_dimensions[-1]))
-        self.encoder = nn.Identity()
-        self.main_head = nn.Sequential(
-            nn.Linear(226, 226),
-            nn.ReLU(),
-            nn.Linear(226, self.dim_out),
-        )
-        self.recon_head = nn.Sequential(
-            # Transformer(
-            #     num_tokens=self.total_tokens,
-            #     dim=all_dimensions[-1],
-            #     depth=1, # asyymetric encoder-deocder architecture
-            #     heads=self.heads,
-            #     dim_head=self.dim_head,
-            #     attn_dropout=self.attn_dropout,
-            #     ff_dropout=self.ff_dropout
-            # ),
-            # nn.LayerNorm(all_dimensions[-1]),
-            nn.Linear(226, 226),
-            nn.ReLU(),
-            nn.Linear(226, dataset.in_dim),
-        )
+        main_head_dimensions = [input_size, *hidden_dimensions, self.dim_out]
+        recon_head_dimensions = [input_size] * (len(main_head_dimensions) - 1) + [dataset.in_dim]
+
+        self.main_head = TabTransformerMLP(main_head_dimensions)
+        self.recon_head = TabTransformerMLP(recon_head_dimensions)
 
 
     def forward(self, inputs):
         inputs_emb = self.get_embedding(inputs)
-        outputs = self.main_head(self.encoder(inputs_emb))
+        outputs = self.main_head(inputs_emb)
         return outputs
 
 
     def get_recon_out(self, inputs):
         inputs_emb = self.get_embedding(inputs)
-        enc_out = self.encoder(inputs_emb)
-        recon_out = self.recon_head(enc_out)
+        recon_out = self.recon_head(inputs_emb)
         # if len(self.cat_indices_groups):
         #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
@@ -297,8 +401,7 @@ class TabTransformer(nn.Module):
 
     def get_feature(self, inputs):
         inputs_emb = self.get_embedding(inputs)
-        feature_out = self.encoder(inputs_emb)
-        return feature_out
+        return inputs_emb
 
 
     def get_embedding(self, inputs):
@@ -379,13 +482,11 @@ class FTTransformer(nn.Module):
             ff_dropout=self.ff_dropout,
         )
         self.main_head = nn.Sequential(
-            # nn.LayerNorm(self.dim),
             nn.Linear(self.dim, self.dim),
             nn.ReLU(),
             nn.Linear(self.dim, self.dim_out)
         )
         self.recon_head = nn.Sequential(
-            # nn.LayerNorm(self.dim),
             nn.Linear(self.dim, self.dim),
             nn.ReLU(),
             nn.Linear(self.dim, dataset.in_dim)

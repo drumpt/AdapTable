@@ -239,7 +239,7 @@ def get_mask_by_feature_importance(args, dataset, test_data, importance): # TODO
         cont_mask = mask[:, :dataset.cont_dim]
         cat_mask = np.concatenate([np.repeat(mask[:, dataset.cont_dim:][:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(dataset.input_one_hot_encoder.categories_)], axis=1)
         mask = torch.FloatTensor(np.concatenate([cont_mask, cat_mask], axis=-1)).to(test_data.device)
-    elif self.cont_dim:
+    elif dataset.cont_dim:
         mask = torch.FloatTensor(mask).to(test_data.device)
     else:
         mask = torch.FloatTensor(np.concatenate([np.repeat(cat_mask[:, category_idx][:, None], len(category), axis=1) for category_idx, category in enumerate(dataset.input_one_hot_encoder.categories_)], axis=1)).to(test_data.device)

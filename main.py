@@ -54,6 +54,7 @@ def pretrain(args, model, optimizer, dataset):
         for train_x, _ in chain(dataset.train_loader, dataset.valid_loader):
             train_x = train_x.to(device)
             train_cor_x, _ = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
+            # train_cor_x, _ = torch.FloatTensor(get_corrupted_data(train_x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)).to(device) # TODO: remove (for comparing)
 
             estimated_x = model.get_recon_out(train_cor_x)
             loss = loss_fn(estimated_x, train_x)
@@ -124,64 +125,15 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
 
     if 'mae' in args.method:
         cor_x, _ = dataset.get_corrupted_data(x, dataset.train_x, shift_type="random_drop", shift_severity=1, imputation_method=args.mae_imputation_method) # fully corrupted (masking is done below)
+        # cor_x, _ = torch.FloatTensor(get_corrupted_data(x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)).to(x.device) # TODO: remove (for comparing)
+
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
         test_cor_mask_x = get_mask_by_feature_importance(args, dataset, x, feature_importance).to(x.device).detach()
         test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * cor_x
         estimated_test_x = source_model.get_recon_out(test_cor_x)
 
-        if 'threshold' in args.method:
-            grad_list = []
-            for idx, test_instance in enumerate(x):
-                optimizer.zero_grad()
-                outputs = source_model(test_instance.unsqueeze(0))
-                recon_out = source_model.get_recon_out(test_instance.unsqueeze(0))
-                loss = F.mse_loss(recon_out * mask[idx], test_instance.unsqueeze(0) * mask[idx]).mean()
-                loss.backward(retain_graph=True)
-                gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
-                grad_list.append(gradient_norm)
-            grad_list = torch.Tensor(grad_list).to(args.device)
-            loss_idx = torch.where(grad_list < 1)
-            optimizer.zero_grad()
-
-            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none') # l2 loss only on non-missing values
-            loss = loss[loss_idx].mean()
-        elif 'sam' in args.method:
-            # if 'threshold' in args.method:
-            optimizer.zero_grad()
-            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none')
-            loss_idx = torch.where(loss < 2 * np.log(outputs.shape[-1]))
-            loss = loss[loss_idx].mean()
-            loss.backward(retain_graph=True)
-            optimizer.first_step()
-
-            new_estimated_x = model.get_recon_out(x)
-            loss_second = F.mse_loss(new_estimated_x * mask, x * mask, reduction='none')
-            loss_idx = torch.where(loss_second < 2 * np.log(outputs.shape[-1]))
-            loss_second = loss_second[loss_idx].mean()
-            loss_second.backward(retain_graph=True)
-            optimizer.second_step()
-            return
-        elif 'double_masking' in args.method:
-            with torch.no_grad():
-                recon_out = model.get_recon_out(x)
-                recon_loss = F.mse_loss(recon_out, x, reduction='none').mean(0)
-                recon_sorted_idx = torch.argsort(recon_loss, descending=True)
-                recon_sorted_idx = recon_sorted_idx[:int(len(recon_sorted_idx) * 0.1)]
-            mask = torch.zeros_like(x[0]).to(args.device)
-            mask[recon_sorted_idx] = 1
-
-            recon_x = model.get_recon_out(x * mask) # ones with high reconstruction error
-            recon_adverse_x = model.get_recon_out(x * (1 - mask)) # ones with low reconstruction error
-
-            m = F.normalize(recon_x, dim=1) @ F.normalize(recon_adverse_x, dim=1).T
-            id = torch.eye(m.shape[0]).to(args.device) - 1
-
-            pos_loss = F.mse_loss(recon_x, recon_adverse_x, reduction='none').mean()
-            neg_loss = F.mse_loss(m, id, reduction='none').mean()
-            loss = pos_loss + neg_loss
-        else:
-            from utils.mae_util import cat_aware_recon_loss
-            loss = cat_aware_recon_loss(estimated_test_x, x, model)
+        from utils.mae_util import cat_aware_recon_loss
+        loss = cat_aware_recon_loss(estimated_test_x, x, model)
         loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
@@ -345,8 +297,8 @@ def main(args):
     print(f"torch.tensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]): {torch.tensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1])}")
 
     source_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
-    target_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.test_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
-    # target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
+    # target_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.test_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
+    target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
 
     if args.vis:
         for train_x, train_y in dataset.train_loader:
@@ -358,12 +310,6 @@ def main(args):
 
     kl_divergence_dict = defaultdict(int)
     kl_div_loss = nn.KLDivLoss()
-
-    if 'use_graphnet' in args.method:
-        from utils.graph import get_pretrained_graphnet, get_pretrained_graphnet_rowwise
-        # gnn, graph_test_input = get_pretrained_graphnet(args, dataset, source_model)
-        gnn = get_pretrained_graphnet_rowwise(args, dataset, source_model)
-        gnn.eval().requires_grad_(False)
 
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
@@ -408,72 +354,9 @@ def main(args):
             estimated_x = source_model.get_recon_out(test_x)
             test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
-        if 'lame' in args.method:
-            import utils.lame as lame
-            estimated_y = lame.batch_evaluation(args, source_model, test_x)
-        elif 'use_graphnet' in args.method and len(test_x) == args.test_batch_size:
-            from utils.graph import get_graphnet_out_rowwise
-            estimated_y = get_graphnet_out_rowwise(args, test_x, source_model, gnn)
-        elif 'label_shift_gt' in args.method:
-            estimated_y = source_model(test_x)
-            if 'mae' in args.method:
-                do = nn.Dropout(p=0.75)
-                imputation_value_list = [-3, 0, 3]
-
-                from utils.mae_util import cat_aware_recon_loss, expand_mask
-                estimated_x = source_model.get_recon_out(do(test_x))
-                recon_loss = cat_aware_recon_loss(estimated_x, test_x, source_model, reduction='none')
-                sorted_recon_loss_idx = torch.argsort(recon_loss, dim=0, descending=True)
-
-                mask = torch.zeros_like(recon_loss)
-                mask[sorted_recon_loss_idx[int(len(sorted_recon_loss_idx) * 0.1):]] = 1
-                mask = expand_mask(mask, source_model).detach()
-
-                imputed_recon = []
-                for imputation_value in imputation_value_list:
-                    corrected_test = test_x * mask + imputation_value * (1 - mask)
-                    imputed_recon_test = source_model.get_recon_out(corrected_test)
-                    imputed_recon.append(imputed_recon_test)
-                imputed_recon = torch.stack(imputed_recon)
-                imputed_recon = torch.mean(imputed_recon, dim=0)
-
-                corrected_test = test_x * mask + imputed_recon * (1 - mask)
-                estimated_y = source_model(corrected_test)
-
-            np_label_list = np.array(LABEL_LIST)
-            target_label_dist = np.sum(np_label_list, axis=0) / np.sum(np_label_list)
-            target_label_dist = torch.from_numpy(target_label_dist).to(args.device)
-
-            calibrated_probability = (F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
-            estimated_y = torch.log(calibrated_probability)
-        # elif 'mae' in args.method:
-        #     do = nn.Dropout(p=0.75)
-        #     imputation_value_list = [-3, 0, 3]
-
-        #     from utils.mae_util import cat_aware_recon_loss, expand_mask
-        #     estimated_x = source_model.get_recon_out(do(test_x))
-        #     recon_loss = cat_aware_recon_loss(estimated_x, test_x, source_model, reduction='none')
-        #     sorted_recon_loss_idx = torch.argsort(recon_loss, dim=0, descending=True)
-
-        #     mask = torch.zeros_like(recon_loss)
-        #     mask[sorted_recon_loss_idx[int(len(sorted_recon_loss_idx) * 0.1):]] = 1
-        #     mask = expand_mask(mask, source_model).detach()
-
-        #     # test sample pulled to source
-        #     imputed_recon = []
-        #     for imputation_value in imputation_value_list:
-        #         corrected_test = test_x * mask + imputation_value * (1 - mask)
-        #         imputed_recon_test = source_model.get_recon_out(corrected_test)
-        #         imputed_recon.append(imputed_recon_test)
-        #     imputed_recon = torch.stack(imputed_recon)
-        #     imputed_recon = torch.mean(imputed_recon, dim=0)
-
-        #     corrected_test = test_x * mask + imputed_recon * (1 - mask)
-
-        #     estimated_y = source_model(corrected_test)
-        else:
-            estimated_y = source_model(test_x)
-            ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
+        estimated_y = source_model(test_x)
+        ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
+        print(f"estimated_y: {estimated_y}")
 
         after_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
 
@@ -539,18 +422,21 @@ def main(args):
         # kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
         kl_divergence_dict['ada_div_src'] += kl_div_loss(torch.log(after_div_source), gt_target_label_dist)
         # kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
-        kl_divergence_dict['ma'] = kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
+        kl_divergence_dict['ma'] += kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
+
+        print(f"kl_divergence_dict['ma']: {kl_divergence_dict['ma']}")
 
         loss = loss_fn(estimated_y, test_y)
         # loss = loss_fn(torch.log(calibrated_probability), test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        # test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        logger.info(f'online batch [{batch_idx}]: acc before {test_acc_before / test_len:.4f}, acc after {test_acc_after / test_len:.4f}')
+        # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        logger.info(f'online batch [{batch_idx}]: cumulative acc before {test_acc_before / test_len:.4f}, cumulative acc after {test_acc_after / test_len:.4f}')
 
-    print(f"final pseudo target dist: {target_label_dist}")
+    print(f"final gt source dist: {source_label_dist}")
     print(f"final gt target dist: {gt_target_label_dist}")
+    print(f"final pseudo target dist: {target_label_dist}")
     for key, item in kl_divergence_dict.items():
         print(f"{key}: {item / (test_len / args.test_batch_size)}")
 
