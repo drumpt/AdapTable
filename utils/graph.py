@@ -155,7 +155,7 @@ def get_pretrained_graphnet_columnwise(args, dataset, source_model):
     optimizer = torch.optim.AdamW(gnn.parameters(), lr=0.01)
 
 
-    for epoch in range(100):
+    for epoch in range(10):
         loss_total = 0
         for batched_train_x, batched_graph, batched_train_y in tqdm(zip(train_graph_dataset.created_batches, train_graph_dataset.created_graph_batches, train_graph_dataset.created_batches_cls)):
 
@@ -164,7 +164,7 @@ def get_pretrained_graphnet_columnwise(args, dataset, source_model):
 
             vanilla_out = source_model(batched_train_x).detach() # currently vanilla outs are logits
             gnn_out = gnn(batched_graph) # currently gnn outs are logits
-            estimated_y = vanilla_out + gnn_out
+            estimated_y = F.softmax(vanilla_out, dim=-1) + gnn_out
 
             loss = F.cross_entropy(estimated_y, torch.argmax(batched_train_y, dim=-1))
             optimizer.zero_grad()
@@ -185,7 +185,7 @@ def get_graphnet_out_columnwise(args, dataset, batch, source_model, gnn):
     print(f'gnn out is : {gnn_out[0]}')
     source_out = source_model(batch).detach()
 
-    estimated_out = F.softmax(source_out + gnn_out, dim=-1)
+    estimated_out = F.softmax(source_out, dim=-1) + gnn_out
     return estimated_out
 
 

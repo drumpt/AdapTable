@@ -65,8 +65,8 @@ class GraphDataset(torch.utils.data.Dataset):
             self.created_batches_cls.extend(list(split_cls))
 
         # random select at maximum 100 batches from self.created_batches
-        if len(self.created_batches) > 100:
-            idx = np.random.choice(len(self.created_batches), 100, replace=False)
+        if len(self.created_batches) > 50:
+            idx = np.random.choice(len(self.created_batches), 50, replace=False)
             self.created_batches = [self.created_batches[i] for i in idx]
             self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
 
@@ -84,30 +84,8 @@ class GraphDataset(torch.utils.data.Dataset):
         for batch_idx, batch in enumerate(self.created_batches):
             print(f'currently : {batch_idx} / {len(self.created_batches)}')
             # create graph
-            mi_matrix = torch.zeros((len(self.mi_idx), len(self.mi_idx))).float().to(self.args.device)
-            for idx1, i in enumerate(self.mi_idx):
-                for idx2, j in enumerate(self.mi_idx):
-                    if i == j:
-                        continue
-                    is_a_cat, is_b_cat = False, False
-                    if isinstance(i, list) and isinstance(j, list):
-                        a = torch.argmax(batch[:, i], dim=1)
-                        b = torch.argmax(batch[:, j], dim=1)
-                        is_a_cat, is_b_cat = True, True
-                    elif isinstance(i, list):
-                        a = torch.argmax(batch[:, i], dim=1)
-                        b = batch[:, j]
-                        is_a_cat = True
-                    elif isinstance(j, list):
-                        a = batch[:, i]
-                        b = torch.argmax(batch[:, j], dim=1)
-                        is_b_cat = True
-                    else:
-                        a = batch[:, i]
-                        b = batch[:, j]
-
-                    mi_matrix[idx1, idx2] = GraphDataset.calculate_mutual_information(self.args, a, b, is_a_cat, is_b_cat)
-
+            # mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
+            mi_matrix = GraphDataset.get_correlation_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
 
             numerical_node_feat = []
             categorical_node_feat = []
@@ -124,6 +102,9 @@ class GraphDataset(torch.utils.data.Dataset):
             numerical_node_feat = torch.stack(numerical_node_feat).to(self.args.device)
             categorical_node_feat = torch.stack(categorical_node_feat).to(self.args.device)
 
+            mi_matrix = (mi_matrix - mi_matrix.min()) / (mi_matrix.max() - mi_matrix.min())
+
+
             edge_index = mi_matrix.nonzero(as_tuple=True)
             edge_attr = mi_matrix[edge_index]
 
@@ -134,6 +115,7 @@ class GraphDataset(torch.utils.data.Dataset):
 
             # print('mi_matrix', mi_matrix.shape)
             # print('max val : ', mi_matrix.max())
+            # min-max scale mi_matrix
 
             # cat1 cat3 ...
             graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_attr=edge_attr)
@@ -249,6 +231,47 @@ class GraphDataset(torch.utils.data.Dataset):
         graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_attr=edge_attr)
 
         return graph_data
+
+    @staticmethod
+    def get_mi_matrix(args, batch, idx_lists):
+
+        mi_matrix = torch.zeros((len(idx_lists), len(idx_lists))).float().to(args.device)
+        for idx1, i in enumerate(idx_lists):
+            for idx2, j in enumerate(idx_lists):
+                if i == j:
+                    continue
+                is_a_cat, is_b_cat = False, False
+                if isinstance(i, list) and isinstance(j, list):
+                    a = torch.argmax(batch[:, i], dim=1)
+                    b = torch.argmax(batch[:, j], dim=1)
+                    is_a_cat, is_b_cat = True, True
+                elif isinstance(i, list):
+                    a = torch.argmax(batch[:, i], dim=1)
+                    b = batch[:, j]
+                    is_a_cat = True
+                elif isinstance(j, list):
+                    a = batch[:, i]
+                    b = torch.argmax(batch[:, j], dim=1)
+                    is_b_cat = True
+                else:
+                    a = batch[:, i]
+                    b = batch[:, j]
+
+                mi_matrix[idx1, idx2] = GraphDataset.calculate_mutual_information(args, a, b, is_a_cat, is_b_cat)
+
+    @staticmethod
+    def get_correlation_matrix(args, batch, idx_lists):
+        new_batch = torch.zeros((batch.shape[0], len(idx_lists))).float().to(args.device)
+        for idx, i in enumerate(idx_lists):
+            if isinstance(i, list):
+                new_batch[:, idx] = torch.argmax(batch[:, i], dim=1)
+            else:
+                new_batch[:, idx] = batch[:, i]
+
+        matrix = torch.corrcoef(new_batch.T) - torch.eye(len(idx_lists)).to(args.device)
+        print('matrix', matrix.shape)
+        print('max val of matrix: ', matrix.max())
+        return matrix
 
 
 

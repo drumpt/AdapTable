@@ -39,6 +39,9 @@ class GraphNet(torch.nn.Module):
         x = global_mean_pool(x, data.batch) # TODO: or concat predefined logits
         # concat use
         x = self.fc(x)
+        x = F.softmax(x, dim=-1)
+        x = x - x.mean(dim=-1, keepdim=True)
+
         return x
 
     def _apply(self, fn):
