@@ -122,11 +122,6 @@ class Dataset():
             self.emb_dim_list, self.cat_end_indices, self.cat_start_indices, self.cat_indices_groups = [], np.array([]), np.array([]), []
         self.shift_at = -1
 
-        print(f"self.train_x: {self.train_x}")
-        print(f"self.train_y: {self.train_y}")
-        print(f"self.test_x: {self.test_x}")
-        print(f"self.test_y: {self.test_y}")
-
         # print dataset info
         train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
         valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)

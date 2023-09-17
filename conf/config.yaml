@@ -18,7 +18,7 @@ mlp:
 # folktables: state, time, time_state
 benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 dataset: cmc
-shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_type: Gaussian # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 1
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd(from empirical marginal distribution)
@@ -80,11 +80,11 @@ gpu_idx: 0
 ### seed for reproduciblity
 seed: 0
 
-### output dir for saving model and log_dir for logging
-out_dir: exps/test_mae
-img_dir: imgs
+### log_dir for logging, out_dir for saving model, and vis_dir for visualization
 log_dir: log
 log_prefix: log_final
+out_dir: exps/test_mae
+vis_dir: imgs
 
 # visualization
 vis: false
