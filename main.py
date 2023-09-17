@@ -125,8 +125,6 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
 
     if 'mae' in args.method:
         cor_x, _ = dataset.get_corrupted_data(x, dataset.train_x, shift_type="random_drop", shift_severity=1, imputation_method=args.mae_imputation_method) # fully corrupted (masking is done below)
-        # cor_x, _ = torch.FloatTensor(get_corrupted_data(x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)).to(x.device) # TODO: remove (for comparing)
-
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
         test_cor_mask_x = get_mask_by_feature_importance(args, dataset, x, feature_importance).to(x.device).detach()
         test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * cor_x
@@ -264,17 +262,10 @@ def main(args):
 
     device = args.device
     dataset = Dataset(args, logger)
-
-    # get shifted column
-    SHIFTED_COLUMN = dataset.get_shifted_column(args)
-
+    SHIFTED_COLUMN = dataset.get_shifted_column(args) # get shifted column
     regression = True if dataset.out_dim == 1 else False
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
-
     source_model = get_source_model(args, dataset)
-
-    print(f"source_model: {source_model}")
-
     source_model.eval().requires_grad_(True)
     original_source_model = deepcopy(source_model)
     original_source_model.eval().requires_grad_(False)
@@ -294,22 +285,16 @@ def main(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
 
-    print(f"torch.tensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]): {torch.tensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1])}")
-
     source_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
-    # target_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.test_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
     target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
+    # kl_divergence_dict = defaultdict(int) # TODO: remove (only for debugging)
 
     if args.vis:
         for train_x, train_y in dataset.train_loader:
-            # SOURCE_INPUT_LIST.extend(train_x.tolist())
             SOURCE_INPUT_LIST.extend(original_source_model.get_embedding(train_x.to(args.device)).cpu().tolist())
             SOURCE_FEATURE_LIST.extend(original_source_model.get_feature(train_x.to(args.device)).cpu().tolist())
             SOURCE_ENTROPY_LIST.extend(softmax_entropy(original_source_model(train_x.to(args.device))).tolist())
             SOURCE_LABEL_LIST.extend(torch.argmax(train_y, dim=-1).tolist())
-
-    kl_divergence_dict = defaultdict(int)
-    kl_div_loss = nn.KLDivLoss()
 
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
@@ -318,34 +303,10 @@ def main(args):
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
-        estimated_y = original_source_model(test_x)
-
-        gt_target_label_dist = torch.mean(test_y, dim=0)
-        gt_target_label_dist = target_label_dist.to(args.device)
-
-        original_estimated_target_label_dist = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
-        before_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
-
-        loss = loss_fn(estimated_y, test_y)
+        ori_estimated_y = original_source_model(test_x)
+        loss = loss_fn(ori_estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
-        test_acc_before += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-
-        # for entropy and mae vs gradient norm visualization
-        if args.vis:
-            ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for
-            RECON_LOSS_LIST_BEFORE_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
-            FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
-            LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
-            TARGET_PREDICTION_LIST.extend(torch.argmax(estimated_y, dim=-1).cpu().tolist())
-
-        if args.entropy_gradient_vis:
-            for test_instance in test_x:
-                test_optimizer.zero_grad()
-                outputs = source_model(test_instance.unsqueeze(0))
-                loss = softmax_entropy(outputs / args.temp).mean()
-                loss.backward(retain_graph=True)
-                gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
-                GRADIENT_NORM_LIST.append(gradient_norm)
+        test_acc_before += (torch.argmax(ori_estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
 
         for step_idx in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_mask_x, source_model, test_optimizer)
@@ -354,91 +315,62 @@ def main(args):
             estimated_x = source_model.get_recon_out(test_x)
             test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
-        estimated_y = source_model(test_x)
-        ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
-        print(f"estimated_y: {estimated_y}")
+        if "lame" in args.method:
+            import utils.lame as lame
+            estimated_y = lame.batch_evaluation(args, source_model, test_x)
+        if 'label_shift_handler' in args.method:
+            estimated_y = source_model(test_x)
+            after_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1), dim=0)
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * after_div_source / source_label_dist), p=1, dim=-1)
+            target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
+            cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
+            estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
 
-        after_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
+            # # TODO: remove (only for debugging)
+            # original_estimated_target_label_dist = torch.mean(F.softmax(ori_estimated_y, dim=-1), dim=0)
+            # ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
+            # before_div_source = F.normalize(torch.mean((F.softmax(ori_estimated_y, dim=-1) / source_label_dist)), p=1, dim=-1)
+            # gt_target_label_dist = torch.mean(test_y, dim=0).to(args.device)
+            # kl_divergence_dict['ori'] += F.kl_div(torch.log(original_estimated_target_label_dist), gt_target_label_dist)
+            # kl_divergence_dict['ori_div_src'] += F.kl_div(torch.log(before_div_source), gt_target_label_dist)
+            # kl_divergence_dict['ada'] += F.kl_div(torch.log(ada_pred), gt_target_label_dist)
+            # kl_divergence_dict['ada_div_src'] += F.kl_div(torch.log(after_div_source), gt_target_label_dist)
+            # kl_divergence_dict['ma'] += F.kl_div(torch.log(target_label_dist), gt_target_label_dist)
+        else:
+            estimated_y = source_model(test_x)
 
-        if args.vis:
+        loss = loss_fn(estimated_y, test_y)
+        test_loss_after += loss.item() * test_x.shape[0]
+        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        logger.info(f'online batch [{batch_idx}]: cumulative acc before {test_acc_before / test_len:.4f}, cumulative acc after {test_acc_after / test_len:.4f}')
+
+        if args.vis: # for entropy and mae vs gradient norm visualization
+            ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(ori_estimated_y).tolist() / np.log(ori_estimated_y.shape[-1]))
+            RECON_LOSS_LIST_BEFORE_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
+            FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
+            LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
+            TARGET_PREDICTION_LIST.extend(torch.argmax(ori_estimated_y, dim=-1).cpu().tolist())
+
             ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
             RECON_LOSS_LIST_AFTER_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
             FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
             LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
             ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
 
-        # print(f"source_label_dist: {source_label_dist}")
-        # print(f"F.softmax(estimated_y, dim=-1) / source_label_dist: {torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)}")
+        if args.entropy_gradient_vis:
+            for test_instance in test_x:
+                test_optimizer.zero_grad()
+                outputs = original_source_model(test_instance.unsqueeze(0))
+                loss = softmax_entropy(outputs / args.temp).mean()
+                loss.backward(retain_graph=True)
+                gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
+                GRADIENT_NORM_LIST.append(gradient_norm)
 
-        # print(f"F.softmax(estimated_y, dim=-1): {F.softmax(estimated_y, dim=-1)}")
-        # print(f"entropy: {softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])}")
-
-        # print(f"torch.mean((F.softmax(estimated_y, dim=-1): {torch.mean((F.softmax(estimated_y, dim=-1)), dim=0)}")
-        # print(f"torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist)): {torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)}")
-
-        # np_label_list = np.array(LABEL_LIST)
-        # target_label_dist = np.sum(np_label_list, axis=0) / np.sum(np_label_list)
-        # target_label_dist = torch.from_numpy(target_label_dist).to(args.device)
-        # target_label_dist = torch.sum(test_y, dim=0)
-        # target_label_dist = target_label_dist / torch.sum(target_label_dist)
-        # target_label_dist = target_label_dist.to(args.device)
-        # target_label_dist = 0 * target_label_dist + (1 - 0) * torch.mean((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True), dim=0)
-        # target_label_dist = 0.9 * target_label_dist + (1 - 0.9) * torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
-        # calibrated_probability = (F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
-        # calibrated_probability = torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist) / torch.sum(torch.sqrt(F.softmax(estimated_y, dim=-1) * target_label_dist), dim=-1, keepdim=True)
-        # calibrated_probability = (F.softmax(estimated_y / 2.5, dim=-1) * target_label_dist / source_label_dist) / (torch.sum(F.softmax(estimated_y / 2.5, dim=-1) * target_label_dist / source_label_dist, dim=-1, keepdim=True))
-        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * source_label_dist), dim=-1, keepdim=True)
-        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
-        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
-        # calibrated_probability = estimated_y / source_label_dist + torch.log(target_label_dist)
-        # print(f'after calibration : {calibrated_probability[0]}')
-        # print(f"calibrated_probability: {calibrated_probability}")
-
-        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist), dim=-1, keepdim=True)
-        calibrated_probability = (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), dim=-1, keepdim=True)
-
-        target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
-
-        cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 100)
-        # cal_use_ratio = js_divergence(target_label_dist, source_label_dist)
-        # cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 100)
-        # cal_use_ratio = 1 / (1 + 1000 * kl_div_loss(torch.log(target_label_dist), source_label_dist))
-        # cal_use_ratio = torch.exp(- 100 * kl_div_loss(torch.log(target_label_dist), source_label_dist))
-        # cal_use_ratio = 1 / (1 + torch.exp(kl_div_loss(torch.log(target_label_dist), source_label_dist)))
-        # cal_use_ratio = 1
-        print(f"target_label_dist: {target_label_dist}")
-        print(f"source_label_dist: {source_label_dist}")
-
-        print(f"cal_use_ratio: {cal_use_ratio}")
-        # print(f"kl_div: {kl_div_loss(torch.log(target_label_dist), source_label_dist))}")
- 
-        calibrated_probability = calibrated_probability * cal_use_ratio + F.softmax(estimated_y, dim=-1) * (1 - cal_use_ratio)
-        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
-
-        print(f"torch.mean(calibrated_probability, dim=0, keepdim=True): {torch.mean(calibrated_probability, dim=0, keepdim=True)}")
-
-        kl_divergence_dict['ori'] += kl_div_loss(torch.log(original_estimated_target_label_dist), gt_target_label_dist)
-        kl_divergence_dict['ori_div_src'] += kl_div_loss(torch.log(before_div_source), gt_target_label_dist)
-        # kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
-        kl_divergence_dict['ada_div_src'] += kl_div_loss(torch.log(after_div_source), gt_target_label_dist)
-        # kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
-        kl_divergence_dict['ma'] += kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
-
-        print(f"kl_divergence_dict['ma']: {kl_divergence_dict['ma']}")
-
-        loss = loss_fn(estimated_y, test_y)
-        # loss = loss_fn(torch.log(calibrated_probability), test_y)
-        test_loss_after += loss.item() * test_x.shape[0]
-        # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        logger.info(f'online batch [{batch_idx}]: cumulative acc before {test_acc_before / test_len:.4f}, cumulative acc after {test_acc_after / test_len:.4f}')
-
-    print(f"final gt source dist: {source_label_dist}")
-    print(f"final gt target dist: {gt_target_label_dist}")
-    print(f"final pseudo target dist: {target_label_dist}")
-    for key, item in kl_divergence_dict.items():
-        print(f"{key}: {item / (test_len / args.test_batch_size)}")
+    # print(f"final gt source dist: {source_label_dist}")
+    # print(f"final gt target dist: {gt_target_label_dist}")
+    # print(f"final pseudo target dist: {target_label_dist}")
+    # for key, item in kl_divergence_dict.items():
+    #     print(f"{key}: {item / (test_len / args.test_batch_size)}")
 
     logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
     logger.info(f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
