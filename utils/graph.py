@@ -54,7 +54,7 @@ def get_pretrained_graphnet_rowwise(args, dataset, source_model):
             # cast to device
             batched_graph = batched_graph.to(args.device)
 
-            vanilla_out = F.softmax(source_model(batched_train_x), dim=-1).detach()
+            vanilla_out = source_model(batched_train_x).detach()
             gnn_out = gnn(batched_graph)
             estimated_y = F.softmax(vanilla_out + gnn_out, dim=-1)
 
@@ -71,7 +71,7 @@ def get_pretrained_graphnet_rowwise(args, dataset, source_model):
             with torch.no_grad():
                 for valid_x, valid_y in tqdm(valid_dataloader):
                     # log loss on validation set
-                    vanilla_out = F.softmax(source_model(valid_x), dim=-1).detach()
+                    vanilla_out = source_model(valid_x).detach()
 
                     batched_feat_x = source_model.get_feature(valid_x)
                     normalized_batched_feat_x = F.normalize(batched_feat_x, dim=-1)
@@ -131,7 +131,7 @@ def get_graphnet_out_rowwise(args, data, source_model, gnn):
 
 
 
-def get_pretrained_graphnet(args, dataset, source_model):
+def get_pretrained_graphnet_columnwise(args, dataset, source_model):
     train_x, train_y = torch.tensor(dataset.train_x).float().to(args.device), torch.tensor(dataset.train_y).float().to(
         args.device)
 
@@ -139,105 +139,53 @@ def get_pretrained_graphnet(args, dataset, source_model):
     test_x, test_y = torch.tensor(dataset.test_x).float().to(args.device), torch.tensor(dataset.test_y).float().to(
         args.device)
 
+    from data.graph_data import GraphDataset
+    train_graph_dataset = GraphDataset(args, dataset)
 
-    mi_matrix_train = get_mi_matrix(args, dataset, 'train')
-    mi_matrix_test = get_mi_matrix(args, dataset, 'test')
-
-    mi_matrix_train = torch.tensor(mi_matrix_train).float().to(args.device)
-    mi_matrix_test = torch.tensor(mi_matrix_test).float().to(args.device)
-
-    graph_train_input = get_nx_graph(mi_matrix_train)
-    graph_test_input = get_nx_graph(mi_matrix_test)
-
-    with torch.no_grad():
-        for i in range(len(graph_train_input.nodes)):
-            with torch.no_grad():
-                mask = torch.zeros_like(train_x[0])
-                mask[i] = 1
-                train_x_masked = train_x * mask
-                feat_dim = source_model.get_feature(train_x_masked).shape[-1]
-                graph_train_input.nodes[i]['x'] = torch.mean(source_model.get_feature(train_x_masked),
-                                                             dim=0).detach()  # Replace num_features with the actual number of features per node
-
-        for i in range(len(graph_test_input.nodes)):
-            with torch.no_grad():
-                mask = torch.zeros_like(train_x[0])
-                mask[i] = 1
-                test_x_masked = test_x * mask
-                graph_test_input.nodes[i]['x'] = torch.mean(source_model.get_feature(test_x_masked),
-                                                            dim=0).detach()  # Replace num_features with the actual number of features per node
-
-    graph_train_input = from_networkx(graph_train_input)
-    graph_test_input = from_networkx(graph_test_input)
-
-    graph_train_input = graph_train_input.to(args.device)
-    graph_test_input = graph_test_input.to(args.device)
-
-    gnn = GraphNet(num_features=feat_dim*2, num_classes=dataset.train_y.shape[1]).to(args.device)
+    # construct gnn
+    gnn = GraphNet(
+        num_features=2,
+        num_classes=dataset.train_y.shape[1],
+        cat_cls_len=train_graph_dataset.cat_len_per_node,
+        cont_len=len(train_graph_dataset.cont_indices)
+    ).to(args.device)
     gnn.requires_grad_(True)
     gnn.train()
-    optimizer = torch.optim.AdamW(gnn.parameters(), lr=0.0001)
-    source_model.requires_grad_(False)
+
+    optimizer = torch.optim.AdamW(gnn.parameters(), lr=0.01)
+
 
     for epoch in range(100):
         loss_total = 0
-        train_dataloader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(train_x, train_y),
-                                                       batch_size=args.test_batch_size, shuffle=True, drop_last=True)
-        for train_x, train_y in tqdm(train_dataloader):
-            train_x, train_y = train_x.to(args.device), train_y.to(args.device)
+        for batched_train_x, batched_graph, batched_train_y in tqdm(zip(train_graph_dataset.created_batches, train_graph_dataset.created_graph_batches, train_graph_dataset.created_batches_cls)):
 
-            # construct batch graph
-            mi_matrix_test = get_batched_mi_matrix(args, train_x)
-            graph_batched = get_batched_graph(mi_matrix_test)
+            batched_train_x, batched_train_y = batched_train_x.to(args.device).float(), batched_train_y.to(args.device).float()
+            batched_graph = batched_graph.to(args.device)
 
-            # print('processing!')
+            vanilla_out = source_model(batched_train_x).detach() # currently vanilla outs are logits
+            gnn_out = gnn(batched_graph) # currently gnn outs are logits
+            estimated_y = vanilla_out + gnn_out
 
-            for i in range(len(graph_batched.nodes)):
-                with torch.no_grad():
-                    mask = torch.zeros_like(test_x[0])
-                    mask[i] = 1
-                    train_x_masked = train_x * mask
-                    graph_batched.nodes[i]['x'] = torch.concatenate([
-                        # torch.mean(train_x[i]).float(),
-                        # torch.std(train_x[i]).float(),
-                        source_model.get_feature(train_x_masked).detach(),
-                        source_model.get_feature(train_x_masked).std(dim=0).detach(),
-                        # torch.std(tot_train_x[i]).float(),
-                    ])
-
-                    # graph_batched.nodes[i]['x'] = [torch.mean(source_model.get_feature(test_x_masked),
-                    #                                               dim=0).detach()]
-            graph_input = from_networkx(graph_batched).to(args.device)
-
-            vanilla_out = F.softmax(source_model(train_x), dim=-1).detach()
-            gnn_out = gnn(graph_input).squeeze()
-            estimated_y = F.softmax(vanilla_out + gnn_out, dim=-1)
-
-            loss = F.cross_entropy(estimated_y, torch.argmax(train_y, dim=-1))
+            loss = F.cross_entropy(estimated_y, torch.argmax(batched_train_y, dim=-1))
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             loss_total += loss.item()
-        print(f'epoch {epoch} loss is {loss_total}')
+
+        print(f'epoch {epoch} loss is {loss_total / len(train_graph_dataset.created_batches)}')
+
+    return gnn
+
+def get_graphnet_out_columnwise(args, dataset, batch, source_model, gnn):
+    from data.graph_data import GraphDataset
+    test_graph_data = GraphDataset.create_test_graph(args, dataset, batch)
+
+    # get gnn out
+    gnn_out = gnn(test_graph_data)
+    print(f'gnn out is : {gnn_out[0]}')
+    source_out = source_model(batch).detach()
+
+    estimated_out = F.softmax(source_out + gnn_out, dim=-1)
+    return estimated_out
 
 
-    # for epoch in range(500):
-    #     vanilla_out = F.softmax(source_model(train_x), dim=-1).detach()
-    #     gnn_out = gnn(graph_train_input).squeeze()
-    #     out = F.softmax(vanilla_out + gnn_out, dim=-1)
-    #     loss = F.cross_entropy(out, torch.argmax(train_y, dim=-1))
-    #     optimizer.zero_grad()
-    #     loss.backward()
-    #     if epoch % 100 == 0:
-    #         print(f'orig_label is : {train_y[0]}')
-    #         print(f'orig_pred is : {vanilla_out[0]}')
-    #         print(f'gnn_pred is : {gnn_out}')
-    #         print(
-    #             f'bef acc is : {torch.mean((torch.argmax(vanilla_out.detach(), dim=-1) == torch.argmax(train_y, dim=-1)).float())}')
-    #         print(
-    #             f'aft acc is : {torch.mean((torch.argmax(vanilla_out.detach() + gnn_out, dim=-1) == torch.argmax(train_y, dim=-1)).float())}')
-    #         print(loss)
-    #     optimizer.step()
-
-    return gnn, graph_test_input

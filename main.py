@@ -21,6 +21,7 @@ from model.model import *
 from utils.utils import *
 from utils.sam import *
 from utils.mae_util import *
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 
 
 def get_model(args, dataset):
@@ -30,17 +31,22 @@ def get_model(args, dataset):
 
 
 def get_source_model(args, dataset):
-    init_model = get_model(args, dataset) # get initalized model architecture only
+    init_model = get_model(args, dataset)  # get initalized model architecture only
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
-    elif len(set(args.method).intersection(['mae', 'ttt++'])): # pretrain and train for masked autoencoder
-        pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(collect_params(init_model, train_params="pretrain")[0], lr=args.pretrain_lr)
-        pretrained_model = pretrain(args, init_model, pretrain_optimizer, dataset) # self-supervised learning (masking and reconstruction task)
-        train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
-        source_model = train(args, pretrained_model, train_optimizer, dataset, with_mae=False) # supervised learning (main task)
+    elif len(set(args.method).intersection(['mae', 'ttt++'])):  # pretrain and train for masked autoencoder
+        pretrain_optimizer = getattr(torch.optim, args.pretrain_optimizer)(
+            collect_params(init_model, train_params="pretrain")[0], lr=args.pretrain_lr)
+        pretrained_model = pretrain(args, init_model, pretrain_optimizer,
+                                    dataset)  # self-supervised learning (masking and reconstruction task)
+        train_optimizer = getattr(torch.optim, args.train_optimizer)(
+            collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
+        source_model = train(args, pretrained_model, train_optimizer, dataset,
+                             with_mae=False)  # supervised learning (main task)
     else:
-        train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.train_lr)
+        train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(init_model, train_params="all")[0],
+                                                                     lr=args.train_lr)
         source_model = train(args, init_model, train_optimizer, dataset)
     return source_model
 
@@ -54,14 +60,10 @@ def pretrain(args, model, optimizer, dataset):
 
         for train_x, _ in chain(dataset.train_loader, dataset.valid_loader):
             train_x = train_x.to(device)
+            train_cor_x, _ = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="random_drop", data_type="numerical",
+                                                        shift_severity=args.pretrain_mask_ratio,
+                                                        imputation_method=args.mae_imputation_method)
 
-            if len(dataset.cat_indices_groups):
-                train_cont_cor_x, _ = Dataset.get_corrupted_data(train_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                train_cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(train_x[:, dataset.cont_dim:].cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                train_cor_x = torch.Tensor(np.concatenate([train_cont_cor_x, dataset.input_one_hot_encoder.transform(train_cat_cor_x)], axis=-1)).to(args.device)
-            else:
-                train_cont_cor_x, _ = Dataset.get_corrupted_data(train_x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-                train_cor_x = torch.Tensor(train_cont_cor_x).float().to(args.device)
             estimated_x = model.get_recon_out(train_cor_x)
             loss = loss_fn(estimated_x, train_x)
 
@@ -120,7 +122,8 @@ def train(args, model, optimizer, dataset, with_mae=False):
             source_model = deepcopy(model)
             torch.save(source_model.state_dict(), os.path.join(args.out_dir, "source_model.pth"))
 
-        logger.info(f"train epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
+        logger.info(
+            f"train epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
     return source_model
 
 
@@ -130,22 +133,12 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
     outputs = model(x)
 
     if 'mae' in args.method:
-        if len(dataset.cat_indices_groups):
-            cont_cor_x, _ = Dataset.get_corrupted_data(x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-            cat_cor_x, _ = Dataset.get_corrupted_data(dataset.input_one_hot_encoder.inverse_transform(x[:, dataset.cont_dim:].detach().cpu()), dataset.input_one_hot_encoder.inverse_transform(dataset.train_x[:, dataset.cont_dim:]), data_type="categorical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-            cor_x = torch.Tensor(np.concatenate([cont_cor_x, dataset.input_one_hot_encoder.transform(cat_cor_x)], axis=-1)).to(args.device)
-        else:
-            cont_cor_x, _ = Dataset.get_corrupted_data(x[:, :dataset.cont_dim], dataset.train_x[:, :dataset.cont_dim], data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-            cor_x = torch.Tensor(cont_cor_x).to(args.device)
+        cor_x, _ = dataset.get_corrupted_data(x, dataset.train_x, shift_type="random_drop", shift_severity=1,
+                                              imputation_method=args.mae_imputation_method)  # fully corrupted (masking is done below)
         feature_importance = get_feature_importance(args, dataset, x, mask, model)
-        test_cor_mask_x = get_mask_by_feature_importance(args, x, feature_importance).to(x.device).detach()
+        test_cor_mask_x = get_mask_by_feature_importance(args, dataset, x, feature_importance).to(x.device).detach()
         test_cor_x = test_cor_mask_x * x + (1 - test_cor_mask_x) * cor_x
-
         estimated_test_x = source_model.get_recon_out(test_cor_x)
-
-        print(f"estimated_test_x: {estimated_test_x}")
-        print(f"estimated_test_x: {test_cor_x}")
-
 
         if 'threshold' in args.method:
             grad_list = []
@@ -155,13 +148,15 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
                 recon_out = source_model.get_recon_out(test_instance.unsqueeze(0))
                 loss = F.mse_loss(recon_out * mask[idx], test_instance.unsqueeze(0) * mask[idx]).mean()
                 loss.backward(retain_graph=True)
-                gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
+                gradient_norm = np.sqrt(np.sum(
+                    [p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in
+                     source_model.parameters()]))
                 grad_list.append(gradient_norm)
             grad_list = torch.Tensor(grad_list).to(args.device)
             loss_idx = torch.where(grad_list < 1)
             optimizer.zero_grad()
 
-            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none') # l2 loss only on non-missing values
+            loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none')  # l2 loss only on non-missing values
             loss = loss[loss_idx].mean()
         elif 'sam' in args.method:
             # if 'threshold' in args.method:
@@ -185,25 +180,21 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
                 recon_loss = F.mse_loss(recon_out, x, reduction='none').mean(0)
                 recon_sorted_idx = torch.argsort(recon_loss, descending=True)
                 recon_sorted_idx = recon_sorted_idx[:int(len(recon_sorted_idx) * 0.1)]
-
             mask = torch.zeros_like(x[0]).to(args.device)
             mask[recon_sorted_idx] = 1
 
-            recon_x = model.get_recon_out(x * mask) # ones with high reconstruction error
-            recon_adverse_x = model.get_recon_out(x * (1 - mask)) # ones with low reconstruction error
+            recon_x = model.get_recon_out(x * mask)  # ones with high reconstruction error
+            recon_adverse_x = model.get_recon_out(x * (1 - mask))  # ones with low reconstruction error
 
             m = F.normalize(recon_x, dim=1) @ F.normalize(recon_adverse_x, dim=1).T
             id = torch.eye(m.shape[0]).to(args.device) - 1
 
-
             pos_loss = F.mse_loss(recon_x, recon_adverse_x, reduction='none').mean()
             neg_loss = F.mse_loss(m, id, reduction='none').mean()
-            # neg_loss = 0
             loss = pos_loss + neg_loss
         else:
             from utils.mae_util import cat_aware_recon_loss
             loss = cat_aware_recon_loss(estimated_test_x, x, model)
-            print('loss', loss)
         loss.backward(retain_graph=True)
     if 'em' in args.method:
         loss = softmax_entropy(outputs / args.temp).mean()
@@ -258,29 +249,31 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         filter_ids_1 = torch.where(entropys < args.eata_e_margin)
 
         ids1 = filter_ids_1
-        ids2 = torch.where(ids1[0]>-0.1)
+        ids2 = torch.where(ids1[0] > -0.1)
 
         # filtered entropy
         entropys = entropys[filter_ids_1]
         # filtered outputs
         if eata_params['current_model_probs'] is not None:
-            cosine_similarities = F.cosine_similarity(eata_params['current_model_probs'].unsqueeze(dim=0), outputs[filter_ids_1].softmax(1), dim=1)
+            cosine_similarities = F.cosine_similarity(eata_params['current_model_probs'].unsqueeze(dim=0),
+                                                      outputs[filter_ids_1].softmax(1), dim=1)
             filter_ids_2 = torch.where(torch.abs(cosine_similarities) < args.eata_d_margin)
             entropys = entropys[filter_ids_2]
             ids2 = filter_ids_2
-            updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1][filter_ids_2].softmax(1))
+            updated_probs = update_model_probs(eata_params['current_model_probs'],
+                                               outputs[filter_ids_1][filter_ids_2].softmax(1))
         else:
             updated_probs = update_model_probs(eata_params['current_model_probs'], outputs[filter_ids_1].softmax(1))
         coeff = 1 / (torch.exp(entropys.clone().detach() - args.eata_e_margin))
         # implementation version 1, compute loss, all samples backward (some unselected are masked)
-        entropys = entropys.mul(coeff) # reweight entropy losses for diff. samples
+        entropys = entropys.mul(coeff)  # reweight entropy losses for diff. samples
         loss = entropys.mean(0)
         if x[ids1][ids2].size(0) != 0:
             loss.backward(retain_graph=True)
 
         # eata param update
         eata_params['current_model_probs'] = updated_probs
-    if 'dem' in args.method: # differential entropy minimization
+    if 'dem' in args.method:  # differential entropy minimization
         model.train()
         prediction_list = []
         for _ in range(args.dropout_steps):
@@ -290,20 +283,22 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         differential_entropy = - torch.log(2 * np.pi * np.e * prediction_std)
         differential_entropy.backward(retain_graph=True)
         model.eval()
-    if 'gem' in args.method: # generalized entropy minimization
+    if 'gem' in args.method:  # generalized entropy minimization
         e_loss = renyi_entropy(outputs / args.temp, alpha=args.renyi_entropy_alpha)
         e_loss.backward(retain_graph=True)
-    if 'ns' in args.method: # generalized entropy minimization
+    if 'ns' in args.method:  # generalized entropy minimization
         negative_outputs = outputs.clone()
         negative_loss = 0
-        negative_mask = torch.where(torch.softmax(negative_outputs, dim=-1) < args.ns_threshold * (10 / negative_outputs.shape[-1]), 1, 0)
-        negative_loss += torch.mean(-torch.log(1 - torch.sum(negative_mask * torch.softmax(negative_outputs / args.temp, dim=-1), dim=-1)))
+        negative_mask = torch.where(
+            torch.softmax(negative_outputs, dim=-1) < args.ns_threshold * (10 / negative_outputs.shape[-1]), 1, 0)
+        negative_loss += torch.mean(
+            -torch.log(1 - torch.sum(negative_mask * torch.softmax(negative_outputs / args.temp, dim=-1), dim=-1)))
         if torch.is_tensor(negative_loss):
             (args.ns_weight * negative_loss).backward(retain_graph=True)
-    if 'dm' in args.method: # diversity maximization
+    if 'dm' in args.method:  # diversity maximization
         mean_probs = torch.mean(outputs, dim=-1, keepdim=True)
         (- args.dm_weight * softmax_entropy(mean_probs / args.temp).mean()).backward(retain_graph=True)
-    if 'kld' in args.method: # kl-divergence loss
+    if 'kld' in args.method:  # kl-divergence loss
         original_outputs = original_source_model(x)
         probs = torch.softmax(outputs, dim=-1)
         original_probs = torch.softmax(original_outputs, dim=-1)
@@ -334,6 +329,10 @@ def main(args):
 
     device = args.device
     dataset = Dataset(args, logger)
+
+    # get shifted column
+    # SHIFTED_COLUMN = dataset.get_shifted_column(args)
+
     regression = True if dataset.out_dim == 1 else False
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
 
@@ -347,14 +346,15 @@ def main(args):
     else:
         test_optimizer = getattr(torch.optim, args.test_optimizer)(params, lr=args.test_lr)
 
-    if args.method == 'ttt++': # for TTT++
-        from utils.ttt import summarize # offline summarization
+    if args.method == 'ttt++':  # for TTT++
+        from utils.ttt import summarize  # offline summarization
         mean, sigma = summarize(args, dataset, source_model)
         # save to global variable
         ttt_params['mean'] = mean
         ttt_params['sigma'] = sigma
 
-    original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
+    original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer,
+                                                                                 scheduler=None)
     test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
 
     source_label_dist = torch.zeros(*(1, dataset.out_dim))
@@ -382,14 +382,22 @@ def main(args):
     kl_divergence_dict = defaultdict(int)
     kl_div_loss = nn.KLDivLoss()
 
+    if 'use_graphnet' in args.method:
+        from utils.graph import get_pretrained_graphnet_columnwise, get_pretrained_graphnet_rowwise
+        # gnn, graph_test_input = get_pretrained_graphnet(args, dataset, source_model)
+        gnn = get_pretrained_graphnet_columnwise(args, dataset, source_model)
+        gnn.eval().requires_grad_(False)
+
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
-            source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None, original_model_state, original_optimizer_state, None)
+            source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None,
+                                                                       original_model_state, original_optimizer_state,
+                                                                       None)
             print('reset model!')
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         test_len += test_x.shape[0]
 
-        estimated_y = source_model(test_x)
+        estimated_y = original_source_model(test_x)
 
         gt_target_label_dist = torch.mean(test_y, dim=0)
         gt_target_label_dist = target_label_dist.to(args.device)
@@ -397,7 +405,8 @@ def main(args):
 
         original_estimated_target_label_dist = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
         # print(f"original_estimated_target_label_dist: {original_estimated_target_label_dist}")
-        before_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
+        before_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum(
+            (F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
 
         # calibrated_probability = (F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True)
 
@@ -417,22 +426,25 @@ def main(args):
                 else:
                     loss = softmax_entropy(outputs / args.temp).mean()
                 loss.backward(retain_graph=True)
-                gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
+                gradient_norm = np.sqrt(np.sum(
+                    [p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in
+                     source_model.parameters()]))
                 GRADIENT_NORM_LIST.append(gradient_norm)
 
         if args.vis:
-            ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])) # for
-            RECON_LOSS_LIST_BEFORE_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
+            ENTROPY_LIST_BEFORE_ADAPTATION.extend(
+                softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))  # for
+            RECON_LOSS_LIST_BEFORE_ADAPTATION.extend(
+                F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(
+                    dim=-1).cpu().tolist())
             FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
             LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
             TARGET_PREDICTION_LIST.extend(torch.argmax(estimated_y, dim=-1).cpu().tolist())
 
-            # print(f"softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]): {softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1])}")
-
         for step_idx in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_mask_x, source_model, test_optimizer)
 
-        if "mae" in args.method: # implement imputation with masked autoencoder
+        if "mae" in args.method:  # implement imputation with masked autoencoder
             estimated_x = source_model.get_recon_out(test_x)
             test_x = test_x * test_mask_x + estimated_x * (1 - test_mask_x)
 
@@ -444,6 +456,12 @@ def main(args):
             import utils.lame as lame
             # feats = source_model.get_feature(test_x)
             estimated_y = lame.batch_evaluation(args, source_model, test_x)
+
+        elif 'use_graphnet' in args.method and len(test_x) == args.test_batch_size:
+            from utils.graph import get_graphnet_out_rowwise, get_graphnet_out_columnwise
+            # estimated_y = get_graphnet_out_rowwise(args, test_x, source_model, gnn)
+            estimated_y = get_graphnet_out_columnwise(args, dataset, test_x, source_model, gnn)
+
         elif 'label_shift_gt' in args.method:
             estimated_y = source_model(test_x)
 
@@ -472,7 +490,6 @@ def main(args):
 
                 corrected_test = test_x * mask + imputed_recon * (1 - mask)
 
-
                 # from utils.utils import draw_input_change
                 # draw_input_change(test_x, corrected_test)
 
@@ -499,7 +516,10 @@ def main(args):
             # target_label_dist = target_label_dist.to(args.device)
 
             print(f'before calibration : {F.softmax(estimated_y / args.temp, dim=-1)[0]}')
-            calibrated_probability = (F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
+            calibrated_probability = (F.softmax(estimated_y / args.temp,
+                                                dim=-1) * target_label_dist / source_label_dist) / torch.sum(
+                (F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist), dim=-1,
+                keepdim=True)
             print(f'after calibration : {calibrated_probability[0]}')
             estimated_y = calibrated_probability
         elif 'mae' in args.method:
@@ -538,15 +558,17 @@ def main(args):
             estimated_y = source_model(corrected_test)
         else:
             estimated_y = source_model(test_x)
-
             ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
             # print(f"mae_prediction: {original_estimated_target_label_dist}")
 
-        after_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
+        after_div_source = torch.mean((F.softmax(estimated_y, dim=-1) / source_label_dist) / torch.sum(
+            (F.softmax(estimated_y, dim=-1) / source_label_dist), dim=-1, keepdim=True), dim=0)
 
         if args.vis:
             ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
-            RECON_LOSS_LIST_AFTER_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
+            RECON_LOSS_LIST_AFTER_ADAPTATION.extend(
+                F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(
+                    dim=-1).cpu().tolist())
             FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
             LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
             ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
@@ -579,28 +601,35 @@ def main(args):
         # print(f"calibrated_probability: {calibrated_probability}")
 
         # calibrated_probability = (F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist), dim=-1, keepdim=True)
-        calibrated_probability = (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), dim=-1, keepdim=True)
+        calibrated_probability = (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist) / torch.sum(
+            (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), dim=-1, keepdim=True)
 
-        target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
+        target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0,
+                                                                             keepdim=True)
 
-        cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 100)
+        # cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 100)
+        # cal_use_ratio = js_divergence(target_label_dist, source_label_dist)
+        # cal_use_ratio = F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 100)
         # cal_use_ratio = 1 / (1 + 1000 * kl_div_loss(torch.log(target_label_dist), source_label_dist))
         # cal_use_ratio = torch.exp(- 100 * kl_div_loss(torch.log(target_label_dist), source_label_dist))
         # cal_use_ratio = 1 / (1 + torch.exp(kl_div_loss(torch.log(target_label_dist), source_label_dist)))
         # cal_use_ratio = 1
-        print(f"cal_use_ratio: {cal_use_ratio}")
-        print(f"kl_div: {kl_div_loss(torch.log(target_label_dist), source_label_dist)}")
+        # print(f"target_label_dist: {target_label_dist}")
+        # print(f"source_label_dist: {source_label_dist}")
 
-        calibrated_probability = calibrated_probability * cal_use_ratio + F.softmax(estimated_y, dim=-1) * (1 - cal_use_ratio)
+        # print(f"cal_use_ratio: {cal_use_ratio}")
+        # print(f"kl_div: {F.tanh(kl_div_loss(torch.log(target_label_dist), source_label_dist) * 100)}")
 
+        # calibrated_probability = calibrated_probability * cal_use_ratio + F.softmax(estimated_y, dim=-1) * (
+        #             1 - cal_use_ratio)
         # calibrated_probability = (F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), dim=-1, keepdim=True)
 
-        print(f"torch.mean(calibrated_probability, dim=0, keepdim=True): {torch.mean(calibrated_probability, dim=0, keepdim=True)}")
-        print(f"target_label_dist: {target_label_dist}")
+        # print(
+        #     f"torch.mean(calibrated_probability, dim=0, keepdim=True): {torch.mean(calibrated_probability, dim=0, keepdim=True)}")
 
         kl_divergence_dict['ori'] += kl_div_loss(torch.log(original_estimated_target_label_dist), gt_target_label_dist)
         kl_divergence_dict['ori_div_src'] += kl_div_loss(torch.log(before_div_source), gt_target_label_dist)
-        kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
+        # kl_divergence_dict['ada'] += kl_div_loss(torch.log(ada_pred), gt_target_label_dist)
         kl_divergence_dict['ada_div_src'] += kl_div_loss(torch.log(after_div_source), gt_target_label_dist)
         # kl_divergence_dict['lame'] += kl_div_loss(torch.log(estimated_y_lame), gt_target_label_dist)
         kl_divergence_dict['ma'] = kl_div_loss(torch.log(target_label_dist), gt_target_label_dist)
@@ -610,31 +639,36 @@ def main(args):
         # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         # test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
         test_acc_after += (torch.argmax(calibrated_probability, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        logger.info(f'online batch [{batch_idx}]: acc before {test_acc_before / test_len:.4f}, acc after {test_acc_after / test_len:.4f}')
+        logger.info(
+            f'online batch [{batch_idx}]: acc before {test_acc_before / test_len:.4f}, acc after {test_acc_after / test_len:.4f}')
 
     print(f"final pseudo target dist: {target_label_dist}")
     print(f"final gt target dist: {gt_target_label_dist}")
     for key, item in kl_divergence_dict.items():
         print(f"{key}: {item / (test_len / args.test_batch_size)}")
 
-    logger.info(f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
-    logger.info(f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
+    logger.info(
+        f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
+    logger.info(
+        f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
 
     if args.vis:
+        draw_entropy_distribution(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution")
         draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
         draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
-        draw_entropy_distribution(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution")
 
         draw_label_distribution_plot(args, SOURCE_LABEL_LIST, "Source Label Distribution")
-        draw_label_distribution_plot(args, TARGET_PREDICTION_LIST, "Pseudo Label Distribution")
         draw_label_distribution_plot(args, LABEL_LIST, "Target Label Distribution")
+        draw_label_distribution_plot(args, TARGET_PREDICTION_LIST, "Pseudo Label Distribution")
 
-        draw_tsne(args, np.array(FEATURE_LIST), np.array(LABEL_LIST), "Latent Space Visualization with t-SNE")
-        draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST), "Source Latent Space Visualization with t-SNE")
-        draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST), "Source Input Space Visualization with t-SNE")
+        draw_tsne(args, np.array(FEATURE_LIST), np.array(LABEL_LIST), "Target Latent Space Visualization with t-SNE")
+        draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST),
+                  "Source Latent Space Visualization with t-SNE")
+        draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST),
+                  "Source Input Space Visualization with t-SNE")
     if args.entropy_gradient_vis:
-        draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
-
+        draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST,
+                                   "Entropy vs. Gradient Norm")
 
 
 if __name__ == "__main__":
