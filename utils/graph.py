@@ -248,9 +248,9 @@ class ColumnwiseGraphNet_rowfeat():
         self.gnn.train()
 
         # parameters
-        self.gnn_epochs = 100
-        self.shrinkage_factor = 0.1
-        self.lr = 0.005
+        self.gnn_epochs = 50
+        self.shrinkage_factor = 1
+        self.lr = 0.0001
 
     def train_gnn(self):
         train_graph_dataset = self.train_graph_dataset
@@ -317,7 +317,7 @@ class ColumnwiseGraphNet_rowfeat():
 
                     valid_loss += F.cross_entropy(estimated_y, torch.argmax(batched_valid_y, dim=-1)).item()
                 if valid_loss < best_valid_loss:
-                    print(f'new best valid loss! {valid_loss}')
+                    # print(f'new best valid loss! {valid_loss}')
                     best_gnn = deepcopy(self.gnn)
 
         self.model.requires_grad_(True)

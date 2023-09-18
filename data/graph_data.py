@@ -52,7 +52,7 @@ class GraphDataset(torch.utils.data.Dataset):
 
     def construct_correlated_batches(self):
 
-        num_batches = 50
+        num_batches = 100
         data = self.feat
         labels = torch.argmax(self.cls, dim=1)
         batch_size = self.args.test_batch_size
@@ -60,9 +60,9 @@ class GraphDataset(torch.utils.data.Dataset):
 
         for i in range(num_batches):
             # For dominant class batches
-            if i % 3 == 0:
+            if i % 2 == 0:
                 dominant_class = classes[torch.randint(0, len(classes), (1,)).item()]
-                dominant_class_count = int(batch_size * 0.8)
+                dominant_class_count = int(batch_size * np.random.randint(5, 10) / 10)
                 other_class_count = batch_size - dominant_class_count
 
                 dominant_class_indices = torch.nonzero(labels == dominant_class).squeeze()
@@ -76,7 +76,7 @@ class GraphDataset(torch.utils.data.Dataset):
                 batch_indices = torch.cat([dominant_class_indices, other_class_indices])
                 batch_indices = batch_indices
             # For balanced batches
-            elif i % 3 == 1:
+            else:
                 class_counts = [batch_size // len(classes) for _ in classes]
                 print(class_counts)
                 batch_indices = torch.cat(
@@ -86,8 +86,8 @@ class GraphDataset(torch.utils.data.Dataset):
 
 
             # For random batches
-            else:
-                batch_indices = torch.randint(0, len(data), (batch_size,))
+            # else:
+            #     batch_indices = torch.randint(0, len(data), (batch_size,))
 
             # Create the batch and add it to the list
 

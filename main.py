@@ -461,7 +461,7 @@ def main(args):
         elif 'use_graphnet' in args.method and len(test_x) == args.test_batch_size:
             estimated_y = graph_class.get_gnn_out(test_x)
             print(f"estimated_y dist: {np.unique(torch.argmax(estimated_y, dim=-1).detach().cpu().numpy(), return_counts=True)}")
-
+            print(f"true dist : {np.unique(torch.argmax(test_y, dim=-1).detach().cpu().numpy(), return_counts=True)}")
         elif 'label_shift_gt' in args.method:
             estimated_y = source_model(test_x)
 
@@ -600,9 +600,9 @@ def main(args):
         # print(f'after calibration : {calibrated_probability[0]}')
         # print(f"calibrated_probability: {calibrated_probability}")
 
-        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist) / torch.sum((F.softmax(estimated_y, dim=-1) * gt_target_label_dist / source_label_dist), dim=-1, keepdim=True)
-        calibrated_probability = (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist) / torch.sum(
-            (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), dim=-1, keepdim=True)
+        calibrated_probability = F.softmax(estimated_y, dim=-1)
+        # calibrated_probability = (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist) / torch.sum(
+        #     (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), dim=-1, keepdim=True)
 
         target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0,
                                                                              keepdim=True)
