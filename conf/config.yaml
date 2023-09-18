@@ -16,9 +16,9 @@ mlp:
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
-dataset: cmc
-shift_type: Gaussian # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+benchmark: folktables # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
+dataset: state
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 1
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd(from empirical marginal distribution)
@@ -41,7 +41,7 @@ smote: false
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 30 # optimization steps for each batch
+num_steps: 10 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
@@ -49,7 +49,7 @@ test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-method: [label_shift_handler]
+method: []
 
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: emd, zero, mean
@@ -87,7 +87,7 @@ out_dir: exps/test_mae
 vis_dir: imgs
 
 # visualization
-vis: false
+vis: true
 entropy_gradient_vis: false
 
 ### wandb

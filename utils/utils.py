@@ -259,7 +259,7 @@ def draw_entropy_distribution(args, entropy_list, title):
     plt.xlim([0, 1])
     plt.xlabel('Entropy')
     plt.ylabel('Number of Instances')
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
+    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
@@ -269,7 +269,7 @@ def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
 
     plt.xlabel('Entropy')
     plt.ylabel('Gradient Norm')
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
+    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_label_distribution_plot(args, label_list, title):
@@ -282,7 +282,7 @@ def draw_label_distribution_plot(args, label_list, title):
     plt.title(title)
     plt.xlabel('Class')
     plt.ylabel('Ratio')
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
+    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_tsne(args, feats, cls, title):
@@ -303,7 +303,7 @@ def draw_tsne(args, feats, cls, title):
     plt.yticks([])
 
     plt.title(title)
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{''.join(args.method)}_{title}.png")
+    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_calibration(args, pred, gt):
@@ -369,7 +369,6 @@ def draw_feature_change(feat1, feat2):
     else:
         feat1_np = feat1
         feat2_np = feat2
-
 
     X = tsne.fit_transform(np.concatenate([feat1_np, feat2_np], axis=0))
     plt.scatter(X[:len(feat1_np), 0], X[:len(feat1_np), 1], color='b')

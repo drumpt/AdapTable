@@ -326,6 +326,17 @@ def main(args):
             cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
             estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
 
+            print(f"test_x: {test_x}")
+            print(f"estimated_x: {estimated_x}")
+
+            # cor_test_x, _ = dataset.get_corrupted_data(test_x, dataset.train_x, shift_type="random_drop", shift_severity=0.05, imputation_method=args.mae_imputation_method) # fully corrupted (masking is done below)
+            cor_test_x = estimated_x
+            estimated_cor_y = source_model(cor_test_x)
+
+            print(f"estimated_y: {torch.argmax(estimated_y, dim=-1)}")
+            print(f"estimated_cor_y: {torch.argmax(estimated_cor_y, dim=-1)}")
+            print(f"same ratio: {(torch.argmax(estimated_y, dim=-1) == torch.argmax(estimated_cor_y, dim=-1)).sum().item() / test_y.shape[0]}")
+
             # # TODO: remove (only for debugging)
             # original_estimated_target_label_dist = torch.mean(F.softmax(ori_estimated_y, dim=-1), dim=0)
             # ada_pred = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
