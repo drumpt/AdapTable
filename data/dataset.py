@@ -1,9 +1,6 @@
 import os
 from os import path
 import sys
-
-import scipy.special
-
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 from collections import Counter
 
@@ -14,12 +11,12 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
 import torch
 import torch.nn.functional as F
-
 import openml
 from openml import tasks, runs
-from data.utils.util_functions import load_opt
-from datasets import load_dataset
+
 from tableshift import get_dataset, get_iid_dataset
+from datasets import load_dataset
+from data.utils.util_functions import load_opt
 from utils import utils
 
 
@@ -43,6 +40,19 @@ class Dataset():
                 train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
             else:
                 train_x, train_y = SMOTE(random_state=args.seed).fit_resample(train_x, train_y)
+            from imblearn.over_sampling import SMOTENC
+            train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
+
+        if isinstance(train_x, pd.DataFrame):
+            # cast all to numpy
+            np_train_x, np_valid_x, np_test_x = train_x.to_numpy().astype(float), valid_x.to_numpy().astype(float), test_x.to_numpy().astype(float)
+            np_train_y, np_valid_y, np_test_y = train_y.to_numpy().astype(float), valid_y.to_numpy().astype(float), test_y.to_numpy().astype(float)
+        else:
+            np_train_x, np_valid_x, np_test_x = train_x, valid_x, test_x
+            np_train_y, np_valid_y, np_test_y = train_y, valid_y, test_y
+        
+        (self.original_train_x, self.original_valid_x, self.original_test_x), (self.original_train_y, self.original_valid_y, self.original_test_y) = (np_train_x, np_valid_x, np_test_x), (np_train_y, np_valid_y, np_test_y)
+
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
         self.emb_dim = []
@@ -62,6 +72,7 @@ class Dataset():
                 imputation_method=args.missing_imputation_method,
             )
             test_cont_x = self.input_scaler.transform(test_cont_x)
+            # self.original_train_x[:, cont_indices] = train_cont_x
         else:
             train_cont_x, test_cont_mask_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([]), np.array([])
         if len(cat_indices):
@@ -495,3 +506,27 @@ class Dataset():
             new_data[:, group] = cat_part_softmax
         new_data = new_data.squeeze()
         return new_data
+
+    def renormalize_data(self, unscaled_data):
+
+        if isinstance(unscaled_data, torch.Tensor):
+            data = unscaled_data.clone().detach().cpu().numpy()
+        elif isinstance(unscaled_data, np.ndarray):
+            data = np.copy(unscaled_data)
+        else:
+            raise ValueError
+
+        # cont_data = self.input_scaler.transform(data[:, :self.cont_dim])
+        cont_data = data[:, :self.cont_dim]
+
+        if hasattr(self, 'input_one_hot_encoder'):
+            cat_data = self.input_one_hot_encoder.transform(data[:, self.cont_dim:])
+        else:
+            cat_data = []
+
+        data = np.concatenate([cont_data, cat_data], axis=1)
+
+        if isinstance(unscaled_data, torch.Tensor):
+            data = torch.from_numpy(data).to(unscaled_data.device)
+
+        return data
