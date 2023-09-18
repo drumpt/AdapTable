@@ -21,6 +21,17 @@ class RowwiseGraphNet():
             num_classes=dataset.train_y.shape[1]
         ).to(args.device)
 
+        from data.graph_data import GraphDataset
+        self.train_graph_dataset = GraphDataset(args, dataset)
+
+        # construct gnn
+        self.gnn = GraphNet(
+            num_features=2,
+            num_classes=dataset.train_y.shape[1],
+            cat_cls_len=self.train_graph_dataset.cat_len_per_node,
+            cont_len=len(self.train_graph_dataset.cont_indices)
+        ).to(args.device).float()
+
         self.model = source_model
         self.model.requires_grad_(False)
 
@@ -159,7 +170,7 @@ class ColumnwiseGraphNet():
         train_graph_dataset = self.train_graph_dataset
         optimizer = torch.optim.AdamW(self.gnn.parameters(), lr=0.005)
 
-        for epoch in range(50):
+        for epoch in range(self.gnn_epochs):
             loss_total = 0
             optimizer.zero_grad()
             for batched_train_x, batched_graph, batched_train_y in tqdm(
@@ -223,26 +234,109 @@ class ColumnwiseGraphNet_rowfeat():
 
         # graph data
         from data.graph_data import GraphDataset
-        self.train_graph_dataset = GraphDataset(args, dataset)
+        self.train_graph_dataset = GraphDataset(args, dataset, type=2)
 
         # construct gnn
         self.gnn = GraphNet(
-            num_features=2,
+            num_features=args.test_batch_size,
             num_classes=dataset.train_y.shape[1],
             cat_cls_len=self.train_graph_dataset.cat_len_per_node,
-            cont_len=len(self.train_graph_dataset.cont_indices)
+            cont_len=len(self.train_graph_dataset.cont_indices),
+            type=2
         ).to(args.device).float()
         self.gnn.requires_grad_(True)
         self.gnn.train()
 
         # parameters
-        self.gnn_epochs = 20
+        self.gnn_epochs = 100
         self.shrinkage_factor = 0.1
+        self.lr = 0.005
 
     def train_gnn(self):
-        pass
-    def get_gnn_out(self):
-        pass
+        train_graph_dataset = self.train_graph_dataset
+        optimizer = torch.optim.AdamW(self.gnn.parameters(), lr=self.lr)
+        self.model.requires_grad_(False)
+
+        split = int(len(train_graph_dataset.created_batches) * 0.8)
+
+        best_valid_loss = 10000
+
+        for epoch in range(self.gnn_epochs):
+            loss_total = 0
+            train_loader = zip(
+                train_graph_dataset.created_batches[:split],
+                train_graph_dataset.created_graph_batches[:split],
+                train_graph_dataset.created_batches_cls[:split]
+            )
+            valid_loader = zip(
+                train_graph_dataset.created_batches[split:],
+                train_graph_dataset.created_graph_batches[split:],
+                train_graph_dataset.created_batches_cls[split:]
+            )
+
+            for batched_train_x, batched_graph, batched_train_y in tqdm(train_loader):
+                batched_train_x, batched_train_y = batched_train_x.to(self.args.device).float(), batched_train_y.to(
+                    self.args.device).float()
+                batched_graph = batched_graph.to(self.args.device)
+
+                vanilla_out = self.model(batched_train_x).detach()  # currently vanilla outs are logits
+                gnn_out = self.gnn(batched_graph) * self.shrinkage_factor  # currently gnn outs are logits
+                estimated_y = F.softmax(vanilla_out, dim=-1) + gnn_out
+
+                loss = F.cross_entropy(estimated_y, torch.argmax(batched_train_y, dim=-1))
+                # print(loss)
+                loss_total += loss.item()
+
+                optimizer.zero_grad()
+                loss.backward(retain_graph=True)
+                optimizer.step()
+                # with torch.no_grad():
+                #     # logging
+                #     y_cnt = np.unique(torch.argmax(batched_train_y, dim=1).cpu().numpy(), return_counts=True)
+                #     print(f'batch distribution is : [{y_cnt}]]')
+                #     print(f'bias is : [{gnn_out[0]}]')
+                #
+                #     vanilla_acc = (torch.argmax(vanilla_out, dim=-1) == torch.argmax(batched_train_y, dim=-1)).sum()
+                #     calibrated_acc = (torch.argmax(F.softmax(vanilla_out, dim=-1) + gnn_out, dim=-1) == torch.argmax(
+                #         batched_train_y, dim=-1)).sum()
+                #
+                #     print(f'vanilla acc is : {vanilla_acc / len(batched_train_y)}')
+                #     print(f'calibrated acc is : {calibrated_acc / len(batched_train_y)}')
+                #     print('')
+
+                # validation
+
+            print(f'epoch {epoch} loss is {loss_total}')
+
+            with torch.no_grad():
+                valid_loss = 0
+                for batched_valid_x, batched_graph, batched_valid_y in tqdm(valid_loader):
+                    vanilla_out = self.model(batched_valid_x).detach()  # currently vanilla outs are logits
+                    gnn_out = self.gnn(batched_graph) * self.shrinkage_factor  # currently gnn outs are logits
+                    estimated_y = F.softmax(vanilla_out, dim=-1) + gnn_out
+
+                    valid_loss += F.cross_entropy(estimated_y, torch.argmax(batched_valid_y, dim=-1)).item()
+                if valid_loss < best_valid_loss:
+                    print(f'new best valid loss! {valid_loss}')
+                    best_gnn = deepcopy(self.gnn)
+
+        self.model.requires_grad_(True)
+
+        self.gnn = best_gnn
+        self.gnn.requires_grad_(False)
+        return self.gnn
+
+    def get_gnn_out(self, batch):
+        with torch.no_grad():
+            from data.graph_data import GraphDataset
+            test_graph_data = GraphDataset.create_test_graph(self.args, self.dataset, batch, type=2)
+            # get gnn out
+            gnn_out = self.gnn(test_graph_data) * self.shrinkage_factor
+            print(f'gnn out is : {gnn_out[0]}')
+            source_out = self.model(batch).detach()
+
+            estimated_out = F.softmax(source_out, dim=-1) + gnn_out
+        return estimated_out
 
 
 

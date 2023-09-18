@@ -9,9 +9,10 @@ import torch
 from sklearn.feature_selection import mutual_info_regression, mutual_info_classif
 from torch_sparse import SparseTensor
 from copy import deepcopy
+import torch.nn.functional as F
 
 class GraphDataset(torch.utils.data.Dataset):
-    def __init__(self, args, dataset, test=False):
+    def __init__(self, args, dataset, type=1):
         self.cont_indices = [i for i in range(dataset.cont_dim)]
         self.feat = torch.FloatTensor(dataset.train_x).type(torch.float32).to(args.device)
         self.cls = torch.tensor(dataset.train_y).to(args.device)
@@ -36,6 +37,12 @@ class GraphDataset(torch.utils.data.Dataset):
         self.created_batches = []
         self.created_batches_cls = []
         self.mi_idx = self.cont_indices + self.cat_idx_per_node
+        self.type = type
+        # type 0: mutual info. as adj. matrix + node as cols
+        # type 1: correlation info. as adj. matrix + node as cols
+        # type 2: mutual info. as adj. matrix + node as rows
+        # type 3: correlation info. as adj. matrix + node as rows
+
         self.preprocessing()
 
     def preprocessing(self):
@@ -44,25 +51,71 @@ class GraphDataset(torch.utils.data.Dataset):
         pass
 
     def construct_correlated_batches(self):
-        for cont_idx in self.cont_indices:
-            # sort features by cont_idx
-            feat = self.feat.clone()
-            cls = self.cls.clone()
 
-            sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
-            sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
+        num_batches = 50
+        data = self.feat
+        labels = torch.argmax(self.cls, dim=1)
+        batch_size = self.args.test_batch_size
+        classes = torch.unique(labels, return_counts=False)
 
-            # split features by cont_idx
-            split_feat = torch.split(sorted_feat, self.args.test_batch_size)
-            split_cls = torch.split(sorted_cls, self.args.test_batch_size)
+        for i in range(num_batches):
+            # For dominant class batches
+            if i % 3 == 0:
+                dominant_class = classes[torch.randint(0, len(classes), (1,)).item()]
+                dominant_class_count = int(batch_size * 0.8)
+                other_class_count = batch_size - dominant_class_count
 
-            if len(sorted_feat) % self.args.test_batch_size != 0:
-                split_feat = split_feat[:-1]
-                split_cls = split_cls[:-1]
+                dominant_class_indices = torch.nonzero(labels == dominant_class).squeeze()
+                other_class_indices = torch.nonzero(labels != dominant_class).squeeze()
 
-            # TODO: add robustness to the batch - ex. Gaussian noise
-            self.created_batches.extend(list(split_feat))
-            self.created_batches_cls.extend(list(split_cls))
+                dominant_class_indices = dominant_class_indices[
+                    torch.randint(0, len(dominant_class_indices), (dominant_class_count,))]
+                other_class_indices = other_class_indices[
+                    torch.randint(0, len(other_class_indices), (other_class_count,))]
+
+                batch_indices = torch.cat([dominant_class_indices, other_class_indices])
+                batch_indices = batch_indices
+            # For balanced batches
+            elif i % 3 == 1:
+                class_counts = [batch_size // len(classes) for _ in classes]
+                print(class_counts)
+                batch_indices = torch.cat(
+                    [torch.nonzero(labels == cls).squeeze()[torch.randint(0, (labels == cls).sum(), (cnt,))] for
+                     cls, cnt in zip(classes, class_counts)])
+                batch_indices = batch_indices
+
+
+            # For random batches
+            else:
+                batch_indices = torch.randint(0, len(data), (batch_size,))
+
+            # Create the batch and add it to the list
+
+            batch_data = data[batch_indices]
+            batch_labels = labels[batch_indices]
+
+            self.created_batches.append(batch_data)
+            self.created_batches_cls.append(batch_labels)
+
+        # for cont_idx in self.cont_indices:
+        #     # sort features by cont_idx
+        #     feat = self.feat.clone()
+        #     cls = self.cls.clone()
+        #
+        #     sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
+        #     sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
+        #
+        #     # split features by cont_idx
+        #     split_feat = torch.split(sorted_feat, self.args.test_batch_size)
+        #     split_cls = torch.split(sorted_cls, self.args.test_batch_size)
+        #
+        #     if len(sorted_feat) % self.args.test_batch_size != 0:
+        #         split_feat = split_feat[:-1]
+        #         split_cls = split_cls[:-1]
+        #
+        #     # TODO: add robustness to the batch - ex. Gaussian noise
+        #     self.created_batches.extend(list(split_feat))
+        #     self.created_batches_cls.extend(list(split_cls))
 
         # random select at maximum 100 batches from self.created_batches
         if len(self.created_batches) > 200:
@@ -70,40 +123,40 @@ class GraphDataset(torch.utils.data.Dataset):
             self.created_batches = [self.created_batches[i] for i in idx]
             self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
 
-            # Gaussain Noise
+        # random permutation
+        idx = np.random.permutation(len(self.created_batches))
+        self.created_batches = [self.created_batches[i] for i in idx]
+        self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
 
         for idx, batch_cls in enumerate(self.created_batches_cls):
-            np_cls = torch.argmax(batch_cls, dim=1).cpu().numpy()
+            np_cls = batch_cls.cpu().numpy()
             print(f'cls distribution of batch [{idx}/{len(self.created_batches_cls)}], {np.unique(np_cls, return_counts=True)}')
 
     def construct_graph_batches(self):
         # create graph batches
         self.created_graph_batches = []
-        printfromhere = False
 
         for batch_idx, batch in enumerate(self.created_batches):
             print(f'currently : {batch_idx} / {len(self.created_batches)}')
             # create graph
-            # mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
-            mi_matrix = GraphDataset.get_correlation_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
 
-            numerical_node_feat = []
-            categorical_node_feat = []
-
-            for idx, i in enumerate(self.mi_idx):
-                if isinstance(i, list):
-                    prob_of_categories = torch.zeros(self.max_cat_len)
-                    prob_init = torch.sum(batch[:, i], dim=0) / batch.shape[0]
-                    prob_of_categories[:len(prob_init)] = prob_init
-                    categorical_node_feat.append(prob_of_categories.to(self.args.device))
-                else:
-                    numerical_node_feat.append(torch.stack([torch.mean(batch[:, i]), torch.std(batch[:, i])]).to(self.args.device))
-
-            numerical_node_feat = torch.stack(numerical_node_feat).to(self.args.device)
-            categorical_node_feat = torch.stack(categorical_node_feat).to(self.args.device)
-
-            # mi_matrix = (mi_matrix - mi_matrix.min()) / (mi_matrix.max() - mi_matrix.min())
-
+            if self.type in [0]: # type 0: mutual info. as adj. matrix + node as cols + node feature as stats
+                mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
+                numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+                    args=self.args, batch=batch, mi_idx=self.mi_idx
+                )
+            elif self.type in [1]: # type 1: correlation info. as adj. matrix + node as cols  + node feature as stats
+                mi_matrix = GraphDataset.get_correlation_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
+                numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+                    args=self.args, batch=batch, mi_idx=self.mi_idx
+                )
+            elif self.type in [2]:# correlation info. as adj. matrix + node as cols  + shift as stats
+                mi_matrix = GraphDataset.get_correlation_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
+                numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
+                    args=self.args, batch=batch, mi_idx=self.mi_idx
+                )
+            else:
+                raise NotImplementedError
 
             edge_index = mi_matrix.nonzero(as_tuple=True)
             edge_attr = mi_matrix[edge_index]
@@ -115,12 +168,6 @@ class GraphDataset(torch.utils.data.Dataset):
             print('min of edge_weights : ', edge_weights.min())
             adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
 
-            # print('mi_matrix', mi_matrix.shape)
-            # print('max val : ', mi_matrix.max())
-            # min-max scale mi_matrix
-
-            # cat1 cat3 ...
-            # graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_attr=edge_attr)
             graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t,
                               edge_weights=edge_weights)
 
@@ -162,7 +209,7 @@ class GraphDataset(torch.utils.data.Dataset):
         return len(self.dataset)
 
     @staticmethod
-    def create_test_graph(args, dataset, batch):
+    def create_test_graph(args, dataset, batch, type=1):
         # set variables
         cont_indices = [i for i in range(dataset.cont_dim)]
         if hasattr(dataset, 'input_one_hot_encoder'):
@@ -181,27 +228,30 @@ class GraphDataset(torch.utils.data.Dataset):
 
         mi_idx = cont_indices + cat_idx_per_node
 
+        if type in [0]:  # type 0: mutual info. as adj. matrix + node as cols + node feature as stats
+            mi_matrix = GraphDataset.get_mi_matrix(args=args, batch=batch, idx_lists=mi_idx)
+            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+                args=args, batch=batch, mi_idx=mi_idx
+            )
+        elif type in [1]:  # type 1: correlation info. as adj. matrix + node as cols  + node feature as stats
+            mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+                args=args, batch=batch, mi_idx=mi_idx
+            )
+        elif type in [2]:  # correlation info. as adj. matrix + node as cols  + shift as stats
+            mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
+                args=args, batch=batch, mi_idx=mi_idx
+            )
+        else:
+            raise NotImplementedError
+
         # mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
-        mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
-
-        numerical_node_feat = []
-        categorical_node_feat = []
-
-        for idx, i in enumerate(mi_idx):
-            if isinstance(i, list):
-                prob_of_categories = torch.zeros(max_cat_len)
-                prob_init = torch.sum(batch[:, i], dim=0) / batch.shape[0]
-                prob_of_categories[:len(prob_init)] = prob_init
-                categorical_node_feat.append(prob_of_categories.to(args.device))
-            else:
-                numerical_node_feat.append(
-                    torch.stack([torch.mean(batch[:, i]), torch.std(batch[:, i])]).to(args.device))
-
-        numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
-        categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
-
-        # edge_index = mi_matrix.nonzero(as_tuple=True)
-        # edge_attr = mi_matrix[edge_index]
+        # mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+        #
+        # numerical_node_feat = GraphDataset.get_stacked_distribution_features(
+        #     args=args, batch=batch, mi_idx=mi_idx
+        # )
 
         # adj_ori = …  # dense
         num_nodes = mi_matrix.shape[0]
@@ -266,6 +316,67 @@ class GraphDataset(torch.utils.data.Dataset):
         print('minimum : ', torch.min(matrix))
         return matrix
 
+    @staticmethod
+    def get_stacked_distribution_features(args, mi_idx, batch):
+        numerical_node_feat = []
+        categorical_node_feat = []
+
+        max_cat_len = 0
+        for idx, i in enumerate(mi_idx):
+            if isinstance(i, list):
+                max_cat_len = max(max_cat_len, len(i))
+
+        for idx, i in enumerate(mi_idx):
+            if isinstance(i, list):
+                prob_of_categories = torch.zeros(max_cat_len)
+                prob_init = torch.sum(batch[:, i], dim=0) / batch.shape[0]
+                prob_of_categories[:len(prob_init)] = prob_init
+                categorical_node_feat.append(prob_of_categories.to(args.device))
+            else:
+                numerical_node_feat.append(
+                    torch.stack([torch.mean(batch[:, i]), torch.std(batch[:, i])]).to(args.device))
+
+        numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
+        categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
+
+        return numerical_node_feat, categorical_node_feat
+
+    @staticmethod
+    def get_stacked_shift_features(args, mi_idx, batch):
+        numerical_node_feat = []
+        categorical_node_feat = []
+
+        max_cat_len = 0
+        for idx, i in enumerate(mi_idx):
+            if isinstance(i, list):
+                max_cat_len = max(max_cat_len, len(i))
+
+        for idx, i in enumerate(mi_idx):
+            if isinstance(i, list):
+                cat_batch = torch.argmax(batch[:, i], dim=-1).float()
+                batch_mean = torch.mean(cat_batch, dim=0)
+                batch_std = torch.std(cat_batch, dim=0) + 1e-6
+
+                categorical_node_feat.append(
+                    ((cat_batch - batch_mean) / batch_std).to(args.device)
+                )
+            else:
+                num_batch = batch[:, i].float()
+                batch_mean = torch.mean(num_batch, dim=0)
+                batch_std = torch.std(num_batch, dim=0) + 1e-6
+
+                numerical_node_feat.append(
+                    ((num_batch - batch_mean) / batch_std).to(args.device)
+                )
+
+        numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
+        categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
+
+        # normalize
+        numerical_node_feat = F.normalize(numerical_node_feat, p=2, dim=1)
+        categorical_node_feat = F.normalize(categorical_node_feat, p=2, dim=1)
+
+        return numerical_node_feat, categorical_node_feat
 
 
 

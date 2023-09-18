@@ -383,9 +383,9 @@ def main(args):
     kl_div_loss = nn.KLDivLoss()
 
     if 'use_graphnet' in args.method:
-        from utils.graph import ColumnwiseGraphNet, RowwiseGraphNet
+        from utils.graph import ColumnwiseGraphNet, RowwiseGraphNet, ColumnwiseGraphNet_rowfeat
         # gnn, graph_test_input = get_pretrained_graphnet(args, dataset, source_model)
-        graph_class = ColumnwiseGraphNet(args, dataset, source_model)
+        graph_class = ColumnwiseGraphNet_rowfeat(args, dataset, source_model)
         gnn = graph_class.train_gnn()
         # gnn.eval().requires_grad_(False)
 
