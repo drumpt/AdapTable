@@ -92,7 +92,7 @@ class GraphDataset(torch.utils.data.Dataset):
             # Create the batch and add it to the list
 
             batch_data = data[batch_indices]
-            batch_labels = labels[batch_indices]
+            batch_labels = self.cls[batch_indices]
 
             self.created_batches.append(batch_data)
             self.created_batches_cls.append(batch_labels)
@@ -129,7 +129,7 @@ class GraphDataset(torch.utils.data.Dataset):
         self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
 
         for idx, batch_cls in enumerate(self.created_batches_cls):
-            np_cls = batch_cls.cpu().numpy()
+            np_cls = torch.argmax(batch_cls, dim=1).cpu().numpy()
             print(f'cls distribution of batch [{idx}/{len(self.created_batches_cls)}], {np.unique(np_cls, return_counts=True)}')
 
     def construct_graph_batches(self):
