@@ -7,8 +7,8 @@ class GraphNet(torch.nn.Module):
         super(GraphNet, self).__init__()
         self.cat_cls_len = cat_cls_len
         self.cont_len = cont_len
-        self.conv1 = GCNConv(num_features, 64)
-        self.conv2 = GCNConv(64, 32)
+        self.conv1 = GCNConv(num_features, 64, bias=True)
+        self.conv2 = GCNConv(64, 32, bias=True)
         self.fc = torch.nn.Linear(32, num_classes)
 
         # TODO: linear layer for each categorical feature
@@ -17,7 +17,7 @@ class GraphNet(torch.nn.Module):
         ]
 
     def forward(self, data):
-        num_x, cat_x, edge_index = data.num_x, data.cat_x, data.edge_index
+        num_x, cat_x, edge_index, edge_weight = data.num_x, data.cat_x, data.edge_index, data.edge_weights
 
         # Apply the linear embedding layer to the categorical features
 
@@ -31,9 +31,9 @@ class GraphNet(torch.nn.Module):
         # print(x)
 
         # Apply the GCN layers
-        x = self.conv1(x, edge_index)
+        x = self.conv1(x, edge_index=edge_index, edge_weight=edge_weight)
         x = F.relu(x)
-        x = self.conv2(x, edge_index)
+        x = self.conv2(x, edge_index=edge_index, edge_weight=edge_weight)
 
         # TODO: concat all features from nodes
         x = global_mean_pool(x, data.batch) # TODO: or concat predefined logits

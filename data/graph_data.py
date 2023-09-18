@@ -65,16 +65,16 @@ class GraphDataset(torch.utils.data.Dataset):
             self.created_batches_cls.extend(list(split_cls))
 
         # random select at maximum 100 batches from self.created_batches
-        if len(self.created_batches) > 50:
-            idx = np.random.choice(len(self.created_batches), 50, replace=False)
+        if len(self.created_batches) > 200:
+            idx = np.random.choice(len(self.created_batches), 200, replace=False)
             self.created_batches = [self.created_batches[i] for i in idx]
             self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
 
             # Gaussain Noise
 
-            # for i in list(split_cls):
-            #     np_i = i.cpu().numpy()
-            #     np.unique(np.argmax(np_i, axis=1), return_counts=True)
+        for idx, batch_cls in enumerate(self.created_batches_cls):
+            np_cls = torch.argmax(batch_cls, dim=1).cpu().numpy()
+            print(f'cls distribution of batch [{idx}/{len(self.created_batches_cls)}], {np.unique(np_cls, return_counts=True)}')
 
     def construct_graph_batches(self):
         # create graph batches
@@ -102,7 +102,7 @@ class GraphDataset(torch.utils.data.Dataset):
             numerical_node_feat = torch.stack(numerical_node_feat).to(self.args.device)
             categorical_node_feat = torch.stack(categorical_node_feat).to(self.args.device)
 
-            mi_matrix = (mi_matrix - mi_matrix.min()) / (mi_matrix.max() - mi_matrix.min())
+            # mi_matrix = (mi_matrix - mi_matrix.min()) / (mi_matrix.max() - mi_matrix.min())
 
 
             edge_index = mi_matrix.nonzero(as_tuple=True)
@@ -111,6 +111,8 @@ class GraphDataset(torch.utils.data.Dataset):
             # adj_ori = …  # dense
             num_nodes = mi_matrix.shape[0]
             edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
+            print('max of edge_weights : ', edge_weights.max())
+            print('min of edge_weights : ', edge_weights.min())
             adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
 
             # print('mi_matrix', mi_matrix.shape)
@@ -118,7 +120,9 @@ class GraphDataset(torch.utils.data.Dataset):
             # min-max scale mi_matrix
 
             # cat1 cat3 ...
-            graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_attr=edge_attr)
+            # graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_attr=edge_attr)
+            graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t,
+                              edge_weights=edge_weights)
 
             self.created_graph_batches.append(graph_data)
 
@@ -173,33 +177,12 @@ class GraphDataset(torch.utils.data.Dataset):
             max_cat_len = max(cat_len_per_node)
         else:
             cat_len_per_node = []
+            cat_idx_per_node = []
 
         mi_idx = cont_indices + cat_idx_per_node
 
-        mi_matrix = torch.zeros((len(mi_idx), len(mi_idx))).float().to(args.device)
-        # TODO: mutual information matrix
-        for idx1, i in enumerate(mi_idx):
-            for idx2, j in enumerate(mi_idx):
-                if i == j:
-                    continue
-                is_a_cat, is_b_cat = False, False
-                if isinstance(i, list) and isinstance(j, list):
-                    a = torch.argmax(batch[:, i], dim=1)
-                    b = torch.argmax(batch[:, j], dim=1)
-                    is_a_cat, is_b_cat = True, True
-                elif isinstance(i, list):
-                    a = torch.argmax(batch[:, i], dim=1)
-                    b = batch[:, j]
-                    is_a_cat = True
-                elif isinstance(j, list):
-                    a = batch[:, i]
-                    b = torch.argmax(batch[:, j], dim=1)
-                    is_b_cat = True
-                else:
-                    a = batch[:, i]
-                    b = batch[:, j]
-
-                mi_matrix[idx1, idx2] = GraphDataset.calculate_mutual_information(args, a, b, is_a_cat, is_b_cat)
+        # mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
+        mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
 
         numerical_node_feat = []
         categorical_node_feat = []
@@ -217,18 +200,19 @@ class GraphDataset(torch.utils.data.Dataset):
         numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
         categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
 
-        edge_index = mi_matrix.nonzero(as_tuple=True)
-        edge_attr = mi_matrix[edge_index]
+        # edge_index = mi_matrix.nonzero(as_tuple=True)
+        # edge_attr = mi_matrix[edge_index]
 
         # adj_ori = …  # dense
         num_nodes = mi_matrix.shape[0]
         edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
         adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
 
-        # print('mi_matrix', mi_matrix.shape)
-        # print('max val : ', mi_matrix.max())
+        print('_', mi_matrix.shape)
+        print('max val : ', mi_matrix.max())
+        print('min val : ', mi_matrix.min())
 
-        graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_attr=edge_attr)
+        graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_weights=edge_weights)
 
         return graph_data
 
@@ -269,8 +253,17 @@ class GraphDataset(torch.utils.data.Dataset):
                 new_batch[:, idx] = batch[:, i]
 
         matrix = torch.corrcoef(new_batch.T) - torch.eye(len(idx_lists)).to(args.device)
-        print('matrix', matrix.shape)
-        print('max val of matrix: ', matrix.max())
+
+        if torch.isnan(matrix).any():
+            # nan in cases where variance is 0
+            print('nan in matrix')
+            matrix = torch.nan_to_num(matrix, nan=0.0, posinf=1.0, neginf=0.0)
+
+        # GCNConv cannot handle negaive weights
+        matrix = torch.abs(matrix)
+
+        print('maximum : ', torch.max(matrix))
+        print('minimum : ', torch.min(matrix))
         return matrix
 
 

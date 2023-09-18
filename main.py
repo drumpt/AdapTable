@@ -383,10 +383,11 @@ def main(args):
     kl_div_loss = nn.KLDivLoss()
 
     if 'use_graphnet' in args.method:
-        from utils.graph import get_pretrained_graphnet_columnwise, get_pretrained_graphnet_rowwise
+        from utils.graph import ColumnwiseGraphNet, RowwiseGraphNet
         # gnn, graph_test_input = get_pretrained_graphnet(args, dataset, source_model)
-        gnn = get_pretrained_graphnet_columnwise(args, dataset, source_model)
-        gnn.eval().requires_grad_(False)
+        graph_class = ColumnwiseGraphNet(args, dataset, source_model)
+        gnn = graph_class.train_gnn()
+        # gnn.eval().requires_grad_(False)
 
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
@@ -458,9 +459,8 @@ def main(args):
             estimated_y = lame.batch_evaluation(args, source_model, test_x)
 
         elif 'use_graphnet' in args.method and len(test_x) == args.test_batch_size:
-            from utils.graph import get_graphnet_out_rowwise, get_graphnet_out_columnwise
-            # estimated_y = get_graphnet_out_rowwise(args, test_x, source_model, gnn)
-            estimated_y = get_graphnet_out_columnwise(args, dataset, test_x, source_model, gnn)
+            estimated_y = graph_class.get_gnn_out(test_x)
+            print(f"estimated_y dist: {np.unique(torch.argmax(estimated_y, dim=-1).detach().cpu().numpy(), return_counts=True)}")
 
         elif 'label_shift_gt' in args.method:
             estimated_y = source_model(test_x)
