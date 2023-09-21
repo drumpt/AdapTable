@@ -418,3 +418,37 @@ class FTTransformer(nn.Module):
             inputs_cat = torch.stack(inputs_cat_emb, dim=-1)
             inputs = torch.cat([inputs_cont, inputs_cat], dim=-1)
         return inputs
+
+
+
+class ColumnShiftHandler(nn.Module):
+    def __init__(self, args, dataset):
+        super().__init__()
+        input_dim = dataset.in_dim
+        hidden_dim = 16
+        output_dim = dataset.out_dim
+
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim, bias=False),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim, bias=True),
+        )
+        self.main_head = nn.Linear(hidden_dim + output_dim, output_dim)
+        # self.model = nn.Sequential(
+        #     nn.Linear(input_dim, hidden_dim, bias=False),
+        #     nn.ReLU(),
+        #     nn.Linear(hidden_dim, output_dim, bias=False),
+        # )
+
+
+    def forward(self, inputs, vanilla_outputs):
+        outputs = self.model(inputs)
+        outputs = outputs.repeat(len(vanilla_outputs), 1)
+        # print(f"outputs: {outputs}")
+        # print(f"outputs.shape: {outputs.shape}")
+        return self.main_head(torch.cat([outputs, vanilla_outputs], dim=-1))
+        # outputs = self.model(inputs)
+        # outputs = outputs.repeat(len(vanilla_outputs), 1)
+        # # print(f"outputs: {outputs}")
+        # # print(f"outputs.shape: {outputs.shape}")
+        # return outputs + vanilla_outputs

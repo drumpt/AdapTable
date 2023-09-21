@@ -36,7 +36,7 @@ def main_sup_baseline(args):
         else:
             from sklearn.linear_model import LogisticRegression
             source_model = LogisticRegression()
-        source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+        source_model = source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
     elif args.model == 'knn':
         from sklearn.neighbors import KNeighborsClassifier
         source_model = KNeighborsClassifier()
@@ -48,18 +48,18 @@ def main_sup_baseline(args):
             verbose=1,
             n_jobs=-1
         )
-        rs.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+        rs.fit(dataset.train_x, dataset.train_y.argmax(1))
 
         best_params = rs.best_params_
         print(f'best params are: {rs.best_params_}')
 
         source_model = KNeighborsClassifier(**best_params)
-        source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+        source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
     elif args.model == 'rf':
         from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
         if regression:
             source_model = RandomForestRegressor(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
-            source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+            source_model = source_model.fit(dataset.train_x, dataset.train_y)
         else:
             source_model = RandomForestClassifier(random_state=args.seed)
             rs = RandomizedSearchCV(
@@ -70,17 +70,17 @@ def main_sup_baseline(args):
                 verbose=1,
                 n_jobs=-1
             )
-            rs.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+            rs.fit(dataset.train_x, dataset.train_y.argmax(1))
 
             best_params = rs.best_params_
             print(f'best params are: {rs.best_params_}')
 
             source_model = RandomForestClassifier(**best_params, random_state=args.seed)
-            source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+            source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
     elif args.model == 'xgboost':
         if regression:
             objective = "reg:linear"
-        elif dataset.dataset.train_y.argmax(1).max() == 1:
+        elif dataset.train_y.argmax(1).max() == 1:
             objective = "binary:logistic"
         else:
             objective = "multi:softprob"
@@ -89,9 +89,9 @@ def main_sup_baseline(args):
         if regression:
             source_model = XGBRegressor(objective=objective, random_state=args.seed)
             rs = RandomizedSearchCV(source_model, param_grid, n_iter=100, cv=5, verbose=1, n_jobs=-1)
-            rs.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+            rs.fit(dataset.train_x, dataset.train_y)
             print(f'best params are: {rs.best_params_}')
-            # source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y)
+            # source_model = source_model.fit(dataset.train_x, dataset.train_y)
         else:
             source_model = XGBClassifier(random_state=args.seed)
             rs = RandomizedSearchCV(
@@ -102,20 +102,20 @@ def main_sup_baseline(args):
                 verbose=1,
                 n_jobs=-1
             )
-            rs.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+            rs.fit(dataset.train_x, dataset.train_y.argmax(1))
 
             best_params = rs.best_params_
             print(f'best params are: {rs.best_params_}')
 
             source_model = XGBClassifier(**best_params, random_state=args.seed)
-            source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
-            # source_model = source_model.fit(dataset.dataset.train_x, dataset.dataset.train_y.argmax(1))
+            source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
+            # source_model = source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
     elif args.model == 'catboost':
         from catboost import CatBoostClassifier, CatBoostRegressor
-        train_x = dataset.dataset.train_x
+        train_x = dataset.train_x
         if regression:
             catboost_model = CatBoostRegressor()
-            train_y = dataset.dataset.train_y
+            train_y = dataset.train_y
             rs = RandomizedSearchCV(
                 estimator=catboost_model,
                 param_distributions=param_grid,
@@ -130,7 +130,7 @@ def main_sup_baseline(args):
             source_model.fit(train_x, train_y)
         else:
             catboost_model = CatBoostClassifier()
-            train_y = dataset.dataset.train_y.argmax(1)
+            train_y = dataset.train_y.argmax(1)
             rs = RandomizedSearchCV(
                 estimator=catboost_model,
                 param_distributions=param_grid,

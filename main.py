@@ -1,27 +1,27 @@
 import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 from functools import partial
 from itertools import chain
 from collections import defaultdict
 import warnings
-
-import numpy as np
-
 warnings.filterwarnings("ignore")
 from copy import deepcopy
 import hydra
 from omegaconf import OmegaConf
+from collections import deque
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score
 
 from data.dataset import *
 from model.model import *
 from utils.utils import *
 from utils.sam import *
 from utils.mae_util import *
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+from main_sup import get_param_grid
 
 
 def get_model(args, dataset):
@@ -32,6 +32,10 @@ def get_model(args, dataset):
 
 def get_source_model(args, dataset):
     init_model = get_model(args, dataset)  # get initalized model architecture only
+    print(init_model)
+    if isinstance(args.method, str):
+        args.method = [args.method]
+
     if os.path.exists(os.path.join(args.out_dir, "source_model.pth")) and not args.retrain:
         init_model.load_state_dict(torch.load(os.path.join(args.out_dir, "source_model.pth")))
         source_model = init_model
@@ -41,10 +45,16 @@ def get_source_model(args, dataset):
         train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(pretrained_model, train_params="downstream")[0], lr=args.train_lr)
         source_model = train(args, pretrained_model, train_optimizer, dataset, with_mae=False) # supervised learning (main task)
     else:
-        train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(init_model, train_params="all")[0],
-                                                                     lr=args.train_lr)
+        train_optimizer = getattr(torch.optim, args.train_optimizer)(collect_params(init_model, train_params="all")[0], lr=args.train_lr)
         source_model = train(args, init_model, train_optimizer, dataset)
     return source_model
+
+
+def get_column_shift_handler(args, dataset, source_model):
+    column_shift_handler = ColumnShiftHandler(args, dataset).to(args.device)
+    column_shift_handler_optimizer = getattr(torch.optim, "AdamW")(collect_params(column_shift_handler, train_params="all")[0], lr=1e-3)
+    column_shift_handler = posttrain(args, source_model, column_shift_handler, column_shift_handler_optimizer, dataset)
+    return column_shift_handler
 
 
 def pretrain(args, model, optimizer, dataset):
@@ -56,7 +66,6 @@ def pretrain(args, model, optimizer, dataset):
         for train_x, _ in chain(dataset.train_loader, dataset.valid_loader):
             train_x = train_x.to(device)
             train_cor_x, _ = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)
-            # train_cor_x, _ = torch.FloatTensor(get_corrupted_data(train_x, dataset.train_x, data_type="numerical", shift_type="random_drop", shift_severity=args.pretrain_mask_ratio, imputation_method=args.mae_imputation_method)).to(device) # TODO: remove (for comparing)
 
             estimated_x = model.get_recon_out(train_cor_x)
             loss = loss_fn(estimated_x, train_x)
@@ -71,11 +80,38 @@ def pretrain(args, model, optimizer, dataset):
     return model
 
 
+def get_xgb_classifier(args, dataset):
+    from xgboost import XGBClassifier
+    from sklearn.model_selection import RandomizedSearchCV
+
+    if dataset.regression:
+        objective = "reg:linear"
+    elif dataset.train_y.argmax(1).max() == 1:
+        objective = "binary:logistic"
+    else:
+        objective = "multi:softprob"
+    param_grid = {
+        'n_estimators': np.arange(50, 200, 5),
+        'learning_rate': np.linspace(0.01, 1, 20),
+        'max_depth': np.arange(2, 12, 1),
+        'gamma': np.linspace(0, 0.5, 11)
+    }
+    tree_model = XGBClassifier(objective=objective, random_state=args.seed)
+    rs = RandomizedSearchCV(tree_model, param_grid, n_iter=100, cv=5, verbose=1, n_jobs=-1)
+    rs.fit(dataset.train_x, dataset.train_y.argmax(1))
+    best_params = rs.best_params_
+    tree_model = XGBClassifier(**best_params, random_state=args.seed)
+    tree_model.fit(dataset.train_x, dataset.train_y.argmax(1))
+    return tree_model
+
+
+
 def train(args, model, optimizer, dataset, with_mae=False):
     device = args.device
-    source_model, best_loss = None, float('inf')
+    source_model, best_loss, best_epoch = None, float('inf'), 0
     regression = True if dataset.out_dim == 1 else False
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
+
     for epoch in range(1, args.epochs + 1):
         train_loss, train_acc, train_len = 0, 0, 0
         model = model.train()
@@ -84,6 +120,28 @@ def train(args, model, optimizer, dataset, with_mae=False):
 
             estimated_y = model(train_x)
             loss = loss_fn(estimated_y, train_y)
+
+            # print(f"estimated_y: {estimated_y}")
+            # print(f"train_y: {train_y}")
+
+            # contrastive loss
+            # train_x_1, _ = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="random_drop", shift_severity=0.75, imputation_method="mean")
+            # train_x_2, _ = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="random_drop", shift_severity=0.75, imputation_method="mean")
+            # train_x = torch.cat([train_x, train_x_1, train_x_2])
+            # train_y = torch.cat([train_y, train_y, train_y])
+            # estimated_feat = model.get_feature(train_x)
+            # loss += 1 * torch.mean(torch.cdist(estimated_feat, estimated_feat, p=2) * (2 * (torch.cdist(train_y, train_y, p=2) == 0).float() - 1))
+     
+            # infonce_loss_fn = InfoNCE()
+            # batch_size, embedding_size = 32, 128
+            # query = torch.randn(batch_size, embedding_size)
+            # positive_key = torch.randn(batch_size, embedding_size)
+            # output = loss(query, positive_key)
+
+            # print(f"torch.cdist(train_y, train_y, p=2).float(): {(torch.cdist(train_y, train_y, p=2) == 0).float()}")
+            # print(f"estimated_feat: {estimated_feat}")
+            # print(f"torch.cdist(estimated_feat, estimated_feat, p=2): {torch.cdist(estimated_feat, estimated_feat, p=2)}")
+            # print(f"torch.cdist(estimated_feat, estimated_feat, p=2).shape: {torch.cdist(estimated_feat, estimated_feat, p=2).shape}")
 
             if with_mae:
                 do = nn.Dropout(p=args.test_mask_ratio)
@@ -95,7 +153,8 @@ def train(args, model, optimizer, dataset, with_mae=False):
             optimizer.step()
 
             train_loss += loss.item() * train_x.shape[0]
-            train_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(train_y, dim=-1)).sum().item()
+            train_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(train_y[:len(estimated_y)], dim=-1)).sum().item()
+            # train_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(train_y, dim=-1)).sum().item()
             train_len += train_x.shape[0]
 
         valid_loss, valid_acc, valid_len = 0, 0, 0
@@ -113,12 +172,112 @@ def train(args, model, optimizer, dataset, with_mae=False):
 
         if valid_loss < best_loss:
             best_loss = valid_loss
+            best_epoch = epoch
             source_model = deepcopy(model)
             torch.save(source_model.state_dict(), os.path.join(args.out_dir, "source_model.pth"))
 
-        logger.info(
-            f"train epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
+        logger.info(f"train epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
+    logger.info(f"best epoch {best_epoch} | best_valid_loss {best_loss}")
     return source_model
+
+
+def posttrain(args, model, column_shift_handler, column_shift_handler_optimizer, dataset):
+    device = args.device
+    source_model, best_loss, best_acc = None, float('inf'), 0
+    regression = True if dataset.out_dim == 1 else False
+    loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
+
+    source_mean_x = torch.zeros(1, dataset.in_dim)
+    for train_x, train_y in dataset.train_loader:
+        source_mean_x += torch.sum(train_x, dim=0, keepdim=True)
+    source_mean_x /= len(dataset.train_x)
+    source_mean_x = source_mean_x.to(args.device)
+
+    model = model.train()
+    for epoch in range(1, 30 + 1):
+        train_loss, train_acc, train_len = 0, 0, 0
+        column_shift_handler = column_shift_handler.train()
+        for train_x, train_y in dataset.posttrain_loader:
+            train_x, train_y = train_x.to(device), train_y.to(device)
+            # print(f"train_y.shape: {train_y.shape}")
+            # print(f"train_y: {train_y}")
+
+            train_x += 0.1 * torch.randn(train_x.shape, device=train_x.device)
+            # print(f"train_x.shape: {train_x.shape}")
+            # print(f"dataset.train_x.shape: {dataset.train_x.shape}")
+            # train_x = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="Gaussian", shift_severity=0.5, imputation_method="emd")
+            # print(f"train_x cor.shape: {train_x.shape}")
+
+            # dataset.get_corrupted_data(x, dataset.train_x, shift_type="random_drop", shift_severity=1, imputation_method=args.mae_imputation_method)
+            # var_x, mean_x = torch.var_mean(train_x, dim=0, keepdim=True)
+            mean_x = torch.mean(train_x, dim=0, keepdim=True)
+            estimated_y = model(train_x)
+            estimated_y = column_shift_handler(mean_x - source_mean_x, model(train_x))
+ 
+            loss = loss_fn(estimated_y, train_y)
+
+            column_shift_handler_optimizer.zero_grad()
+            loss.backward()
+            column_shift_handler_optimizer.step()
+
+            train_loss += loss.item() * train_x.shape[0]
+            train_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(train_y, dim=-1)).sum().item()
+            train_len += train_x.shape[0]
+
+        # for train_x, train_mask_x, train_y in dataset.test_loader:
+        #     train_x, train_y = train_x.to(device), train_y.to(device)
+        #     # print(f"train_y.shape: {train_y.shape}")
+        #     # print(f"train_y: {train_y}")
+
+        #     # train_x += 0.1 * torch.randn(train_x.shape, device=train_x.device)
+        #     # print(f"train_x.shape: {train_x.shape}")
+        #     # print(f"dataset.train_x.shape: {dataset.train_x.shape}")
+        #     # train_x, _ = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="Gaussian", shift_severity=0.5, imputation_method="emd")
+        #     # print(f"train_x cor.shape: {train_x.shape}")
+
+        #     # dataset.get_corrupted_data(x, dataset.train_x, shift_type="random_drop", shift_severity=1, imputation_method=args.mae_imputation_method)
+        #     # var_x, mean_x = torch.var_mean(train_x, dim=0, keepdim=True)
+        #     mean_x = torch.mean(train_x, dim=0, keepdim=True)
+        #     estimated_y = model(train_x)
+        #     estimated_y = column_shift_handler(mean_x - source_mean_x, model(train_x))
+ 
+        #     loss = loss_fn(estimated_y, train_y)
+
+        #     column_shift_handler_optimizer.zero_grad()
+        #     loss.backward()
+        #     column_shift_handler_optimizer.step()
+
+        #     train_loss += loss.item() * train_x.shape[0]
+        #     train_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(train_y, dim=-1)).sum().item()
+        #     train_len += train_x.shape[0]
+
+        valid_loss, valid_acc, valid_len = 0, 0, 0
+        column_shift_handler = column_shift_handler.eval()
+        with torch.no_grad():
+            for valid_x, valid_y in dataset.valid_loader:
+                valid_x, valid_y = valid_x.to(device), valid_y.to(device)
+
+                mean_x = torch.mean(valid_x, dim=0, keepdim=True)
+                estimated_y = model(valid_x)
+                estimated_y = column_shift_handler(mean_x - source_mean_x, estimated_y)
+                loss = loss_fn(estimated_y, valid_y)
+
+                valid_loss += loss.item() * valid_x.shape[0]
+                valid_acc += (torch.argmax(estimated_y, dim=-1) == torch.argmax(valid_y, dim=-1)).sum().item()
+                valid_len += valid_x.shape[0]
+
+        # if valid_acc > best_acc:
+        #     best_acc = valid_acc
+        if valid_loss < best_loss:
+            best_loss = valid_loss
+        # if train_loss < best_loss:
+        #     best_loss = train_loss
+            source_model = deepcopy(column_shift_handler)
+            torch.save(source_model.state_dict(), os.path.join(args.out_dir, "column_shift_handler.pth"))
+
+        logger.info(f"train epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
+    return source_model
+
 
 
 def forward_and_adapt(args, dataset, x, mask, model, optimizer):
@@ -145,7 +304,7 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
                     [p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in
                      source_model.parameters()]))
                 grad_list.append(gradient_norm)
-            grad_list = torch.Tensor(grad_list).to(args.device)
+            grad_list = torch.tensor(grad_list).to(args.device)
             loss_idx = torch.where(grad_list < 1)
             optimizer.zero_grad()
 
@@ -323,11 +482,34 @@ def main(args):
     device = args.device
     dataset = Dataset(args, logger)
 
-    # get shifted column
-    # SHIFTED_COLUMN = dataset.get_shifted_column(args)
-
     regression = True if dataset.out_dim == 1 else False
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
+
+    # entropy_list = []
+    # calibration_list = []
+    # prediction_list = []
+
+    # tree_model = get_xgb_classifier(args, dataset)
+    # print(f"tree_model: {tree_model}")
+    # tree_test_acc = 0
+
+    # gt_prob_list = []
+
+    # for test_x, test_mask_x, test_y in dataset.test_loader:
+    #     estimated_y = tree_model.predict_proba(test_x)
+    #     entropy_list.extend(softmax_entropy(torch.tensor(np.log(estimated_y))).tolist())
+
+    #     gt_prob_list = []
+    #     for est_inst_y, gt_class in zip(estimated_y, np.argmax(np.array(test_y), axis=-1)):
+    #         gt_prob_list.append(est_inst_y[gt_class])
+    #     calibration_list.extend(np.array(gt_prob_list)[np.argmax(estimated_y, axis=-1) == np.argmax(np.array(test_y), axis=-1)].tolist())
+    #     prediction_list.extend(np.argmax(test_y, axis=-1)[np.argmax(estimated_y, axis=-1) == np.argmax(np.array(test_y), axis=-1)].tolist())
+
+    #     tree_test_acc += (np.argmax(estimated_y, axis=-1) == np.argmax(np.array(test_y), axis=-1)).sum()
+    # print(f"test_acc: {tree_test_acc / len(dataset.test_x)}")    
+    # # draw_calibration(args, calibration_list, prediction_list)
+    # draw_entropy_distribution(args, entropy_list, "Target Entropy Distribution using XGBoost")
+
     source_model = get_source_model(args, dataset)
     source_model.eval().requires_grad_(True)
     original_source_model = deepcopy(source_model)
@@ -345,13 +527,37 @@ def main(args):
         ttt_params['mean'] = mean
         ttt_params['sigma'] = sigma
 
-    original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer,
-                                                                                 scheduler=None)
-    test_loss_before, test_acc_before, test_loss_after, test_acc_after, test_len = 0, 0, 0, 0, 0
+    original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
+    test_loss_before, test_loss_after, ground_truth_label_list, estimated_before_label_list, estimated_after_label_list = 0, 0, [], [], []
 
     source_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
     target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
     # kl_divergence_dict = defaultdict(int) # TODO: remove (only for debugging)
+
+    probs_per_label = defaultdict(list)
+    for train_x, train_y in dataset.train_loader:
+        train_x, train_y = train_x.to(args.device), train_y.to(args.device)
+        estimated_y = source_model(train_x)
+        probs = estimated_y.softmax(dim=-1)
+        for class_idx in range(estimated_y.shape[-1]):
+            probs_per_label[class_idx].extend(probs[:, class_idx].cpu().tolist())
+            # print(f"probs[: class_idx].cpu().tolist(): {probs[:, class_idx].cpu().tolist()}")
+    for label, probs in probs_per_label.items():
+        # print(f"label -- probs: {label} {probs} ")
+        draw_entropy_distribution(args, probs, f"class {label} probability distribution")
+    # print(f"probs_per_label: {probs_per_label}")
+
+    if 'label_shift_handler' in args.method:
+        global memory_queue_list
+        memory_queue_list = []
+
+    if 'column_shift_handler' in args.method:
+        column_shift_handler = get_column_shift_handler(args, dataset, source_model)
+        source_mean_x = torch.zeros(1, dataset.in_dim)
+        for train_x, train_y in dataset.train_loader:
+            source_mean_x += torch.sum(train_x, dim=0, keepdim=True)
+        source_mean_x /= len(dataset.train_x)
+        source_mean_x = source_mean_x.to(args.device)
 
     if args.vis:
         for train_x, train_y in dataset.train_loader:
@@ -361,11 +567,15 @@ def main(args):
             SOURCE_LABEL_LIST.extend(torch.argmax(train_y, dim=-1).tolist())
 
     if 'use_graphnet' in args.method:
-        from utils.graph import ColumnwiseGraphNet, RowwiseGraphNet, ColumnwiseGraphNet_rowfeat
+        from utils.graph import ColumnwiseGraphNet
+        # from utils.graph import ColumnwiseGraphNet, RowwiseGraphNet, ColumnwiseGraphNet_rowfeat
         # gnn, graph_test_input = get_pretrained_graphnet(args, dataset, source_model)
-        graph_class = ColumnwiseGraphNet_rowfeat(args, dataset, source_model)
+        # graph_class = ColumnwiseGraphNet_rowfeat(args, dataset, source_model)
+        graph_class = ColumnwiseGraphNet(args, dataset, source_model)
         gnn = graph_class.train_gnn()
         # gnn.eval().requires_grad_(False)
+
+    loss_fn = nn.MSELoss() if dataset.regression else nn.CrossEntropyLoss()
 
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
@@ -374,15 +584,37 @@ def main(args):
                                                                        None)
             print('reset model!')
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
-        test_len += test_x.shape[0]
+        ground_truth_label_list.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
 
         ori_estimated_y = original_source_model(test_x)
         loss = loss_fn(ori_estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
-        test_acc_before += (torch.argmax(ori_estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
+        estimated_before_label_list.extend(torch.argmax(ori_estimated_y, dim=-1).cpu().tolist())
 
-        for step_idx in range(1, args.num_steps + 1):
+        for _ in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_mask_x, source_model, test_optimizer)
+
+        from sklearn.metrics import confusion_matrix
+
+
+        # threshold = 0.9
+        # tree_estimated_y = tree_model.predict_proba(test_x.cpu().numpy())
+        # above_threshold = np.max(tree_estimated_y, axis=-1) > threshold
+        # tree_estimated_y_sub = tree_estimated_y[above_threshold]
+        # print(f"tree_estimated_y: {tree_estimated_y}")
+        # print(f"tree_estimated_y_sub: {tree_estimated_y_sub}")
+        # print(f"np.max(tree_estimated_y, axis=-1) > threshold: {np.max(tree_estimated_y, axis=-1) > threshold}")
+        # print(f"tree pseudo-label quality: {(torch.argmax(torch.tensor(tree_estimated_y_sub).to(args.device), dim=-1) == torch.argmax(test_y[above_threshold], dim=-1)).sum().item() / above_threshold.sum()}")
+        # print(f"torch.argmax(torch.tensor(tree_estimated_y_sub).to(args.device), dim=-1): {torch.argmax(torch.tensor(tree_estimated_y_sub).to(args.device), dim=-1)}")
+        # print(f"torch.argmax(test_y[above_threshold], dim=-1): {torch.argmax(test_y[above_threshold], dim=-1)}")
+        # for _ in range(1, args.num_steps + 1):
+        #     estimated_y = source_model(test_x)
+        #     estimated_y_sub = estimated_y[torch.tensor(above_threshold)]
+        #     loss = loss_fn(estimated_y_sub, torch.argmax(torch.tensor(tree_estimated_y_sub).to(args.device), dim=-1))
+
+        #     test_optimizer.zero_grad()
+        #     loss.backward()  
+        #     test_optimizer.step()
 
         if "mae" in args.method:  # implement imputation with masked autoencoder
             estimated_x = source_model.get_recon_out(test_x)
@@ -392,13 +624,12 @@ def main(args):
             import utils.lame as lame
             estimated_y = lame.batch_evaluation(args, source_model, test_x)
         elif 'use_graphnet' in args.method and len(test_x) == args.test_batch_size:
-            estimated_y = graph_class.get_gnn_out(test_x)
+            estimated_y = graph_class.get_gnn_out(test_x, ori_estimated_y)
             print(f"estimated_y dist: {np.unique(torch.argmax(estimated_y, dim=-1).detach().cpu().numpy(), return_counts=True)}")
+            print(f"true dist : {np.unique(torch.argmax(test_y, dim=-1).detach().cpu().numpy(), return_counts=True)}")
         elif 'label_shift_gt' in args.method:
             estimated_y = source_model(test_x)
-
             if 'mae' in args.method:
-
                 do = nn.Dropout(p=0.75)
                 imputation_value_list = [-3, 0, 3]
 
@@ -455,7 +686,6 @@ def main(args):
             print(f'after calibration : {calibrated_probability[0]}')
             estimated_y = calibrated_probability
         elif 'mae' in args.method:
-
             do = nn.Dropout(p=0.75)
             imputation_value_list = [-3, 0, 3]
 
@@ -490,11 +720,26 @@ def main(args):
             estimated_y = source_model(corrected_test)
         elif 'label_shift_handler' in args.method:
             estimated_y = source_model(test_x)
-            after_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1), dim=0)
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * after_div_source / source_label_dist), p=1, dim=-1)
+            before_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1)), p=1, dim=-1), dim=0)
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
             target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
             cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
             estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
+
+            # current_target_label_dist = torch.mean(test_y, dim=0, keepdim=True)
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * current_target_label_dist / source_label_dist), p=1, dim=-1)
+            # probs = estimated_y.softmax(dim=-1)
+            # calibrated_probs = torch.zeros_like(probs, device=probs.device)
+            # for instance_idx in range(probs.shape[0]):
+            #     for class_idx in range(probs.shape[-1]):
+            #         class_prob_tensor = torch.tensor(probs_per_label[class_idx]).to(args.device).unsqueeze(0)
+            #         calibrated_probs[instance_idx, class_idx] = (probs[instance_idx, class_idx] >= class_prob_tensor).float().sum().item() / class_prob_tensor.shape[-1]
+            # # print(f"calibrated_probs: {calibrated_probs}")
+            # calibrated_probs = torch.mean(F.normalize(calibrated_probs, p=1, dim=-1), dim=0, keepdim=True)
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * calibrated_probs), p=1, dim=-1)
+            estimated_y = torch.log(calibrated_probability)
 
             # print(f"test_x: {test_x}")
             # print(f"estimated_x: {estimated_x}")
@@ -516,15 +761,40 @@ def main(args):
             # kl_divergence_dict['ada'] += F.kl_div(torch.log(ada_pred), gt_target_label_dist)
             # kl_divergence_dict['ada_div_src'] += F.kl_div(torch.log(after_div_source), gt_target_label_dist)
             # kl_divergence_dict['ma'] += F.kl_div(torch.log(target_label_dist), gt_target_label_dist)
+        elif 'column_shift_handler' in args.method:
+            mean_x = torch.mean(test_x, dim=0, keepdim=True)
+            estimated_y = source_model(test_x)
+            estimated_y = column_shift_handler(mean_x - source_mean_x, estimated_y)
+            # print(f"estimated_y: {estimated_y}")
+            # print(f"torch.argmax(estimated_y, dim=-1): {torch.argmax(estimated_y, dim=-1)}")
         else:
             estimated_y = source_model(test_x)
+
+        # shifted_column = dataset.get_shifted_column()
+        # print(f"shifted_column:  {shifted_column}")
+        # test_x[: shifted_column] = 0
+        # print(f"test_x: {test_x}")
+        # estimated_y = source_model(test_x)
+        # print(f"estimated_y: {estimated_y}")
+
+        # probs = source_model(test_x).softmax(dim=-1)
+        # calibrated_probs = torch.zeros_like(probs, device=probs.device)
+        # for instance_idx in range(probs.shape[0]):
+        #     for class_idx in range(probs.shape[-1]):
+        #         class_prob_tensor = torch.tensor(probs_per_label[class_idx]).to(args.device).unsqueeze(0)
+        #         calibrated_probs[instance_idx, class_idx] = (probs[instance_idx, class_idx] >= class_prob_tensor).float().sum().item() / class_prob_tensor.shape[-1]
+        # print(f"probs: {probs}")
+        # # print(f"calibrated_probs: {calibrated_probs}")
+        # print(f"F.normalize(calibrated_probs, p=1, dim=-1): {F.normalize(calibrated_probs, p=1, dim=-1)}")
+        # calibrated_probs = F.normalize(calibrated_probs, p=1, dim=-1)
+        # estimated_y = torch.log(calibrated_probs)
 
         after_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1), dim=0)
 
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
-        test_acc_after += (torch.argmax(estimated_y, dim=-1) == torch.argmax(test_y, dim=-1)).sum().item()
-        logger.info(f'online batch [{batch_idx}]: cumulative acc before {test_acc_before / test_len:.4f}, cumulative acc after {test_acc_after / test_len:.4f}')
+        estimated_after_label_list.extend(torch.argmax(estimated_y, dim=-1).cpu().tolist())
+        logger.info(f'online batch [{batch_idx}]: cumulative acc before {accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, cumulative acc after {accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}')
 
         if args.vis: # for entropy and mae vs gradient norm visualization
             ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(ori_estimated_y).tolist() / np.log(ori_estimated_y.shape[-1]))
@@ -553,10 +823,14 @@ def main(args):
     # for key, item in kl_divergence_dict.items():
     #     print(f"{key}: {item / (test_len / args.test_batch_size)}")
 
-    logger.info(
-        f"before adaptation | test loss {test_loss_before / test_len:.4f}, test acc {test_acc_before / test_len:.4f}")
-    logger.info(
-        f"after adaptation | test loss {test_loss_after / test_len:.4f}, test acc {test_acc_after / test_len:.4f}")
+
+    confusion_matrix_before = confusion_matrix(ground_truth_label_list, estimated_before_label_list)
+    confusion_matrix_after = confusion_matrix(ground_truth_label_list, estimated_after_label_list)
+
+    logger.info(f"before adaptation | loss {test_loss_before / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_before_label_list, average='macro'):.4f}")
+    logger.info(f"before adaptation | confusion matrix\n{confusion_matrix_before}")
+    logger.info(f"after adaptation | loss {test_loss_before / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_after_label_list, average='macro'):.4f}")
+    logger.info(f"after adaptation | confusion matrix\n{confusion_matrix_after}")
 
     if args.vis:
         draw_entropy_distribution(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution")

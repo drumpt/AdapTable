@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def kl_divergence(h1, h2):
     """Calculate the KL divergence between two histograms."""
     h1_rel_freq = h1 / np.sum(h1)

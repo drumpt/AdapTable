@@ -307,7 +307,7 @@ def draw_tsne(args, feats, cls, title):
 
 
 def draw_calibration(args, pred, gt):
-    from sklearn.calibration import CalibratedClassifierCV, CalibrationDisplay
+    from sklearn.calibration import CalibrationDisplay
     from matplotlib.gridspec import GridSpec
     fig = plt.figure(figsize=(10, 10))
     gs = GridSpec(4, 2)

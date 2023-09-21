@@ -44,18 +44,11 @@ class GraphDataset(torch.utils.data.Dataset):
         # type 1: correlation info. as adj. matrix + node as cols
         # type 2: mutual info. as adj. matrix + node as rows
         # type 3: correlation info. as adj. matrix + node as rows
-
         self.preprocessing()
 
 
-    def preprocessing(self):
-        self.construct_correlated_batches()
-        self.construct_graph_batches()
-        pass
-
-
     def construct_correlated_batches(self):
-        num_batches = 50
+        num_batches = 100
         data = self.feat
         labels = torch.argmax(self.cls, dim=1)
         batch_size = self.args.test_batch_size
@@ -63,9 +56,9 @@ class GraphDataset(torch.utils.data.Dataset):
 
         for i in range(num_batches):
             # For dominant class batches
-            if i % 3 == 0:
+            if i % 2 == 0:
                 dominant_class = classes[torch.randint(0, len(classes), (1,)).item()]
-                dominant_class_count = int(batch_size * 0.8)
+                dominant_class_count = int(batch_size * np.random.randint(5, 10) / 10)
                 other_class_count = batch_size - dominant_class_count
 
                 dominant_class_indices = torch.nonzero(labels == dominant_class).squeeze()
@@ -79,7 +72,7 @@ class GraphDataset(torch.utils.data.Dataset):
                 batch_indices = torch.cat([dominant_class_indices, other_class_indices])
                 batch_indices = batch_indices
             # For balanced batches
-            elif i % 3 == 1:
+            else:
                 class_counts = [batch_size // len(classes) for _ in classes]
                 print(class_counts)
                 batch_indices = torch.cat(
@@ -89,8 +82,94 @@ class GraphDataset(torch.utils.data.Dataset):
 
 
             # For random batches
+            # else:
+            #     batch_indices = torch.randint(0, len(data), (batch_size,))
+
+            # Create the batch and add it to the list
+
+            batch_data = data[batch_indices]
+            batch_labels = self.cls[batch_indices]
+
+            self.created_batches.append(batch_data)
+            self.created_batches_cls.append(batch_labels)
+
+        # for cont_idx in self.cont_indices:
+        #     # sort features by cont_idx
+        #     feat = self.feat.clone()
+        #     cls = self.cls.clone()
+        #
+        #     sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
+        #     sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
+        #
+        #     # split features by cont_idx
+        #     split_feat = torch.split(sorted_feat, self.args.test_batch_size)
+        #     split_cls = torch.split(sorted_cls, self.args.test_batch_size)
+        #
+        #     if len(sorted_feat) % self.args.test_batch_size != 0:
+        #         split_feat = split_feat[:-1]
+        #         split_cls = split_cls[:-1]
+        #
+        #     # TODO: add robustness to the batch - ex. Gaussian noise
+        #     self.created_batches.extend(list(split_feat))
+        #     self.created_batches_cls.extend(list(split_cls))
+
+        # random select at maximum 100 batches from self.created_batches
+        if len(self.created_batches) > 200:
+            idx = np.random.choice(len(self.created_batches), 200, replace=False)
+            self.created_batches = [self.created_batches[i] for i in idx]
+            self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
+
+        # random permutation
+        idx = np.random.permutation(len(self.created_batches))
+        self.created_batches = [self.created_batches[i] for i in idx]
+        self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
+
+        for idx, batch_cls in enumerate(self.created_batches_cls):
+            np_cls = torch.argmax(batch_cls, dim=1).cpu().numpy()
+            print(f'cls distribution of batch [{idx}/{len(self.created_batches_cls)}], {np.unique(np_cls, return_counts=True)}')
+
+
+
+    def preprocessing(self):
+        self.construct_correlated_batches()
+        self.construct_graph_batches()
+
+        num_batches = 100
+        data = self.feat
+        labels = torch.argmax(self.cls, dim=1)
+        batch_size = self.args.test_batch_size
+        classes = torch.unique(labels, return_counts=False)
+
+        for i in range(num_batches):
+            # For dominant class batches
+            if i % 2 == 0:
+                dominant_class = classes[torch.randint(0, len(classes), (1,)).item()]
+                dominant_class_count = int(batch_size * np.random.randint(5, 10) / 10)
+                other_class_count = batch_size - dominant_class_count
+
+                dominant_class_indices = torch.nonzero(labels == dominant_class).squeeze()
+                other_class_indices = torch.nonzero(labels != dominant_class).squeeze()
+
+                dominant_class_indices = dominant_class_indices[
+                    torch.randint(0, len(dominant_class_indices), (dominant_class_count,))]
+                other_class_indices = other_class_indices[
+                    torch.randint(0, len(other_class_indices), (other_class_count,))]
+
+                batch_indices = torch.cat([dominant_class_indices, other_class_indices])
+                batch_indices = batch_indices
+            # For balanced batches
             else:
-                batch_indices = torch.randint(0, len(data), (batch_size,))
+                class_counts = [batch_size // len(classes) for _ in classes]
+                print(class_counts)
+                batch_indices = torch.cat(
+                    [torch.nonzero(labels == cls).squeeze()[torch.randint(0, (labels == cls).sum(), (cnt,))] for
+                     cls, cnt in zip(classes, class_counts)])
+                batch_indices = batch_indices
+
+
+            # For random batches
+            # else:
+            #     batch_indices = torch.randint(0, len(data), (batch_size,))
 
             # Create the batch and add it to the list
 
@@ -161,6 +240,8 @@ class GraphDataset(torch.utils.data.Dataset):
                 )
             else:
                 raise NotImplementedError
+
+            print(f"mi_matrix: {mi_matrix}")
 
             edge_index = mi_matrix.nonzero(as_tuple=True)
             edge_attr = mi_matrix[edge_index]

@@ -40,18 +40,15 @@ class Dataset():
                 train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
             else:
                 train_x, train_y = SMOTE(random_state=args.seed).fit_resample(train_x, train_y)
-            from imblearn.over_sampling import SMOTENC
-            train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
 
-        if isinstance(train_x, pd.DataFrame):
-            # cast all to numpy
-            np_train_x, np_valid_x, np_test_x = train_x.to_numpy().astype(float), valid_x.to_numpy().astype(float), test_x.to_numpy().astype(float)
-            np_train_y, np_valid_y, np_test_y = train_y.to_numpy().astype(float), valid_y.to_numpy().astype(float), test_y.to_numpy().astype(float)
-        else:
-            np_train_x, np_valid_x, np_test_x = train_x, valid_x, test_x
-            np_train_y, np_valid_y, np_test_y = train_y, valid_y, test_y
-        
-        (self.original_train_x, self.original_valid_x, self.original_test_x), (self.original_train_y, self.original_valid_y, self.original_test_y) = (np_train_x, np_valid_x, np_test_x), (np_train_y, np_valid_y, np_test_y)
+        # if isinstance(train_x, pd.DataFrame):
+        #     # cast all to numpy
+        #     np_train_x, np_valid_x, np_test_x = train_x.to_numpy().astype(float), valid_x.to_numpy().astype(float), test_x.to_numpy().astype(float)
+        #     np_train_y, np_valid_y, np_test_y = train_y.to_numpy().astype(float), valid_y.to_numpy().astype(float), test_y.to_numpy().astype(float)
+        # else:
+        #     np_train_x, np_valid_x, np_test_x = train_x, valid_x, test_x
+        #     np_train_y, np_valid_y, np_test_y = train_y, valid_y, test_y        
+        # (self.original_train_x, self.original_valid_x, self.original_test_x), (self.original_train_y, self.original_valid_y, self.original_test_y) = (np_train_x, np_valid_x, np_test_x), (np_train_y, np_valid_y, np_test_y)
 
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
@@ -100,6 +97,7 @@ class Dataset():
         self.test_x = np.concatenate([test_cont_x if len(cont_indices) else test_cont_x.reshape(test_cat_x.shape[0], 0), test_cat_x if len(cat_indices) else test_cat_x.reshape(test_cont_x.shape[0], 0)], axis=-1)
         self.test_mask_x = np.concatenate([test_cont_mask_x if len(cont_indices) else test_cont_mask_x.reshape(test_cat_mask_x.shape[0], 0), test_cat_mask_x if len(cat_indices) else test_cat_mask_x.reshape(test_cont_mask_x.shape[0], 0)], axis=-1)
 
+        self.regression = regression
         if regression:
             self.output_scaler = getattr(sklearn.preprocessing, args.normalizer)()
             self.output_scaler.fit(np.concatenate([train_y, valid_y], axis=0))
@@ -121,6 +119,14 @@ class Dataset():
         self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+
+        # # TODO: remove (only for debugging)
+        # print(f"np.argsort(self.train_y, axis=0): {np.argsort(self.train_y, axis=0)[:, 1]}")
+        # print(f"self.train_x[:, 1]: {self.train_x[:, 1]}")
+        # posttrain_data = torch.utils.data.Subset(train_data, indices=np.argsort(self.train_x[:, 1], axis=0))
+        # # posttrain_data = torch.utils.data.Subset(train_data, indices=np.argsort(self.train_y, axis=0)[:, 1])
+        # self.posttrain_loader = torch.utils.data.DataLoader(posttrain_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+        self.posttrain_loader = self.train_loader
 
         # for embedding
         self.cont_dim = train_cont_x.shape[-1]
@@ -144,7 +150,7 @@ class Dataset():
         logger.info(f"Class distribution - test {np.round(test_counts[1] / np.sum(test_counts[1]), 2)}, {test_counts}")
 
 
-    def get_shifted_column(self, args):
+    def get_shifted_column(self):
         if self.shift_at == -1:
             from utils.shift_severity import calculate_columnwise_kl_divergence
             kl_div_per_column = calculate_columnwise_kl_divergence(self.train_x, self.test_x)
@@ -196,6 +202,14 @@ class Dataset():
         valid_x, valid_y, _, _ = dataset.get_pandas("validation")
         test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("test")
         cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
+
+        # TODO: remove (only for debugging)        
+        # pd.options.display.max_columns = train_x.shape[1]
+        # print(f"train_x.columns: {train_x.columns}")
+        # print(f"train_x.describe(): {train_x.describe(include='all')}")
+        # print(f"test_x.describe(): {test_x.describe(include='all')}")
+        # print(f"cat_indices: {cat_indices}")
+
         return (train_x, valid_x, test_x), (pd.DataFrame(train_y), pd.DataFrame(valid_y), pd.DataFrame(test_y)), cat_indices, regression
 
 
@@ -390,6 +404,8 @@ class Dataset():
 
     @staticmethod
     def get_corrupted_data_by_modality(test_data, train_data, data_type, shift_type, shift_severity, imputation_method):
+        if torch.is_tensor(test_data):
+            test_data = test_data.detach().cpu().numpy()
         mask = np.ones(test_data.shape, dtype=np.int32)
         if shift_type in ["Gaussian", "uniform"] and data_type == "numerical":
             scaler = StandardScaler()
