@@ -428,12 +428,21 @@ class ColumnShiftHandler(nn.Module):
         hidden_dim = 16
         output_dim = dataset.out_dim
 
-        self.model = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim, bias=False),
+        # self.model = nn.Sequential(
+        #     nn.Linear(hidden_dim, 1),
+        # )
+        self.input_layer = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim, bias=True),
         )
-        self.main_head = nn.Linear(hidden_dim + output_dim, output_dim)
+        self.middle_layer = nn.Sequential(
+            nn.Linear(hidden_dim + output_dim, hidden_dim),
+            nn.ReLU(),
+        )
+        self.main_head = nn.Linear(hidden_dim, 1)
+
+
+        # self.main_head = nn.Linear(hidden_dim + output_dim, output_dim)
         # self.model = nn.Sequential(
         #     nn.Linear(input_dim, hidden_dim, bias=False),
         #     nn.ReLU(),
@@ -441,14 +450,19 @@ class ColumnShiftHandler(nn.Module):
         # )
 
 
-    def forward(self, inputs, vanilla_outputs):
-        outputs = self.model(inputs)
-        outputs = outputs.repeat(len(vanilla_outputs), 1)
-        # print(f"outputs: {outputs}")
-        # print(f"outputs.shape: {outputs.shape}")
-        return self.main_head(torch.cat([outputs, vanilla_outputs], dim=-1))
+    def forward(self, shifted_inputs, vanilla_outputs):
+        # print(f"shifted_inputs.shape: {shifted_inputs.shape}")
+        # print(F"vanilla_outputs.shape: {vanilla_outputs.shape}")
+        out = self.input_layer(shifted_inputs)
+        out = self.middle_layer(torch.cat([out, vanilla_outputs], dim=-1))
+        t = self.main_head(out)
+        t = F.softplus(t)
+        # print(f"t: {t}")
+        # print(f"t.shape: {t.shape}")
+        # print(f"vanilla_outputs.shape: {vanilla_outputs.shape}")
         # outputs = self.model(inputs)
         # outputs = outputs.repeat(len(vanilla_outputs), 1)
         # # print(f"outputs: {outputs}")
         # # print(f"outputs.shape: {outputs.shape}")
         # return outputs + vanilla_outputs
+        return torch.mul(vanilla_outputs, t)

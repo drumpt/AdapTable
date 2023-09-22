@@ -8,7 +8,6 @@ warnings.filterwarnings("ignore")
 from copy import deepcopy
 import hydra
 from omegaconf import OmegaConf
-from collections import deque
 
 import numpy as np
 import torch
@@ -21,7 +20,6 @@ from model.model import *
 from utils.utils import *
 from utils.sam import *
 from utils.mae_util import *
-from main_sup import get_param_grid
 
 
 def get_model(args, dataset):
@@ -52,7 +50,7 @@ def get_source_model(args, dataset):
 
 def get_column_shift_handler(args, dataset, source_model):
     column_shift_handler = ColumnShiftHandler(args, dataset).to(args.device)
-    column_shift_handler_optimizer = getattr(torch.optim, "AdamW")(collect_params(column_shift_handler, train_params="all")[0], lr=1e-3)
+    column_shift_handler_optimizer = getattr(torch.optim, "AdamW")(collect_params(column_shift_handler, train_params="all")[0], lr=1e-2)
     column_shift_handler = posttrain(args, source_model, column_shift_handler, column_shift_handler_optimizer, dataset)
     return column_shift_handler
 
@@ -194,26 +192,17 @@ def posttrain(args, model, column_shift_handler, column_shift_handler_optimizer,
     source_mean_x = source_mean_x.to(args.device)
 
     model = model.train()
-    for epoch in range(1, 30 + 1):
+    for epoch in range(1, 10 + 1):
         train_loss, train_acc, train_len = 0, 0, 0
         column_shift_handler = column_shift_handler.train()
         for train_x, train_y in dataset.posttrain_loader:
             train_x, train_y = train_x.to(device), train_y.to(device)
-            # print(f"train_y.shape: {train_y.shape}")
-            # print(f"train_y: {train_y}")
 
-            train_x += 0.1 * torch.randn(train_x.shape, device=train_x.device)
             # print(f"train_x.shape: {train_x.shape}")
-            # print(f"dataset.train_x.shape: {dataset.train_x.shape}")
-            # train_x = dataset.get_corrupted_data(train_x, dataset.train_x, shift_type="Gaussian", shift_severity=0.5, imputation_method="emd")
-            # print(f"train_x cor.shape: {train_x.shape}")
-
-            # dataset.get_corrupted_data(x, dataset.train_x, shift_type="random_drop", shift_severity=1, imputation_method=args.mae_imputation_method)
-            # var_x, mean_x = torch.var_mean(train_x, dim=0, keepdim=True)
-            mean_x = torch.mean(train_x, dim=0, keepdim=True)
+            # TODO 1: add column-wise shift-aware component
+            # TODO 2: add regularization term
             estimated_y = model(train_x)
-            estimated_y = column_shift_handler(mean_x - source_mean_x, model(train_x))
- 
+            estimated_y = column_shift_handler(train_x, estimated_y)
             loss = loss_fn(estimated_y, train_y)
 
             column_shift_handler_optimizer.zero_grad()
@@ -257,9 +246,8 @@ def posttrain(args, model, column_shift_handler, column_shift_handler_optimizer,
             for valid_x, valid_y in dataset.valid_loader:
                 valid_x, valid_y = valid_x.to(device), valid_y.to(device)
 
-                mean_x = torch.mean(valid_x, dim=0, keepdim=True)
                 estimated_y = model(valid_x)
-                estimated_y = column_shift_handler(mean_x - source_mean_x, estimated_y)
+                estimated_y = column_shift_handler(valid_x, estimated_y)
                 loss = loss_fn(estimated_y, valid_y)
 
                 valid_loss += loss.item() * valid_x.shape[0]
@@ -275,7 +263,7 @@ def posttrain(args, model, column_shift_handler, column_shift_handler_optimizer,
             source_model = deepcopy(column_shift_handler)
             torch.save(source_model.state_dict(), os.path.join(args.out_dir, "column_shift_handler.pth"))
 
-        logger.info(f"train epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
+        logger.info(f"posttrain epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
     return source_model
 
 
@@ -378,6 +366,25 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         pseudo_label = torch.argmax(outputs, dim=-1)
         loss = F.cross_entropy(outputs, pseudo_label)
         loss.backward(retain_graph=True)
+
+    if 'pl_csh' in args.method:
+        global column_shift_handler
+        outputs = column_shift_handler(x, outputs)
+        pseudo_label = torch.argmax(outputs, dim=-1)
+        # outputs = outputs/0.2
+
+        threshold = 0.9
+        filter = outputs.softmax(dim=-1).max(dim=-1)[0] > threshold
+        # print(f"outputs.softmax(dim=-1).max(dim=-1)[0]: {outputs.softmax(dim=-1).max(dim=-1)[0]}")
+        # print(f"outputs[filter]: {outputs[filter].shape}")
+        # print(f"pseudo_label[filter]: {pseudo_label[filter].shape}")
+
+        loss = F.cross_entropy(outputs[filter], pseudo_label[filter])
+        # loss = softmax_entropy(outputs[filter]).mean()
+        # print(f"loss: {loss}")
+        loss.backward(retain_graph=True)        
+
+
     if 'ttt++' in args.method:
         # getting featuers
         z = model.get_feature(x)
@@ -465,6 +472,11 @@ def main(args):
     EMA, ENTROPY_LIST_BEFORE_ADAPTATION, ENTROPY_LIST_AFTER_ADAPTATION, GRADIENT_NORM_LIST, RECON_LOSS_LIST_BEFORE_ADAPTATION, RECON_LOSS_LIST_AFTER_ADAPTATION, FEATURE_LIST, LABEL_LIST = None, [], [], [], [], [], [], []
     SOURCE_LABEL_LIST, TARGET_PREDICTION_LIST = [], []
     SOURCE_INPUT_LIST, SOURCE_FEATURE_LIST, SOURCE_ENTROPY_LIST = [], [], []
+
+    SOURCE_PREDICTION_LIST, SOURCE_CALIBRATED_PREDICTION_LIST, SOURCE_CALIBRATED_ENTROPY_LIST, SOURCE_ONE_HOT_LABEL_LIST = [], [], [], []
+    SOURCE_PROB_LIST, PROB_LIST_BEFORE_ADAPTATION, PROB_LIST_AFTER_ADAPTATION, PROB_LIST_AFTER_CALIBRATION = [], [], [], []
+    SOURCE_CALIBRATED_PROB_LIST = []
+
     eata_params = {'fishers': None, 'current_model_probs': None}
     ttt_params = {'mean': None, 'sigma': None}
     if hasattr(args, 'seed'):
@@ -533,6 +545,7 @@ def main(args):
     source_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
     target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
     # kl_divergence_dict = defaultdict(int) # TODO: remove (only for debugging)
+    estimated_prob_list = []
 
     probs_per_label = defaultdict(list)
     for train_x, train_y in dataset.train_loader:
@@ -544,27 +557,16 @@ def main(args):
             # print(f"probs[: class_idx].cpu().tolist(): {probs[:, class_idx].cpu().tolist()}")
     for label, probs in probs_per_label.items():
         # print(f"label -- probs: {label} {probs} ")
-        draw_entropy_distribution(args, probs, f"class {label} probability distribution")
+        draw_histogram(args, probs, f"class {label} probability distribution", "Confidence", "Number of Instances")
     # print(f"probs_per_label: {probs_per_label}")
 
-    if 'label_shift_handler' in args.method:
-        global memory_queue_list
-        memory_queue_list = []
-
-    if 'column_shift_handler' in args.method:
-        column_shift_handler = get_column_shift_handler(args, dataset, source_model)
-        source_mean_x = torch.zeros(1, dataset.in_dim)
-        for train_x, train_y in dataset.train_loader:
-            source_mean_x += torch.sum(train_x, dim=0, keepdim=True)
-        source_mean_x /= len(dataset.train_x)
-        source_mean_x = source_mean_x.to(args.device)
-
-    if args.vis:
-        for train_x, train_y in dataset.train_loader:
-            SOURCE_INPUT_LIST.extend(original_source_model.get_embedding(train_x.to(args.device)).cpu().tolist())
-            SOURCE_FEATURE_LIST.extend(original_source_model.get_feature(train_x.to(args.device)).cpu().tolist())
-            SOURCE_ENTROPY_LIST.extend(softmax_entropy(original_source_model(train_x.to(args.device))).tolist())
-            SOURCE_LABEL_LIST.extend(torch.argmax(train_y, dim=-1).tolist())
+    # if args.vis:
+    for train_x, train_y in dataset.train_loader:
+        SOURCE_INPUT_LIST.extend(original_source_model.get_embedding(train_x.to(args.device)).cpu().tolist())
+        SOURCE_FEATURE_LIST.extend(original_source_model.get_feature(train_x.to(args.device)).cpu().tolist())
+        SOURCE_ENTROPY_LIST.extend(softmax_entropy(original_source_model(train_x.to(args.device))).tolist())
+        SOURCE_LABEL_LIST.extend(torch.argmax(train_y, dim=-1).tolist())
+        SOURCE_PROB_LIST.extend(original_source_model(train_x.to(args.device)).softmax(dim=-1).max(dim=-1)[0].tolist())
 
     if 'use_graphnet' in args.method:
         from utils.graph import ColumnwiseGraphNet
@@ -575,7 +577,50 @@ def main(args):
         gnn = graph_class.train_gnn()
         # gnn.eval().requires_grad_(False)
 
+    if 'label_shift_handler' in args.method:
+        global memory_queue_list
+        memory_queue_list = []
+
+    if 'column_shift_handler' in args.method:
+        global column_shift_handler
+        column_shift_handler = get_column_shift_handler(args, dataset, source_model)
+        # source_mean_x = torch.zeros(1, dataset.in_dim)
+        # for train_x, train_y in dataset.train_loader:
+        #     source_mean_x += torch.sum(train_x, dim=0, keepdim=True)
+        # source_mean_x /= len(dataset.train_x)
+        # source_mean_x = source_mean_x.to(args.device)
+        for train_x, train_y in dataset.train_loader:
+            train_x, train_y = train_x.to(args.device), train_y.to(args.device)
+            estimated_y = source_model(train_x)
+            SOURCE_PREDICTION_LIST.extend(estimated_y.tolist())
+            # SOURCE_CALIBRATED_PREDICTION_LIST.extend((estimated_y/0.2).tolist())
+            # SOURCE_CALIBRATED_ENTROPY_LIST.extend(softmax_entropy(column_shift_handler(train_x, estimated_y)).tolist())
+            SOURCE_CALIBRATED_PREDICTION_LIST.extend(column_shift_handler(train_x, estimated_y).softmax(dim=-1).tolist())
+            SOURCE_CALIBRATED_ENTROPY_LIST.extend(softmax_entropy(column_shift_handler(train_x, estimated_y)).tolist())
+            SOURCE_CALIBRATED_PROB_LIST.extend(column_shift_handler(train_x, estimated_y).softmax(dim=-1).max(dim=-1)[0].tolist())
+            SOURCE_ONE_HOT_LABEL_LIST.extend(train_y.cpu().tolist())
+
+
+    ece_loss_fn = ECELoss()
+    # classwise_ece_loss_fn = ClasswiseECELoss()
+
+    # ece_before = ece_score(np.array(SOURCE_PREDICTION_LIST), np.array(SOURCE_ONE_HOT_LABEL_LIST))
+    # ece_after = ece_score(np.array(SOURCE_CALIBRATED_PREDICTION_LIST), np.array(SOURCE_ONE_HOT_LABEL_LIST))
+
+    ece_before = ece_loss_fn(torch.tensor(SOURCE_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
+    ece_after = ece_loss_fn(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
+
+    # print(f"ece_before: {ece_before}")
+    # print(f"ece_after: {ece_after}")
+
+    print(f"np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1)}")
+    print(f"torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1).max(axis=-1)[0]}")
+    reliability_plot(args, np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration1.png")
+    reliability_plot(args, np.array(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_CALIBRATED_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration2.png")
+
     loss_fn = nn.MSELoss() if dataset.regression else nn.CrossEntropyLoss()
+
+    from sklearn.metrics import confusion_matrix
 
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
@@ -590,12 +635,10 @@ def main(args):
         loss = loss_fn(ori_estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         estimated_before_label_list.extend(torch.argmax(ori_estimated_y, dim=-1).cpu().tolist())
+        estimated_prob_list.extend(torch.max(torch.softmax(ori_estimated_y, dim=-1), dim=-1)[0].cpu().tolist())
 
         for _ in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_mask_x, source_model, test_optimizer)
-
-        from sklearn.metrics import confusion_matrix
-
 
         # threshold = 0.9
         # tree_estimated_y = tree_model.predict_proba(test_x.cpu().numpy())
@@ -678,12 +721,12 @@ def main(args):
             # target_label_dist = target_label_dist / torch.sum(target_label_dist)
             # target_label_dist = target_label_dist.to(args.device)
 
-            print(f'before calibration : {F.softmax(estimated_y / args.temp, dim=-1)[0]}')
+            # print(f'before calibration : {F.softmax(estimated_y / args.temp, dim=-1)[0]}')
             calibrated_probability = (F.softmax(estimated_y / args.temp,
                                                 dim=-1) * target_label_dist / source_label_dist) / torch.sum(
                 (F.softmax(estimated_y / args.temp, dim=-1) * target_label_dist / source_label_dist), dim=-1,
                 keepdim=True)
-            print(f'after calibration : {calibrated_probability[0]}')
+            # print(f'after calibration : {calibrated_probability[0]}')
             estimated_y = calibrated_probability
         elif 'mae' in args.method:
             do = nn.Dropout(p=0.75)
@@ -720,25 +763,27 @@ def main(args):
             estimated_y = source_model(corrected_test)
         elif 'label_shift_handler' in args.method:
             estimated_y = source_model(test_x)
-            before_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1)), p=1, dim=-1), dim=0)
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
-            target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
-            cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
-            estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
+            # if 'column_shift_handler' in args.method:
+            #     estimated_y = column_shift_handler(test_x, estimated_y)
+            # before_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1)), p=1, dim=-1), dim=0)
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
+            # target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
+            # cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
+            # estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
 
             # current_target_label_dist = torch.mean(test_y, dim=0, keepdim=True)
             # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * current_target_label_dist / source_label_dist), p=1, dim=-1)
-            # probs = estimated_y.softmax(dim=-1)
-            # calibrated_probs = torch.zeros_like(probs, device=probs.device)
-            # for instance_idx in range(probs.shape[0]):
-            #     for class_idx in range(probs.shape[-1]):
-            #         class_prob_tensor = torch.tensor(probs_per_label[class_idx]).to(args.device).unsqueeze(0)
-            #         calibrated_probs[instance_idx, class_idx] = (probs[instance_idx, class_idx] >= class_prob_tensor).float().sum().item() / class_prob_tensor.shape[-1]
-            # # print(f"calibrated_probs: {calibrated_probs}")
-            # calibrated_probs = torch.mean(F.normalize(calibrated_probs, p=1, dim=-1), dim=0, keepdim=True)
-            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * calibrated_probs), p=1, dim=-1)
+            probs = estimated_y.softmax(dim=-1)
+            calibrated_probs = torch.zeros_like(probs, device=probs.device)
+            for instance_idx in range(probs.shape[0]):
+                for class_idx in range(probs.shape[-1]):
+                    class_prob_tensor = torch.tensor(probs_per_label[class_idx]).to(args.device).unsqueeze(0)
+                    calibrated_probs[instance_idx, class_idx] = (probs[instance_idx, class_idx] >= class_prob_tensor).float().sum().item() / class_prob_tensor.shape[-1]
+            # print(f"calibrated_probs: {calibrated_probs}")
+            calibrated_probs = torch.mean(F.normalize(calibrated_probs, p=1, dim=-1), dim=0, keepdim=True)
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * calibrated_probs), p=1, dim=-1)
             estimated_y = torch.log(calibrated_probability)
 
             # print(f"test_x: {test_x}")
@@ -761,14 +806,17 @@ def main(args):
             # kl_divergence_dict['ada'] += F.kl_div(torch.log(ada_pred), gt_target_label_dist)
             # kl_divergence_dict['ada_div_src'] += F.kl_div(torch.log(after_div_source), gt_target_label_dist)
             # kl_divergence_dict['ma'] += F.kl_div(torch.log(target_label_dist), gt_target_label_dist)
-        elif 'column_shift_handler' in args.method:
-            mean_x = torch.mean(test_x, dim=0, keepdim=True)
-            estimated_y = source_model(test_x)
-            estimated_y = column_shift_handler(mean_x - source_mean_x, estimated_y)
-            # print(f"estimated_y: {estimated_y}")
-            # print(f"torch.argmax(estimated_y, dim=-1): {torch.argmax(estimated_y, dim=-1)}")
-        else:
-            estimated_y = source_model(test_x)
+        # elif 'column_shift_handler' in args.method:
+        #     # mean_x = torch.mean(test_x, dim=0, keepdim=True)
+        #     estimated_y = source_model(test_x)
+        #     estimated_y = column_shift_handler(test_x, estimated_y)
+
+        #     PROB_LIST_AFTER_CALIBRATION.extend(estimated_y.softmax(dim=-1).max(dim=-1)[0].cpu().detach())
+
+        #     # print(f"estimated_y: {estimated_y}")
+        #     # print(f"torch.argmax(estimated_y, dim=-1): {torch.argmax(estimated_y, dim=-1)}")
+        # else:
+        #     estimated_y = source_model(test_x)
 
         # shifted_column = dataset.get_shifted_column()
         # print(f"shifted_column:  {shifted_column}")
@@ -789,24 +837,33 @@ def main(args):
         # calibrated_probs = F.normalize(calibrated_probs, p=1, dim=-1)
         # estimated_y = torch.log(calibrated_probs)
 
-        after_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1), dim=0)
+        # after_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1), dim=0)
 
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         estimated_after_label_list.extend(torch.argmax(estimated_y, dim=-1).cpu().tolist())
         logger.info(f'online batch [{batch_idx}]: cumulative acc before {accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, cumulative acc after {accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}')
 
+        logger.info(f"batch true distribution: {torch.mean(test_y, dim=0)}")
+        logger.info(f'online batch [{batch_idx}]: current acc before {accuracy_score(torch.argmax(test_y, dim=-1).cpu().tolist(), torch.argmax(ori_estimated_y, dim=-1).cpu().tolist()):.4f}, current acc after {accuracy_score(torch.argmax(test_y, dim=-1).cpu().tolist(), torch.argmax(estimated_y, dim=-1).cpu().tolist()):.4f}')
+
+
         if args.vis: # for entropy and mae vs gradient norm visualization
             ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(ori_estimated_y).tolist() / np.log(ori_estimated_y.shape[-1]))
             RECON_LOSS_LIST_BEFORE_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
             FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
             LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
+
+            print(f"softmax_entropy(ori_estimated_y).max(dim=-1)[0]: {softmax_entropy(ori_estimated_y).max(dim=-1)[0]}")
+
+            PROB_LIST_BEFORE_ADAPTATION.extend(ori_estimated_y.softmax(dim=-1).max(dim=-1)[0].tolist())
             TARGET_PREDICTION_LIST.extend(torch.argmax(ori_estimated_y, dim=-1).cpu().tolist())
 
             ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
             RECON_LOSS_LIST_AFTER_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
             FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
             LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
+            PROB_LIST_AFTER_ADAPTATION.extend(estimated_y.softmax(dim=-1).max(dim=-1)[0].tolist())
 
         if args.entropy_gradient_vis:
             for test_instance in test_x:
@@ -823,19 +880,28 @@ def main(args):
     # for key, item in kl_divergence_dict.items():
     #     print(f"{key}: {item / (test_len / args.test_batch_size)}")
 
+    # print(f"estimated_prob_list: {estimated_prob_list}")
 
     confusion_matrix_before = confusion_matrix(ground_truth_label_list, estimated_before_label_list)
     confusion_matrix_after = confusion_matrix(ground_truth_label_list, estimated_after_label_list)
 
     logger.info(f"before adaptation | loss {test_loss_before / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_before_label_list, average='macro'):.4f}")
-    logger.info(f"before adaptation | confusion matrix\n{confusion_matrix_before}")
     logger.info(f"after adaptation | loss {test_loss_before / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_after_label_list, average='macro'):.4f}")
+    logger.info(f"before adaptation | confusion matrix\n{confusion_matrix_before}")
     logger.info(f"after adaptation | confusion matrix\n{confusion_matrix_after}")
 
     if args.vis:
-        draw_entropy_distribution(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution")
-        draw_entropy_distribution(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation")
-        draw_entropy_distribution(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation")
+        draw_histogram(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution", "Entropy", "Number of Instances")
+        draw_histogram(args, np.array(SOURCE_PROB_LIST), "Source Confidence Distribution", "Confidence", "Number of Instances")
+        if 'column_shift_handler' in args.method:
+            draw_histogram(args, np.array(SOURCE_CALIBRATED_ENTROPY_LIST), "Source Entropy Distribution After Calibration", "Entropy", "Number of Instances")
+            draw_histogram(args, np.array(SOURCE_CALIBRATED_PROB_LIST), "Source Confidence Distribution After Calibration", "Confidence", "Number of Instances")
+            draw_histogram(args, np.array(PROB_LIST_AFTER_CALIBRATION), "Target Confidence Distribution After Calibration", "Confidence", "Number of Instances")
+
+        draw_histogram(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation", "Entropy", "Number of Instances")
+        draw_histogram(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation", "Entropy", "Number of Instances")
+        draw_histogram(args, np.array(PROB_LIST_BEFORE_ADAPTATION), "Target Confidence Distribution Before Adaptation", "Confidence", "Number of Instances")
+        draw_histogram(args, np.array(PROB_LIST_AFTER_ADAPTATION), "Target Confidence Distribution After Adaptation", "Confidence", "Number of Instances")
 
         draw_label_distribution_plot(args, SOURCE_LABEL_LIST, "Source Label Distribution")
         draw_label_distribution_plot(args, LABEL_LIST, "Target Label Distribution")
@@ -844,6 +910,9 @@ def main(args):
         draw_tsne(args, np.array(FEATURE_LIST), np.array(LABEL_LIST), "Target Latent Space Visualization with t-SNE")
         draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST), "Source Latent Space Visualization with t-SNE")
         draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST), "Source Input Space Visualization with t-SNE")
+
+
+
     if args.entropy_gradient_vis:
         draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
 

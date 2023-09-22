@@ -251,14 +251,14 @@ def get_mask_by_feature_importance(args, dataset, test_data, importance): # TODO
 
 ##################################################################
 # for visualization
-def draw_entropy_distribution(args, entropy_list, title):
+def draw_histogram(args, x_list, title, xlabel, ylabel):
     plt.clf()
-    plt.hist(entropy_list, bins=50)
+    plt.hist(x_list, bins=20)
 
     plt.title(title)
     plt.xlim([0, 1])
-    plt.xlabel('Entropy')
-    plt.ylabel('Number of Instances')
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
     plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
@@ -306,21 +306,99 @@ def draw_tsne(args, feats, cls, title):
     plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
-def draw_calibration(args, pred, gt):
-    from sklearn.calibration import CalibrationDisplay
-    from matplotlib.gridspec import GridSpec
-    fig = plt.figure(figsize=(10, 10))
-    gs = GridSpec(4, 2)
-    colors = plt.cm.get_cmap("Dark2")
 
-    ax_calibration_curve = fig.add_subplot(gs[:2, :2])
-    calibration_displays = {}
-    display = CalibrationDisplay.from_predictions(y_true=gt, y_prob=pred, n_bins=10)
-    calibration_displays[f'{args.method}'] = display
+import math
+def _bin_initializer(bin_dict, num_bins=10):
+    for i in range(num_bins):
+        bin_dict[i][COUNT] = 0
+        bin_dict[i][CONF] = 0
+        bin_dict[i][ACC] = 0
+        bin_dict[i][BIN_ACC] = 0
+        bin_dict[i][BIN_CONF] = 0
 
-    ax_calibration_curve.grid()
-    ax_calibration_curve.set_title("Calibration plots")
-    plt.show()
+COUNT = 'count'
+CONF = 'conf'
+ACC = 'acc'
+BIN_ACC = 'bin_acc'
+BIN_CONF = 'bin_conf'
+
+def _populate_bins(confs, preds, labels, num_bins=15):
+    bin_dict = {}
+    for i in range(num_bins):
+        bin_dict[i] = {}
+    _bin_initializer(bin_dict, num_bins)
+    num_test_samples = len(confs)
+
+    # print(f"confs: {confs}")
+    # print(f"preds: {preds}")
+    # print(f"labels: {labels}")
+
+    for i in range(0, num_test_samples):
+        confidence = confs[i]
+        prediction = preds[i]
+        label = labels[i]
+        binn = int(math.ceil(((num_bins * confidence) - 1)))
+        bin_dict[binn][COUNT] = bin_dict[binn][COUNT] + 1
+        bin_dict[binn][CONF] = bin_dict[binn][CONF] + confidence
+        bin_dict[binn][ACC] = bin_dict[binn][ACC] + \
+            (1 if (label == prediction) else 0)
+
+    for binn in range(0, num_bins):
+        if (bin_dict[binn][COUNT] == 0):
+            bin_dict[binn][BIN_ACC] = 0
+            bin_dict[binn][BIN_CONF] = 0
+        else:
+            bin_dict[binn][BIN_ACC] = float(
+                bin_dict[binn][ACC]) / bin_dict[binn][COUNT]
+            bin_dict[binn][BIN_CONF] = bin_dict[binn][CONF] / \
+                float(bin_dict[binn][COUNT])
+    return bin_dict
+
+
+
+
+def reliability_plot(args, confs, preds, labels, title, num_bins=10):
+    '''
+    Method to draw a reliability plot from a model's predictions and confidences.
+    '''
+    bin_dict = _populate_bins(confs, preds, labels, num_bins)
+    bns = [(i / float(num_bins)) for i in range(num_bins)]
+    y = []
+    for i in range(num_bins):
+        y.append(bin_dict[i][BIN_ACC])
+    plt.figure(figsize=(10, 8))  # width:20, height:3
+    plt.bar(bns, bns, align='edge', width=0.05, color='pink', label='Expected')
+    plt.bar(bns, y, align='edge', width=0.05,
+            color='blue', alpha=0.5, label='Actual')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Confidence')
+    plt.legend()
+    plt.savefig(title)
+    # plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png") 
+
+
+
+
+# def draw_calibration(args, pred, gt, title):
+#     from sklearn.calibration import CalibrationDisplay
+#     from matplotlib.gridspec import GridSpec
+#     plt.clf()
+#     fig = plt.figure(figsize=(10, 10))
+#     gs = GridSpec(4, 2)
+#     colors = plt.cm.get_cmap("Dark2")
+
+#     ax_calibration_curve = fig.add_subplot(gs[:2, :2])
+#     calibration_displays = {}
+#     display = CalibrationDisplay.from_predictions(y_true=gt, y_prob=pred, n_bins=10)
+#     calibration_displays[f'{args.method}'] = display
+
+#     ax_calibration_curve.grid()
+#     ax_calibration_curve.set_title(title)
+#     # plt.show()
+#     # plt.title(title)
+#     plt.savefig(title)
+#     # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png") 
+#     # plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png") 
 
 
 def draw_feature_change(feat1, feat2):
@@ -421,3 +499,103 @@ def save_pickle(saving_object, title,args):
     file_name = f'{title}_model{args.model}_dataset{args.dataset}_shift_type{args.shift_type}_method{args.method}.pkl'
     with open(os.path.join(args.tsne_dir, file_name), 'wb') as f:
         pickle.dump(saving_object, f, pickle.HIGHEST_PROTOCOL)
+    
+
+
+
+class ECELoss(nn.Module):
+    '''
+    Compute ECE (Expected Calibration Error)
+    '''
+    def __init__(self, n_bins=15):
+        super(ECELoss, self).__init__()
+        bin_boundaries = torch.linspace(0, 1, n_bins + 1)
+        self.bin_lowers = bin_boundaries[:-1]
+        self.bin_uppers = bin_boundaries[1:]
+
+    def forward(self, logits, labels):
+        softmaxes = F.softmax(logits, dim=1)
+        confidences, predictions = torch.max(softmaxes, 1)
+        accuracies = predictions.eq(labels)
+
+        ece = torch.zeros(1, device=logits.device)
+        for bin_lower, bin_upper in zip(self.bin_lowers, self.bin_uppers):
+            # Calculated |confidence - accuracy| in each bin
+            in_bin = confidences.gt(bin_lower.item()) * confidences.le(bin_upper.item())
+            prop_in_bin = in_bin.float().mean()
+            if prop_in_bin.item() > 0:
+                accuracy_in_bin = accuracies[in_bin].float().mean()
+                avg_confidence_in_bin = confidences[in_bin].mean()
+                ece += torch.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+
+        return ece
+
+
+class AdaptiveECELoss(nn.Module):
+    '''
+    Compute Adaptive ECE
+    '''
+    def __init__(self, n_bins=15):
+        super(AdaptiveECELoss, self).__init__()
+        self.nbins = n_bins
+
+    def histedges_equalN(self, x):
+        npt = len(x)
+        return np.interp(np.linspace(0, npt, self.nbins + 1),
+                     np.arange(npt),
+                     np.sort(x))
+    def forward(self, logits, labels):
+        softmaxes = F.softmax(logits, dim=1)
+        confidences, predictions = torch.max(softmaxes, 1)
+        accuracies = predictions.eq(labels)
+        n, bin_boundaries = np.histogram(confidences.cpu().detach(), self.histedges_equalN(confidences.cpu().detach()))
+        #print(n,confidences,bin_boundaries)
+        self.bin_lowers = bin_boundaries[:-1]
+        self.bin_uppers = bin_boundaries[1:]
+        ece = torch.zeros(1, device=logits.device)
+        for bin_lower, bin_upper in zip(self.bin_lowers, self.bin_uppers):
+            # Calculated |confidence - accuracy| in each bin
+            in_bin = confidences.gt(bin_lower.item()) * confidences.le(bin_upper.item())
+            prop_in_bin = in_bin.float().mean()
+            if prop_in_bin.item() > 0:
+                accuracy_in_bin = accuracies[in_bin].float().mean()
+                avg_confidence_in_bin = confidences[in_bin].mean()
+                ece += torch.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+        return ece
+
+
+class ClasswiseECELoss(nn.Module):
+    '''
+    Compute Classwise ECE
+    '''
+    def __init__(self, n_bins=15):
+        super(ClasswiseECELoss, self).__init__()
+        bin_boundaries = torch.linspace(0, 1, n_bins + 1)
+        self.bin_lowers = bin_boundaries[:-1]
+        self.bin_uppers = bin_boundaries[1:]
+
+    def forward(self, logits, labels):
+        num_classes = int((torch.max(labels) + 1).item())
+        softmaxes = F.softmax(logits, dim=1)
+        per_class_sce = None
+
+        for i in range(num_classes):
+            class_confidences = softmaxes[:, i]
+            class_sce = torch.zeros(1, device=logits.device)
+            labels_in_class = labels.eq(i) # one-hot vector of all positions where the label belongs to the class i
+
+            for bin_lower, bin_upper in zip(self.bin_lowers, self.bin_uppers):
+                in_bin = class_confidences.gt(bin_lower.item()) * class_confidences.le(bin_upper.item())
+                prop_in_bin = in_bin.float().mean()
+                if prop_in_bin.item() > 0:
+                    accuracy_in_bin = labels_in_class[in_bin].float().mean()
+                    avg_confidence_in_bin = class_confidences[in_bin].mean()
+                    class_sce += torch.abs(avg_confidence_in_bin - accuracy_in_bin) * prop_in_bin
+
+            if (i == 0):
+                per_class_sce = class_sce
+            else:
+                per_class_sce = torch.cat((per_class_sce, class_sce), dim=0)
+
+        sce = torch.mean(per_class_sce)
+        return sce

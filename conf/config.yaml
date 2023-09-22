@@ -17,9 +17,9 @@ mlp:
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
 benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
-dataset: cmc
+dataset: optdigits
 shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0.5
+shift_severity: 1
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd
 
@@ -32,7 +32,7 @@ pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
 retrain: true
-epochs: 20
+epochs: 10
 train_batch_size: 64
 train_optimizer: AdamW
 train_lr: 1e-4
@@ -41,15 +41,15 @@ smote: false
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 10 # optimization steps for each batch
+num_steps: 30 # optimization steps for each batch
 test_batch_size: 64
 test_optimizer: AdamW
-train_params: [all] # currently supported: all, LN, BN, GN
+train_params: [downstream] # currently supported: all, LN, BN, GN
 test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-method: [label_shift_handler]
+method: [column_shift_handler, label_shift_handler]
 
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: zero, mean, emd

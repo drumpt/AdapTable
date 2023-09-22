@@ -124,9 +124,14 @@ class Dataset():
         # print(f"np.argsort(self.train_y, axis=0): {np.argsort(self.train_y, axis=0)[:, 1]}")
         # print(f"self.train_x[:, 1]: {self.train_x[:, 1]}")
         # posttrain_data = torch.utils.data.Subset(train_data, indices=np.argsort(self.train_x[:, 1], axis=0))
-        # # posttrain_data = torch.utils.data.Subset(train_data, indices=np.argsort(self.train_y, axis=0)[:, 1])
-        # self.posttrain_loader = torch.utils.data.DataLoader(posttrain_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
-        self.posttrain_loader = self.train_loader
+        # posttrain_data = torch.utils.data.Subset(train_data, indices=np.argsort(self.train_y, axis=0)[:, 1])
+        posttrain_data = torch.utils.data.TensorDataset(
+            torch.cat([torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.valid_x).type(torch.float32)], dim=0),
+            torch.cat([torch.FloatTensor(self.train_y).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32)], dim=0)
+        )
+        self.posttrain_loader = torch.utils.data.DataLoader(posttrain_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+        # self.posttrain_loader = self.valid_loader
+        # self.posttrain_loader = self.train_loader
 
         # for embedding
         self.cont_dim = train_cont_x.shape[-1]
