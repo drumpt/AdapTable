@@ -595,11 +595,11 @@ def main(args):
             SOURCE_PREDICTION_LIST.extend(estimated_y.tolist())
             # SOURCE_CALIBRATED_PREDICTION_LIST.extend((estimated_y/0.2).tolist())
             # SOURCE_CALIBRATED_ENTROPY_LIST.extend(softmax_entropy(column_shift_handler(train_x, estimated_y)).tolist())
-            SOURCE_CALIBRATED_PREDICTION_LIST.extend(column_shift_handler(train_x, estimated_y).softmax(dim=-1).tolist())
+            # SOURCE_CALIBRATED_PREDICTION_LIST.extend(column_shift_handler(train_x, estimated_y).softmax(dim=-1).tolist())
+            SOURCE_CALIBRATED_PREDICTION_LIST.extend(column_shift_handler(train_x, estimated_y).tolist())
             SOURCE_CALIBRATED_ENTROPY_LIST.extend(softmax_entropy(column_shift_handler(train_x, estimated_y)).tolist())
             SOURCE_CALIBRATED_PROB_LIST.extend(column_shift_handler(train_x, estimated_y).softmax(dim=-1).max(dim=-1)[0].tolist())
             SOURCE_ONE_HOT_LABEL_LIST.extend(train_y.cpu().tolist())
-
 
     ece_loss_fn = ECELoss()
     # classwise_ece_loss_fn = ClasswiseECELoss()
@@ -607,11 +607,15 @@ def main(args):
     # ece_before = ece_score(np.array(SOURCE_PREDICTION_LIST), np.array(SOURCE_ONE_HOT_LABEL_LIST))
     # ece_after = ece_score(np.array(SOURCE_CALIBRATED_PREDICTION_LIST), np.array(SOURCE_ONE_HOT_LABEL_LIST))
 
+    TARGET_PREDICTION_LIST, TARGET_CALIBRATED_PREDICTION_LIST = [], []
+
+    print(f"SOURCE_PREDICTION_LIST: {SOURCE_PREDICTION_LIST}")
+    print(f"SOURCE_PREDICTION_LIST: {SOURCE_CALIBRATED_PREDICTION_LIST}")
+
     ece_before = ece_loss_fn(torch.tensor(SOURCE_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
     ece_after = ece_loss_fn(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
-
-    # print(f"ece_before: {ece_before}")
-    # print(f"ece_after: {ece_after}")
+    print(f"ece_before: {ece_before}")
+    print(f"ece_after: {ece_after}")
 
     print(f"np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1)}")
     print(f"torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1).max(axis=-1)[0]}")
@@ -636,6 +640,8 @@ def main(args):
         test_loss_before += loss.item() * test_x.shape[0]
         estimated_before_label_list.extend(torch.argmax(ori_estimated_y, dim=-1).cpu().tolist())
         estimated_prob_list.extend(torch.max(torch.softmax(ori_estimated_y, dim=-1), dim=-1)[0].cpu().tolist())
+
+        TARGET_PREDICTION_LIST.extend(ori_estimated_y.detach().cpu().tolist())
 
         for _ in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_mask_x, source_model, test_optimizer)
@@ -763,28 +769,43 @@ def main(args):
             estimated_y = source_model(corrected_test)
         elif 'label_shift_handler' in args.method:
             estimated_y = source_model(test_x)
-            # if 'column_shift_handler' in args.method:
-            #     estimated_y = column_shift_handler(test_x, estimated_y)
-            # before_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1)), p=1, dim=-1), dim=0)
-            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
-            # target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
-            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
-            # cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
-            # estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
-            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
+            if 'column_shift_handler' in args.method:
+                estimated_y = column_shift_handler(test_x, estimated_y)
+                for i in range(len(estimated_y)):
+                    if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]):
+                        estimated_y[i] = estimated_y[i] / 0.01
+                    else:
+                        estimated_y[i] = estimated_y[i] / 100
+
+                # calibrated_y = column_shift_handler(test_x, estimated_y)
+                # print(f"calibrated_y: {calibrated_y}")
+
+
+            print(f"estimated_y before label shift handeling: {estimated_y}")
+            # estimated_y = torch.log(F.normalize(F.softmax(estimated_y, dim=-1) * F.softmax(calibrated_y, dim=-1) / source_label_dist, p=1, dim=-1))
+
+            before_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1)), p=1, dim=-1), dim=0)
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
+            target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
+            cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
+            estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
+            # estimated_y = torch.log(calibrated_probability)
+
+            print(f"estimated_y after label shift handling: {estimated_y}")
 
             # current_target_label_dist = torch.mean(test_y, dim=0, keepdim=True)
             # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * current_target_label_dist / source_label_dist), p=1, dim=-1)
-            probs = estimated_y.softmax(dim=-1)
-            calibrated_probs = torch.zeros_like(probs, device=probs.device)
-            for instance_idx in range(probs.shape[0]):
-                for class_idx in range(probs.shape[-1]):
-                    class_prob_tensor = torch.tensor(probs_per_label[class_idx]).to(args.device).unsqueeze(0)
-                    calibrated_probs[instance_idx, class_idx] = (probs[instance_idx, class_idx] >= class_prob_tensor).float().sum().item() / class_prob_tensor.shape[-1]
-            # print(f"calibrated_probs: {calibrated_probs}")
-            calibrated_probs = torch.mean(F.normalize(calibrated_probs, p=1, dim=-1), dim=0, keepdim=True)
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * calibrated_probs), p=1, dim=-1)
-            estimated_y = torch.log(calibrated_probability)
+            # probs = estimated_y.softmax(dim=-1)
+            # calibrated_probs = torch.zeros_like(probs, device=probs.device)
+            # for instance_idx in range(probs.shape[0]):
+            #     for class_idx in range(probs.shape[-1]):
+            #         class_prob_tensor = torch.tensor(probs_per_label[class_idx]).to(args.device).unsqueeze(0)
+            #         calibrated_probs[instance_idx, class_idx] = (probs[instance_idx, class_idx] >= class_prob_tensor).float().sum().item() / class_prob_tensor.shape[-1]
+            # # print(f"calibrated_probs: {calibrated_probs}")
+            # calibrated_probs = torch.mean(F.normalize(calibrated_probs, p=1, dim=-1), dim=0, keepdim=True)
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * calibrated_probs), p=1, dim=-1)
+            # estimated_y = torch.log(calibrated_probability)
 
             # print(f"test_x: {test_x}")
             # print(f"estimated_x: {estimated_x}")
@@ -839,6 +860,8 @@ def main(args):
 
         # after_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1), dim=0)
 
+        TARGET_CALIBRATED_PREDICTION_LIST.extend(estimated_y.detach().cpu().tolist())
+
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         estimated_after_label_list.extend(torch.argmax(estimated_y, dim=-1).cpu().tolist())
@@ -847,12 +870,12 @@ def main(args):
         logger.info(f"batch true distribution: {torch.mean(test_y, dim=0)}")
         logger.info(f'online batch [{batch_idx}]: current acc before {accuracy_score(torch.argmax(test_y, dim=-1).cpu().tolist(), torch.argmax(ori_estimated_y, dim=-1).cpu().tolist()):.4f}, current acc after {accuracy_score(torch.argmax(test_y, dim=-1).cpu().tolist(), torch.argmax(estimated_y, dim=-1).cpu().tolist()):.4f}')
 
+        FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
+        LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
 
         if args.vis: # for entropy and mae vs gradient norm visualization
             ENTROPY_LIST_BEFORE_ADAPTATION.extend(softmax_entropy(ori_estimated_y).tolist() / np.log(ori_estimated_y.shape[-1]))
             RECON_LOSS_LIST_BEFORE_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
-            FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
-            LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
 
             print(f"softmax_entropy(ori_estimated_y).max(dim=-1)[0]: {softmax_entropy(ori_estimated_y).max(dim=-1)[0]}")
 
@@ -861,8 +884,6 @@ def main(args):
 
             ENTROPY_LIST_AFTER_ADAPTATION.extend(softmax_entropy(estimated_y).tolist() / np.log(estimated_y.shape[-1]))
             RECON_LOSS_LIST_AFTER_ADAPTATION.extend(F.mse_loss(source_model.get_recon_out(test_x * test_mask_x), test_x, reduction='none').mean(dim=-1).cpu().tolist())
-            FEATURE_LIST.extend(source_model.get_feature(test_x).cpu().tolist())
-            LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
             PROB_LIST_AFTER_ADAPTATION.extend(estimated_y.softmax(dim=-1).max(dim=-1)[0].tolist())
 
         if args.entropy_gradient_vis:
@@ -881,6 +902,15 @@ def main(args):
     #     print(f"{key}: {item / (test_len / args.test_batch_size)}")
 
     # print(f"estimated_prob_list: {estimated_prob_list}")
+
+    print(f"len(TARGET_PREDICTION_LIST): {len(TARGET_PREDICTION_LIST)}")
+    print(f"len(TARGET_CALIBRATED_PREDICTION_LIST): {len(TARGET_CALIBRATED_PREDICTION_LIST)}")
+    print(f"len(LABEL_LIST): {len(LABEL_LIST)}")
+
+    ece_before = ece_loss_fn(torch.tensor(TARGET_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
+    ece_after = ece_loss_fn(torch.tensor(TARGET_CALIBRATED_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
+    print(f"test ece_before: {ece_before}")
+    print(f"test ece_after: {ece_after}")
 
     confusion_matrix_before = confusion_matrix(ground_truth_label_list, estimated_before_label_list)
     confusion_matrix_after = confusion_matrix(ground_truth_label_list, estimated_after_label_list)
