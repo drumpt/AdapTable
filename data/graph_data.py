@@ -12,12 +12,12 @@ from copy import deepcopy
 import torch.nn.functional as F
 
 
-
 class GraphDataset(torch.utils.data.Dataset):
-    def __init__(self, args, dataset, type=1):
+    def __init__(self, args, dataset, type=1, num_batches=100):
         self.cont_indices = [i for i in range(dataset.cont_dim)]
         self.feat = torch.FloatTensor(dataset.train_x).type(torch.float32).to(args.device)
         self.cls = torch.tensor(dataset.train_y).to(args.device)
+        self.num_batches = len(self.feat) // args.test_batch_size * 2
 
         if hasattr(dataset, 'input_one_hot_encoder'):
             self.cat_len_per_node = [len(category) for category in dataset.input_one_hot_encoder.categories_]
@@ -40,84 +40,80 @@ class GraphDataset(torch.utils.data.Dataset):
         self.created_batches_cls = []
         self.mi_idx = self.cont_indices + self.cat_idx_per_node
         self.type = type
-        # type 0: mutual info. as adj. matrix + node as cols
-        # type 1: correlation info. as adj. matrix + node as cols
-        # type 2: mutual info. as adj. matrix + node as rows
-        # type 3: correlation info. as adj. matrix + node as rows
+
+
         self.preprocessing()
 
 
     def construct_correlated_batches(self):
-        num_batches = 100
+        num_batches = self.num_batches
         data = self.feat
         labels = torch.argmax(self.cls, dim=1)
         batch_size = self.args.test_batch_size
         classes = torch.unique(labels, return_counts=False)
 
-        for i in range(num_batches):
-            # For dominant class batches
-            if i % 2 == 0:
-                dominant_class = classes[torch.randint(0, len(classes), (1,)).item()]
-                dominant_class_count = int(batch_size * np.random.randint(5, 10) / 10)
-                other_class_count = batch_size - dominant_class_count
+        # random permute cont indices:
+        random_cont_indices = np.random.permutation(self.cont_indices)
+        random_cat_indices = np.random.permutation(self.cat_idx_per_node)
 
-                dominant_class_indices = torch.nonzero(labels == dominant_class).squeeze()
-                other_class_indices = torch.nonzero(labels != dominant_class).squeeze()
+        for cat_idx in random_cat_indices:
+            # sort features by cat_idx
+            feat = self.feat.clone()
+            cls = self.cls.clone()
 
-                dominant_class_indices = dominant_class_indices[
-                    torch.randint(0, len(dominant_class_indices), (dominant_class_count,))]
-                other_class_indices = other_class_indices[
-                    torch.randint(0, len(other_class_indices), (other_class_count,))]
+            # add gaussian noise to the continuous features
+            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * 0.01
 
-                batch_indices = torch.cat([dominant_class_indices, other_class_indices])
-                batch_indices = batch_indices
-            # For balanced batches
-            else:
-                class_counts = [batch_size // len(classes) for _ in classes]
-                print(class_counts)
-                batch_indices = torch.cat(
-                    [torch.nonzero(labels == cls).squeeze()[torch.randint(0, (labels == cls).sum(), (cnt,))] for
-                     cls, cnt in zip(classes, class_counts)])
-                batch_indices = batch_indices
+            sorted_feat = feat[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
+            sorted_cls = cls[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
+
+            # split features by cat_idx
+            split_feat = torch.split(sorted_feat, self.args.test_batch_size)
+            split_cls = torch.split(sorted_cls, self.args.test_batch_size)
+
+            if len(sorted_feat) % self.args.test_batch_size != 0:
+                split_feat = split_feat[:-1]
+                split_cls = split_cls[:-1]
+            self.created_batches.extend(list(split_feat))
+            self.created_batches_cls.extend(list(split_cls))
+
+            # random select at maximum 100 batches from self.created_batches
+            if len(self.created_batches) > self.num_batches:
+                break
+
+        for cont_idx in random_cont_indices:
+            # sort features by cont_idx
+            feat = self.feat.clone()
+            cls = self.cls.clone()
+
+            # add gaussian noise to the continuous features
+            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * 0.01
+
+            sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
+            sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
+
+            # split features by cont_idx
+            split_feat = torch.split(sorted_feat, self.args.test_batch_size)
+            split_cls = torch.split(sorted_cls, self.args.test_batch_size)
+
+            if len(sorted_feat) % self.args.test_batch_size != 0:
+                split_feat = split_feat[:-1]
+                split_cls = split_cls[:-1]
+
+            # TODO: add robustness to the batch - ex. Gaussian noise
+            self.created_batches.extend(list(split_feat))
+            self.created_batches_cls.extend(list(split_cls))
+
+            # random select at maximum 100 batches from self.created_batches
+            if len(self.created_batches) > self.num_batches:
+                break
 
 
-            # For random batches
-            # else:
-            #     batch_indices = torch.randint(0, len(data), (batch_size,))
-
-            # Create the batch and add it to the list
-
-            batch_data = data[batch_indices]
-            batch_labels = self.cls[batch_indices]
-
-            self.created_batches.append(batch_data)
-            self.created_batches_cls.append(batch_labels)
-
-        # for cont_idx in self.cont_indices:
-        #     # sort features by cont_idx
-        #     feat = self.feat.clone()
-        #     cls = self.cls.clone()
-        #
-        #     sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
-        #     sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
-        #
-        #     # split features by cont_idx
-        #     split_feat = torch.split(sorted_feat, self.args.test_batch_size)
-        #     split_cls = torch.split(sorted_cls, self.args.test_batch_size)
-        #
-        #     if len(sorted_feat) % self.args.test_batch_size != 0:
-        #         split_feat = split_feat[:-1]
-        #         split_cls = split_cls[:-1]
-        #
-        #     # TODO: add robustness to the batch - ex. Gaussian noise
-        #     self.created_batches.extend(list(split_feat))
-        #     self.created_batches_cls.extend(list(split_cls))
-
-        # random select at maximum 100 batches from self.created_batches
-        if len(self.created_batches) > 200:
-            idx = np.random.choice(len(self.created_batches), 200, replace=False)
-            self.created_batches = [self.created_batches[i] for i in idx]
-            self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
+        # random select batches
+        if len(self.created_batches) > self.num_batches:
+            idx = np.random.permutation(len(self.created_batches))
+            self.created_batches = [self.created_batches[i] for i in idx[:self.num_batches]]
+            self.created_batches_cls = [self.created_batches_cls[i] for i in idx[:self.num_batches]]
 
         # random permutation
         idx = np.random.permutation(len(self.created_batches))
@@ -133,87 +129,6 @@ class GraphDataset(torch.utils.data.Dataset):
     def preprocessing(self):
         self.construct_correlated_batches()
         self.construct_graph_batches()
-
-        num_batches = 100
-        data = self.feat
-        labels = torch.argmax(self.cls, dim=1)
-        batch_size = self.args.test_batch_size
-        classes = torch.unique(labels, return_counts=False)
-
-        for i in range(num_batches):
-            # For dominant class batches
-            if i % 2 == 0:
-                dominant_class = classes[torch.randint(0, len(classes), (1,)).item()]
-                dominant_class_count = int(batch_size * np.random.randint(5, 10) / 10)
-                other_class_count = batch_size - dominant_class_count
-
-                dominant_class_indices = torch.nonzero(labels == dominant_class).squeeze()
-                other_class_indices = torch.nonzero(labels != dominant_class).squeeze()
-
-                dominant_class_indices = dominant_class_indices[
-                    torch.randint(0, len(dominant_class_indices), (dominant_class_count,))]
-                other_class_indices = other_class_indices[
-                    torch.randint(0, len(other_class_indices), (other_class_count,))]
-
-                batch_indices = torch.cat([dominant_class_indices, other_class_indices])
-                batch_indices = batch_indices
-            # For balanced batches
-            else:
-                class_counts = [batch_size // len(classes) for _ in classes]
-                print(class_counts)
-                batch_indices = torch.cat(
-                    [torch.nonzero(labels == cls).squeeze()[torch.randint(0, (labels == cls).sum(), (cnt,))] for
-                     cls, cnt in zip(classes, class_counts)])
-                batch_indices = batch_indices
-
-
-            # For random batches
-            # else:
-            #     batch_indices = torch.randint(0, len(data), (batch_size,))
-
-            # Create the batch and add it to the list
-
-            batch_data = data[batch_indices]
-            batch_labels = self.cls[batch_indices]
-
-            self.created_batches.append(batch_data)
-            self.created_batches_cls.append(batch_labels)
-
-        # for cont_idx in self.cont_indices:
-        #     # sort features by cont_idx
-        #     feat = self.feat.clone()
-        #     cls = self.cls.clone()
-        #
-        #     sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
-        #     sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
-        #
-        #     # split features by cont_idx
-        #     split_feat = torch.split(sorted_feat, self.args.test_batch_size)
-        #     split_cls = torch.split(sorted_cls, self.args.test_batch_size)
-        #
-        #     if len(sorted_feat) % self.args.test_batch_size != 0:
-        #         split_feat = split_feat[:-1]
-        #         split_cls = split_cls[:-1]
-        #
-        #     # TODO: add robustness to the batch - ex. Gaussian noise
-        #     self.created_batches.extend(list(split_feat))
-        #     self.created_batches_cls.extend(list(split_cls))
-
-        # random select at maximum 100 batches from self.created_batches
-        if len(self.created_batches) > 200:
-            idx = np.random.choice(len(self.created_batches), 200, replace=False)
-            self.created_batches = [self.created_batches[i] for i in idx]
-            self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
-
-        # random permutation
-        idx = np.random.permutation(len(self.created_batches))
-        self.created_batches = [self.created_batches[i] for i in idx]
-        self.created_batches_cls = [self.created_batches_cls[i] for i in idx]
-
-        for idx, batch_cls in enumerate(self.created_batches_cls):
-            np_cls = torch.argmax(batch_cls, dim=1).cpu().numpy()
-            print(f'cls distribution of batch [{idx}/{len(self.created_batches_cls)}], {np.unique(np_cls, return_counts=True)}')
-
 
     def construct_graph_batches(self):
         # create graph batches
@@ -238,15 +153,10 @@ class GraphDataset(torch.utils.data.Dataset):
                 numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
                     args=self.args, batch=batch, mi_idx=self.mi_idx
                 )
+                print('type 2')
             else:
                 raise NotImplementedError
 
-            print(f"mi_matrix: {mi_matrix}")
-
-            edge_index = mi_matrix.nonzero(as_tuple=True)
-            edge_attr = mi_matrix[edge_index]
-
-            # adj_ori = …  # dense
             num_nodes = mi_matrix.shape[0]
             edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
             print('max of edge_weights : ', edge_weights.max())
@@ -315,23 +225,25 @@ class GraphDataset(torch.utils.data.Dataset):
 
         mi_idx = cont_indices + cat_idx_per_node
 
-        if type in [0]:  # type 0: mutual info. as adj. matrix + node as cols + node feature as stats
-            mi_matrix = GraphDataset.get_mi_matrix(args=args, batch=batch, idx_lists=mi_idx)
-            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
-                args=args, batch=batch, mi_idx=mi_idx
-            )
-        elif type in [1]:  # type 1: correlation info. as adj. matrix + node as cols  + node feature as stats
-            mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
-            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
-                args=args, batch=batch, mi_idx=mi_idx
-            )
-        elif type in [2]:  # correlation info. as adj. matrix + node as cols  + shift as stats
-            mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
-            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
-                args=args, batch=batch, mi_idx=mi_idx
-            )
-        else:
-            raise NotImplementedError
+        # if type in [0]:  # type 0: mutual info. as adj. matrix + node as cols + node feature as stats
+        #     mi_matrix = GraphDataset.get_mi_matrix(args=args, batch=batch, idx_lists=mi_idx)
+        #     numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+        #         args=args, batch=batch, mi_idx=mi_idx
+        #     )
+        # elif type in [1]:  # type 1: correlation info. as adj. matrix + node as cols  + node feature as stats
+
+        mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+        numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+            args=args, batch=batch, mi_idx=mi_idx
+        )
+
+        # elif type in [2]:  # correlation info. as adj. matrix + node as cols  + shift as stats
+        #     mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+        #     numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
+        #         args=args, batch=batch, mi_idx=mi_idx
+        #     )
+        # else:
+        #     raise NotImplementedError
 
         # mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
         # mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
@@ -345,9 +257,9 @@ class GraphDataset(torch.utils.data.Dataset):
         edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
         adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
 
-        print('_', mi_matrix.shape)
-        print('max val : ', mi_matrix.max())
-        print('min val : ', mi_matrix.min())
+        # print('_', mi_matrix.shape)
+        # print('max val : ', mi_matrix.max())
+        # print('min val : ', mi_matrix.min())
 
         graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_weights=edge_weights)
 
@@ -393,14 +305,14 @@ class GraphDataset(torch.utils.data.Dataset):
 
         if torch.isnan(matrix).any():
             # nan in cases where variance is 0
-            print('nan in matrix')
+            # print('nan in matrix')
             matrix = torch.nan_to_num(matrix, nan=0.0, posinf=1.0, neginf=0.0)
 
         # GCNConv cannot handle negaive weights
         matrix = torch.abs(matrix)
 
-        print('maximum : ', torch.max(matrix))
-        print('minimum : ', torch.min(matrix))
+        # print('maximum : ', torch.max(matrix))
+        # print('minimum : ', torch.min(matrix))
         return matrix
 
     @staticmethod

@@ -259,7 +259,9 @@ def draw_histogram(args, x_list, title, xlabel, ylabel):
     plt.xlim([0, 1])
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
+    plt.show()
+
+    # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
@@ -269,7 +271,8 @@ def draw_entropy_gradient_plot(args, entropy_list, gradient_list, title):
 
     plt.xlabel('Entropy')
     plt.ylabel('Gradient Norm')
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
+
+    # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_label_distribution_plot(args, label_list, title):
@@ -282,7 +285,8 @@ def draw_label_distribution_plot(args, label_list, title):
     plt.title(title)
     plt.xlabel('Class')
     plt.ylabel('Ratio')
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
+
+    # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_tsne(args, feats, cls, title):
@@ -303,7 +307,8 @@ def draw_tsne(args, feats, cls, title):
     plt.yticks([])
 
     plt.title(title)
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
+
+    # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 
@@ -373,8 +378,10 @@ def reliability_plot(args, confs, preds, labels, title, num_bins=10):
     plt.ylabel('Accuracy')
     plt.xlabel('Confidence')
     plt.legend()
-    plt.savefig(title)
-    # plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png") 
+    plt.show()
+    # plt.savefig(title)
+    #
+    # plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 
@@ -396,9 +403,12 @@ def reliability_plot(args, confs, preds, labels, title, num_bins=10):
 #     ax_calibration_curve.set_title(title)
 #     # plt.show()
 #     # plt.title(title)
-#     plt.savefig(title)
-#     # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png") 
-#     # plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png") 
+#
+# plt.savefig(title)
+#     #
+# plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
+#     #
+# plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 def draw_feature_change(feat1, feat2):

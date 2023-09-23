@@ -49,7 +49,10 @@ test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-method: [column_shift_handler, label_shift_handler]
+#method: [tempscale_graph, label_shift_handler]
+method: [tempscale_graph, em]
+#method: [column_shift_handler, label_shift_handler]
+
 
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: zero, mean, emd
@@ -72,6 +75,10 @@ ttt_coef: [1.0, 0.1, 1.0] # for ttt++
 num_estimators: 25
 max_depth: 3
 
+# posttrain
+posttrain_lr: 1e-2
+posttrain_epochs: 500
+
 ##################################################################
 ### device
 device: cuda
@@ -89,6 +96,10 @@ vis_dir: imgs
 # visualization
 vis: false
 entropy_gradient_vis: false
+
+# graph
+graph_add_noise: false
+graph_noise_std: 0.1
 
 ### wandb
 wandb_user: drumpt
