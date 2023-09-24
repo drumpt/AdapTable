@@ -9,13 +9,13 @@ class GraphNet(torch.nn.Module):
         super(GraphNet, self).__init__()
         self.cat_cls_len = cat_cls_len
         self.cont_len = cont_len
-        self.conv1 = GCNConv(num_features, 64, bias=True)
-        self.conv2 = GCNConv(64, 32, bias=True)
+        self.conv1 = GCNConv(num_features, 8, bias=True)
+        self.conv2 = GCNConv(8, 4, bias=True)
 
         print(f"Hello~~~: {cat_cls_len}")
         print(f"Hello 2~~~: {cont_len}")
 
-        self.fc = torch.nn.Linear((len(cat_cls_len) + cont_len) * 32 + num_classes, num_classes)
+        self.fc = torch.nn.Linear((len(cat_cls_len) + cont_len) * 4 + 2 * num_classes, num_classes)
         self.type = type
 
         # TODO: linear layer for each categorical feature
@@ -70,3 +70,50 @@ class GraphNet(torch.nn.Module):
         for i in self.embedding_layer:
             i._apply(fn)
         return self
+
+class GraphNet_tempscale(torch.nn.Module):
+    def __init__(self, num_features, num_classes, cat_cls_len, cont_len, type=1):
+        super(GraphNet_tempscale, self).__init__()
+        self.cat_cls_len = cat_cls_len
+        self.cont_len = cont_len
+        self.conv1 = GCNConv(num_features, 16, bias=True)
+        self.conv2 = GCNConv(16, 8, bias=True)
+
+        self.fc = torch.nn.Linear((len(cat_cls_len) + cont_len) * 8 + 2 * num_classes, 1)
+        self.type = type
+
+        # TODO: linear layer for each categorical feature
+        self.embedding_layer = [
+            torch.nn.Linear(max(self.cat_cls_len), num_features) for _ in self.cat_cls_len
+        ]
+
+    def forward(self, data, vanilla_out, prob_dist=None):
+        num_x, cat_x, edge_index, edge_weight = data.num_x, data.cat_x, data.edge_index, data.edge_weights
+
+        x = [num_x]
+        for i in range(len(self.cat_cls_len)):
+            x.append(self.embedding_layer[i](cat_x[i]).unsqueeze(0))
+        x = torch.concatenate(x, dim=0).float()
+
+
+        # Apply the GCN layers
+        x = self.conv1(x, edge_index=edge_index, edge_weight=edge_weight)
+        x = F.relu(x)
+        x = self.conv2(x, edge_index=edge_index, edge_weight=edge_weight)
+        x = F.relu(x)
+        x = x.reshape(1, -1).repeat(len(vanilla_out), 1)
+        x = torch.cat([vanilla_out, x, prob_dist.repeat(x.shape[0], 1)], dim=-1)
+
+        x = self.fc(x)
+        x = F.softplus(x, beta=1.1)
+        # print(x)
+
+        return x
+
+    def _apply(self, fn):
+        super(GraphNet_tempscale, self)._apply(fn)
+        # Apply the linear embedding layer to the categorical features
+        for i in self.embedding_layer:
+            i._apply(fn)
+        return self
+

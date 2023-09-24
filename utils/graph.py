@@ -3,11 +3,14 @@ import numpy as np
 from utils.graph_embedding import get_mi_matrix, get_node2vec_embedding, get_nx_graph
 import torch
 from torch_geometric.utils import from_networkx
-from model.graph import GraphNet
+from model.graph import *
+from utils.calibration_loss_fn import *
 from utils.graph_embedding import get_batched_mi_matrix, get_batched_graph
 import torch.nn.functional as F
 from tqdm import tqdm
 from copy import deepcopy
+from utils.utils import *
+
 
 
 
@@ -204,7 +207,10 @@ class ColumnwiseGraphNet():
 
                 loss /= len(train_graph_dataset.created_batches)
                 loss_total += loss.item()
+
+                optimizer.zero_grad()
                 loss.backward(retain_graph=True)
+                optimizer.step()
 
                 with torch.no_grad():
                     # logging
@@ -219,7 +225,6 @@ class ColumnwiseGraphNet():
                     # print(f'calibrated acc is : {calibrated_acc / len(batched_train_y)}')
                     # print('')
 
-            optimizer.step()
             print(f'epoch {epoch} loss is {loss_total / len(train_graph_dataset.created_batches)}')
 
         self.model.requires_grad_(True)
@@ -235,6 +240,143 @@ class ColumnwiseGraphNet():
         estimated_out = source_out + gnn_out
         return estimated_out
 
+
+class ColumnwiseGraphNet_tempscaling():
+    def __init__(self, args, dataset, source_model):
+        self.args = args
+        self.dataset = dataset
+
+        self.model = source_model
+        self.model.requires_grad_(False)
+        self.type = 1
+
+        # parameters
+        self.gnn_epochs = self.args.posttrain_epochs
+        self.shrinkage_factor = 0.5
+        self.lr = self.args.posttrain_lr
+        self.num_batches = 50
+
+        # graph data
+        from data.graph_data import GraphDataset
+        self.train_graph_dataset = GraphDataset(args, dataset, type=self.type, num_batches=self.num_batches)
+
+        self.gnn = GraphNet_tempscale(
+            num_features=2,
+            num_classes=dataset.train_y.shape[1],
+            cat_cls_len=self.train_graph_dataset.cat_len_per_node,
+            cont_len=len(self.train_graph_dataset.cont_indices),
+            type=self.type,
+        ).to(args.device).float()
+
+
+        self.gnn.requires_grad_(True)
+        self.gnn.train()
+        self.model.requires_grad_(False)
+
+    def train_gnn(self):
+        # reg_loss_fn = CAGCN_loss()
+        loss_fn = FocalLoss(gamma=10)
+        reg_loss_fn = CAGCN_loss()
+
+        train_graph_dataset = self.train_graph_dataset
+        optimizer = torch.optim.AdamW(self.gnn.parameters(), lr=self.lr)
+
+        best_ece_score = np.inf
+        best_model = None
+        best_epoch = 0
+
+        for epoch in range(self.gnn_epochs):
+            loss_total = 0
+
+            bef_adapt_list = []
+            aft_adapt_list = []
+            vanilla_out_list = []
+            calibrated_out_list = []
+            label_list = []
+
+            for batched_train_x, batched_graph, batched_train_y in tqdm(
+                    zip(train_graph_dataset.created_batches, train_graph_dataset.created_graph_batches,
+                        train_graph_dataset.created_batches_cls)):
+                batched_train_x, batched_train_y = batched_train_x.to(self.args.device).float(), batched_train_y.to(
+                    self.args.device).float()
+                batched_graph = batched_graph.to(self.args.device)
+
+                with torch.no_grad():
+                    vanilla_out = self.model(batched_train_x).detach()
+                    # [0.1 0.2]
+
+                # prob distribution of y
+                prob_dist = torch.sum(batched_train_y, dim=0) / len(batched_train_y)
+
+                gnn_out = self.gnn(batched_graph, vanilla_out, prob_dist).squeeze()
+                gnn_out = gnn_out.repeat(vanilla_out.size(1), 1).transpose(0, 1)
+
+                estimated_y = torch.mul(vanilla_out, gnn_out)
+
+                # loss = loss_fn(estimated_y, batched_train_y)
+
+                estimated_y = F.softmax(estimated_y, dim=-1)
+                vanilla_out = F.softmax(vanilla_out, dim=-1)
+
+                # loss += 0.5 * reg_loss_fn(estimated_y, batched_train_y)
+
+                loss = reg_loss_fn(estimated_y, batched_train_y)
+
+                loss_total += loss.item()
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                # log batch accuaracy
+                bef_adapt = (torch.argmax(vanilla_out, dim=-1) == torch.argmax(batched_train_y, dim=-1)).sum().item() / len(batched_train_y)
+                aft_adapt = (torch.argmax(estimated_y, dim=-1) == torch.argmax(batched_train_y, dim=-1)).sum().item() / len(batched_train_y)
+
+                bef_adapt_list.append(bef_adapt)
+                aft_adapt_list.append(aft_adapt)
+
+                vanilla_out_list.extend(vanilla_out.detach().cpu().tolist())
+                calibrated_out_list.extend(estimated_y.detach().cpu().tolist())
+                label_list.extend(torch.argmax(batched_train_y, dim=-1).detach().cpu().tolist())
+
+            with torch.no_grad():
+                ece_loss_fn = ECELoss()
+                ece_loss_list = []
+                for valid_x, valid_y in self.dataset.valid_loader:
+                    valid_x, valid_y = valid_x.to(self.args.device), valid_y.to(self.args.device)
+                    estimated_y = self.model(valid_x).detach().cpu()
+                    prob_dist = torch.sum(valid_y, dim=0) / len(valid_y)
+                    calibrated_y = self.get_gnn_out(self.model, valid_x, prob_dist).detach().cpu()
+                    ece_loss = ece_loss_fn(calibrated_y.to(self.args.device), torch.argmax(valid_y, dim=-1))
+                    ece_loss_list.append(ece_loss.item())
+                ece_loss = np.sum(ece_loss_list)
+
+                if ece_loss < best_ece_score:
+                    best_epoch = epoch + 1
+                    # best_ece_score = ece_loss
+                    best_model = deepcopy(self.gnn)
+
+
+            print(f'epoch {epoch} loss is {loss_total / len(train_graph_dataset.created_batches)}')
+            print(f'epoch {epoch} bef_adapt is {np.mean(bef_adapt_list)}')
+            print(f'epoch {epoch} aft_adapt is {np.mean(aft_adapt_list)}')
+            print(f'epoch {epoch} ece is {ece_loss / len(self.dataset.valid_loader)}')
+
+        best_model.requires_grad_(False)
+        best_model.eval()
+        self.model.requires_grad_(True)
+        print('best model saved at epoch ', best_epoch)
+        return best_model
+
+    def get_gnn_out(self, model, batch, prob_dist):
+        from data.graph_data import GraphDataset
+        test_graph_data = GraphDataset.create_test_graph(self.args, self.dataset, batch)
+
+        vanilla_out = model(batch)
+        gnn_out = self.gnn(test_graph_data, vanilla_out, prob_dist)
+        estimated_y = torch.mul(vanilla_out, gnn_out.detach())
+        estimated_y = F.softmax(estimated_y, dim=-1)
+        return estimated_y
 
 
 # class ColumnwiseGraphNet_rowfeat():
