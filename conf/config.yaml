@@ -1,7 +1,7 @@
 ### model
 ## currently supported: MLP, TabNet, TabTransformer, FTTransformer
 ## supervised baseline: lr, knn, rf, xgboost, catboost
-model: MLP
+model: TabNet
 mlp:
   embedding: false
   num_enc_layers: 2
@@ -18,8 +18,8 @@ mlp:
 # folktables: state, time, time_state
 benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 dataset: cmc
-shift_type: categorical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0.1
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_severity: 0.3
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd
 
@@ -35,7 +35,7 @@ retrain: true
 epochs: 10
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-4
+train_lr: 2e-2
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
 
