@@ -145,14 +145,15 @@ class Dataset():
         self.shift_at = -1
 
         # print dataset info
-        train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
-        valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
-        test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
+        self.train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
+        print(f"self.train_counts: {self.train_counts}")
+        self.valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
+        self.test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
 
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")
-        logger.info(f"Class distribution - train {np.round(train_counts[1] / np.sum(train_counts[1]), 2)}, {train_counts}")
-        logger.info(f"Class distribution - valid {np.round(valid_counts[1] / np.sum(valid_counts[1]), 2)}, {valid_counts}")
-        logger.info(f"Class distribution - test {np.round(test_counts[1] / np.sum(test_counts[1]), 2)}, {test_counts}")
+        logger.info(f"Class distribution - train {np.round(self.train_counts[1] / np.sum(self.train_counts[1]), 2)}, {self.train_counts}")
+        logger.info(f"Class distribution - valid {np.round(self.valid_counts[1] / np.sum(self.valid_counts[1]), 2)}, {self.valid_counts}")
+        logger.info(f"Class distribution - test {np.round(self.test_counts[1] / np.sum(self.test_counts[1]), 2)}, {self.test_counts}")
 
 
     def get_shifted_column(self):

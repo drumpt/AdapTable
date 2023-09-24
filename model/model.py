@@ -457,6 +457,7 @@ class ColumnShiftHandler(nn.Module):
         out = self.middle_layer(torch.cat([out, vanilla_outputs], dim=-1))
         t = self.main_head(out)
         t = F.softplus(t)
+
         # print(f"t: {t}")
         # print(f"t.shape: {t.shape}")
         # print(f"vanilla_outputs.shape: {vanilla_outputs.shape}")
@@ -465,4 +466,13 @@ class ColumnShiftHandler(nn.Module):
         # # print(f"outputs: {outputs}")
         # # print(f"outputs.shape: {outputs.shape}")
         # return outputs + vanilla_outputs
-        return torch.mul(vanilla_outputs, t)
+        return torch.div(vanilla_outputs, t)
+        # return torch.mul(vanilla_outputs, t)
+
+
+    def get_temperature(self, shifted_inputs, vanilla_outputs):
+        out = self.input_layer(shifted_inputs)
+        out = self.middle_layer(torch.cat([out, vanilla_outputs], dim=-1))
+        t = self.main_head(out)
+        t = F.softplus(t)
+        return t

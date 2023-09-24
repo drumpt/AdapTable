@@ -366,7 +366,6 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         pseudo_label = torch.argmax(outputs, dim=-1)
         loss = F.cross_entropy(outputs, pseudo_label)
         loss.backward(retain_graph=True)
-
     if 'pl_csh' in args.method:
         global column_shift_handler
         outputs = column_shift_handler(x, outputs)
@@ -382,9 +381,7 @@ def forward_and_adapt(args, dataset, x, mask, model, optimizer):
         loss = F.cross_entropy(outputs[filter], pseudo_label[filter])
         # loss = softmax_entropy(outputs[filter]).mean()
         # print(f"loss: {loss}")
-        loss.backward(retain_graph=True)        
-
-
+        loss.backward(retain_graph=True)
     if 'ttt++' in args.method:
         # getting featuers
         z = model.get_feature(x)
@@ -609,16 +606,13 @@ def main(args):
 
     TARGET_PREDICTION_LIST, TARGET_CALIBRATED_PREDICTION_LIST = [], []
 
-    print(f"SOURCE_PREDICTION_LIST: {SOURCE_PREDICTION_LIST}")
-    print(f"SOURCE_PREDICTION_LIST: {SOURCE_CALIBRATED_PREDICTION_LIST}")
-
     ece_before = ece_loss_fn(torch.tensor(SOURCE_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
     ece_after = ece_loss_fn(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
     print(f"ece_before: {ece_before}")
     print(f"ece_after: {ece_after}")
 
-    print(f"np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1)}")
-    print(f"torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1).max(axis=-1)[0]}")
+    # print(f"np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1)}")
+    # print(f"torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1): {torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1).max(axis=-1)[0]}")
     reliability_plot(args, np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration1.png")
     reliability_plot(args, np.array(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_CALIBRATED_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration2.png")
 
@@ -768,31 +762,210 @@ def main(args):
 
             estimated_y = source_model(corrected_test)
         elif 'label_shift_handler' in args.method:
+            # source_model.eval()
             estimated_y = source_model(test_x)
+
+            # threshold = 0.8
+            # print(f"estimated_y before calibration: {estimated_y.argmax(dim=-1)}")
+            # tensor = torch.tensor([3, 1, 4, 1, 5, 9, 2, 6, 5, 3])
+
+            # # Define the value of k as a percentage (e.g., 10%)
+            # k_percent = 10
+
+            # # Calculate the threshold value for the top k% using percentile
+            # threshold = torch.percentile(tensor, 100 - k_percent)
+
+            # # Create a boolean mask to identify values greater than or equal to the threshold
+            # mask = tensor >= threshold
+
+            # # Get the indices of the values that meet the criteria (top k%)
+            # top_k_indices = torch.nonzero(mask, as_tuple=True)
+
+            # # Print the indices
+            # print(top_k_indices)
+
+            # source_model.train()
+            # prediction_list = []
+            # for _ in range(10):
+            #     dropout_estimated_y = source_model(test_x)
+            #     prediction_list.append(dropout_estimated_y.softmax(dim=-1).cpu().tolist())
+            # prediction_list = torch.tensor(prediction_list)
+            # # print(f"prediction_list: {prediction_list[0]}")
+            # # print(f"prediction_list.shape: {prediction_list.shape}")
+            # source_model.eval()
+
             if 'column_shift_handler' in args.method:
-                estimated_y = column_shift_handler(test_x, estimated_y)
+                calibrated_estimated_y = column_shift_handler(test_x, estimated_y)
+                # per_sample_temperature = -(calibrated_estimated_y.softmax(dim=-1) * calibrated_estimated_y.log_softmax(dim=-1)).sum(dim=-1)
+
+                # estimated_y = column_shift_handler(test_x, estimated_y)
+
+                # above_threshold = calibrated_estimated_y.softmax(dim=-1).max(dim=-1)[0] > threshold
+                # print(f"above_threshold: {above_threshold}")
+                # estimated_y[above_threshold.long()] = estimated_y[above_threshold.long()] / 0.001
+                # estimated_y[1 - above_threshold.long()] = estimated_y[1 - above_threshold.long()] / 1000
+
+                # print(f"estimated_y.softmax(dim=-1): {estimated_y.softmax(dim=-1).max(dim=-1)[0]}")
+
+                # model.train()
+
+
+                imb_ratio = np.max(dataset.train_counts[1]) / np.min(dataset.train_counts[1]) + 1e-6
+                # temperature = [imb_ratio / (imb_ratio - 1), 20])
+                # temperature = imb_ratio / (imb_ratio - 1)
+                temperature = 3
+                # per_sample_temperature = column_shift_handler.get_temperature(test_x, estimated_y)
+                per_sample_temperature = 1 / estimated_y.max(dim=-1, keepdim=True)[0]
+
+            
+                # per_sample_temperature = torch.mean(torch.var(prediction_list, dim=0), dim=-1, keepdim=True)
+                # mean_prediction = torch.mean(prediction_list, dim=0)
+                # per_sample_temperature = -(mean_prediction.softmax(dim=-1) * mean_prediction.log_softmax(dim=-1)).sum(dim=-1)
+                # print(f"per_sample_temperature: {per_sample_temperature.shape}")
+                # print(f"per_sample_temperature: {per_sample_temperature}")
+                # print(f"per_sample_temperature.shape: {per_sample_temperature.shape}")
+
+                # print(f"per_sample_temperature: {per_sample_temperature}")
+                # print(f"per_sample_temperature: {per_sample_temperature.shape}")
+
+                # temperature_threshold = torch.quantile(per_sample_temperature, 0.01 * (100 - 47.63) * 1) # top-k
+                temperature_upper_threshold = torch.quantile(per_sample_temperature, 0.5) # top-k
+                temperature_lower_threshold = torch.quantile(per_sample_temperature, 0.5) # top-k
+                pos_mask = (per_sample_temperature <= temperature_lower_threshold).long() # small temperature -> correct case
+                neg_mask = (per_sample_temperature >= temperature_upper_threshold).long() # large temperature -> incorrect case
+
+                # print(f"pos_mask: {pos_mask}")
+                # print(f"neg_mask: {neg_mask}")
+
+                # only for debugging
+                estimated_gt_list = []
+                gt_list = []
                 for i in range(len(estimated_y)):
-                    if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]):
-                        estimated_y[i] = estimated_y[i] / 0.01
-                    else:
-                        estimated_y[i] = estimated_y[i] / 100
+                    if pos_mask[i] or neg_mask[i]:
+                        if pos_mask[i]:
+                            estimated_gt_list.append(1)
+                        else:
+                            estimated_gt_list.append(0)
+                        gt_list.append(1 if (torch.argmax(estimated_y[i]) == torch.argmax(test_y[i])) == 1 else 0)
+                confusion_matrix_batch = confusion_matrix(gt_list, estimated_gt_list)
+                print(f"confusion_matrix_batch: {confusion_matrix_batch}")
+
+                for i in range(len(estimated_y)):
+                    # print(f"torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]): {torch.argmax(estimated_y[i]) == torch.argmax(test_y[i])}")
+                    print(f"estimated_y[{i}] before: {torch.argmax(estimated_y[i], dim=-1)}")
+                    if pos_mask[i]:
+                        if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]): # 맞춘 케이스
+                            print(f"true and temperature sharpening")
+                        else:
+                            print(f"false but temperature sharpening")
+
+                        estimated_y[i] = estimated_y[i] * temperature
+                        # if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]): # 맞춘 케이스
+                        #     estimated_y[i] = estimated_y[i] * temperature
+                        # print(f"estimated_y[i]: {estimated_y[i]}")
+                    elif neg_mask[i]:
+                        if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]): # 맞춘 케이스
+                            print(f"true but temperature smoothing")
+                        else:
+                            print(f"false and temperature smoothing") # 틀린 케이스
+
+                        estimated_y[i] = estimated_y[i] / temperature
+                        # if torch.argmax(estimated_y[i]) != torch.argmax(test_y[i]): # 틀린  케이스
+                        #     estimated_y[i] = estimated_y[i] / temperature
+                        # print(f"estimated_y[i]: {estimated_y[i]}")
+                    print(f"estimated_y[{i}] after: {torch.argmax(estimated_y[i], dim=-1)}")
+
+                # # estimated_y[mask.long()] = estimated_y[mask.long()] * temperature
+                # # estimated_y[1 - mask.long()] = estimated_y[1 - mask.long()] / temperature
+
+                # print(f"estimated_y after: {estimated_y}")
+
+                # for i in range(len(estimated_y)):
+                #     if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]): # correct case
+                #         # estimated_y[i] = estimated_y[i] * temperature
+                #         if not pos_mask[i]:
+                #             estimated_y[i] = estimated_y[i] * temperature
+                #         # estimated_y[i] = estimated_y[i] * np.random.choice([1 / temperature, temperature])
+                #         # estimated_y[i] = estimated_y[i] * np.random.choice([1, temperature])
+                #     else:
+                #         # estimated_y[i] = estimated_y[i] / temperature
+                #         if not neg_mask[i]:
+                #             estimated_y[i] = estimated_y[i] / temperature
+                #         # estimated_y[i] = estimated_y[i] * np.random.choice([1 / temperature, temperature])
+                #         # estimated_y[i] = estimated_y[i] * np.random.choice([1 / temperature, 1])
+            # print(f"estimated_y after calibration: {estimated_y.argmax(dim=-1)}")
+
+            # threshold_pos = 0.95
+            # filter_pos = estimated_y.softmax(dim=-1).max(dim=-1)[0] > threshold_pos
+            # threshold_neg = 0.5
+            # filter_neg = estimated_y.softmax(dim=-1).max(dim=-1)[0] < threshold_neg
+            # estimated_y[filter_pos] = estimated_y[filter_pos] / 0.1
+            # estimated_y[filter_neg] = estimated_y[filter_neg] / 10
+
+            # # print(f"outputs.softmax(dim=-1).max(dim=-1)[0]: {outputs.softmax(dim=-1).max(dim=-1)[0]}")
+            # # print(f"outputs[filter]: {outputs[filter].shape}")
+            # # print(f"pseudo_label[filter]: {pseudo_label[filter].shape}")
+
+            # loss = F.cross_entropy(outputs[filter], pseudo_label[filter])
+            # # loss = softmax_entropy(outputs[filter]).mean()
+            # # print(f"loss: {loss}")
+            # loss.backward(retain_graph=True)
+
+            # if 'column_shift_handler' in args.method:
+            #     estimated_y = column_shift_handler(test_x, estimated_y)
+            #     for i in range(len(estimated_y)):
+            #         if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]):
+            #             estimated_y[i] = estimated_y[i] / 0.01
+            #         else:
+            #             estimated_y[i] = estimated_y[i] / 100
 
                 # calibrated_y = column_shift_handler(test_x, estimated_y)
                 # print(f"calibrated_y: {calibrated_y}")
 
 
-            print(f"estimated_y before label shift handeling: {estimated_y}")
-            # estimated_y = torch.log(F.normalize(F.softmax(estimated_y, dim=-1) * F.softmax(calibrated_y, dim=-1) / source_label_dist, p=1, dim=-1))
+            # before_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1)), p=1, dim=-1), dim=0)
 
-            before_div_source = torch.mean(F.normalize((F.softmax(estimated_y, dim=-1)), p=1, dim=-1), dim=0)
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
-            target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
-            cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
-            estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
-            # estimated_y = torch.log(calibrated_probability)
+            # print(f"before_div_source: {before_div_source}")
 
-            print(f"estimated_y after label shift handling: {estimated_y}")
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
+
+            # calibrated_probability_2 = F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
+
+            # print(f"F.softmax(estimated_y, dim=-1): {F.softmax(estimated_y, dim=-1)}")
+            # print(f"F.softmax(estimated_y, dim=-1).argmax(dim=-1): {F.softmax(estimated_y, dim=-1).argmax(dim=-1)}")
+            # print(f"source_label_dist: {source_label_dist}")
+
+            # calibrated_probability_3 = F.normalize((F.softmax(estimated_y, dim=-1) * before_div_source), p=1, dim=-1)
+
+            # print(f"ori calibrated_probability: {calibrated_probability.argmax(dim=-1)}")
+            # print(f"ori calibrated_probability_2: {calibrated_probability_2.argmax(dim=-1)}")
+            # print(f"ori calibrated_probability_3: {calibrated_probability_3.argmax(dim=-1)}")
+
+            # target_label_dist = (1 - 0.5) * target_label_dist + 0.5 * torch.mean(calibrated_probability, dim=0, keepdim=True)
+
+            # print(f"estimated target dist: {target_label_dist}")
+            # print(f"true target dist: {torch.mean(test_y, dim=0)}")
+
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
+
+            # print(f"second calibrated_probability: {calibrated_probability.argmax(dim=-1)}")
+
+
+            # cal_use_ratio = F.tanh(F.kl_div(torch.log(target_label_dist), source_label_dist) * 100)
+
+            # print(f"cal use ratio: {cal_use_ratio}")
+
+
+            # estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
+            # # estimated_y = torch.log(calibrated_probability)
+
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
+            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
+            # calibrated_probability = F.softmax(estimated_y, dim=-1)
+
+            estimated_y = (ori_estimated_y.softmax(dim=-1) / 2 + calibrated_probability / 2).log()
+
+            # print(f"estimated_y after label shift handling: {estimated_y.argmax(dim=-1)}")
 
             # current_target_label_dist = torch.mean(test_y, dim=0, keepdim=True)
             # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * current_target_label_dist / source_label_dist), p=1, dim=-1)
