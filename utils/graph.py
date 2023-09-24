@@ -275,15 +275,20 @@ class ColumnwiseGraphNet_tempscaling():
 
     def train_gnn(self):
         # reg_loss_fn = CAGCN_loss()
-        loss_fn = FocalLoss(gamma=10)
+        loss_fn = FocalLoss(gamma=5)
+        # loss_fn = nn.MSELoss()
         reg_loss_fn = CAGCN_loss()
 
         train_graph_dataset = self.train_graph_dataset
         optimizer = torch.optim.AdamW(self.gnn.parameters(), lr=self.lr)
+        self.model.requires_grad_(False)
 
         best_ece_score = np.inf
         best_model = None
         best_epoch = 0
+        patience = 10
+
+        num_iter = 0
 
         for epoch in range(self.gnn_epochs):
             loss_total = 0
@@ -301,6 +306,8 @@ class ColumnwiseGraphNet_tempscaling():
                     self.args.device).float()
                 batched_graph = batched_graph.to(self.args.device)
 
+                num_iter += 1
+
                 with torch.no_grad():
                     vanilla_out = self.model(batched_train_x).detach()
                     # [0.1 0.2]
@@ -309,24 +316,28 @@ class ColumnwiseGraphNet_tempscaling():
                 prob_dist = torch.sum(batched_train_y, dim=0) / len(batched_train_y)
 
                 gnn_out = self.gnn(batched_graph, vanilla_out, prob_dist).squeeze()
-                gnn_out = gnn_out.repeat(vanilla_out.size(1), 1).transpose(0, 1)
+                # gnn_out = gnn_out.repeat(vanilla_out.size(1), 1).transpose(0, 1)
 
                 estimated_y = torch.mul(vanilla_out, gnn_out)
-
-                # loss = loss_fn(estimated_y, batched_train_y)
-
                 estimated_y = F.softmax(estimated_y, dim=-1)
                 vanilla_out = F.softmax(vanilla_out, dim=-1)
 
-                # loss += 0.5 * reg_loss_fn(estimated_y, batched_train_y)
-
-                loss = reg_loss_fn(estimated_y, batched_train_y)
+                loss = loss_fn(estimated_y, batched_train_y)
+                reg_loss = reg_loss_fn(estimated_y, batched_train_y) * 0.5
+                # print(f'original loss is : {loss.item()}')
+                # print(f'regularized loss is : {reg_loss.item()}')
+                loss += reg_loss
+                # loss = reg_loss_fn(estimated_y, batched_train_y)
 
                 loss_total += loss.item()
 
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
+                # batch-wise update
+                if num_iter % self.args.test_batch_size == 0:
+                    loss.backward(retain_graph=True)
+                    optimizer.step()
+                    optimizer.zero_grad()
+                else:
+                    loss.backward(retain_graph=True)
 
                 # log batch accuaracy
                 bef_adapt = (torch.argmax(vanilla_out, dim=-1) == torch.argmax(batched_train_y, dim=-1)).sum().item() / len(batched_train_y)
@@ -352,9 +363,15 @@ class ColumnwiseGraphNet_tempscaling():
                 ece_loss = np.sum(ece_loss_list)
 
                 if ece_loss < best_ece_score:
+                    patience = 5
                     best_epoch = epoch + 1
-                    # best_ece_score = ece_loss
+                    best_ece_score = ece_loss
                     best_model = deepcopy(self.gnn)
+                else:
+                    patience -= 1
+
+                if patience == 0:
+                    break
 
 
             print(f'epoch {epoch} loss is {loss_total / len(train_graph_dataset.created_batches)}')
@@ -368,15 +385,19 @@ class ColumnwiseGraphNet_tempscaling():
         print('best model saved at epoch ', best_epoch)
         return best_model
 
-    def get_gnn_out(self, model, batch, prob_dist):
+    def get_gnn_out(self, model, batch, prob_dist, wo_softmax=False):
         from data.graph_data import GraphDataset
         test_graph_data = GraphDataset.create_test_graph(self.args, self.dataset, batch)
 
         vanilla_out = model(batch)
         gnn_out = self.gnn(test_graph_data, vanilla_out, prob_dist)
         estimated_y = torch.mul(vanilla_out, gnn_out.detach())
-        estimated_y = F.softmax(estimated_y, dim=-1)
-        return estimated_y
+
+        if wo_softmax:
+            return estimated_y
+        else:
+            estimated_y = F.softmax(estimated_y, dim=-1)
+            return estimated_y
 
 
 # class ColumnwiseGraphNet_rowfeat():

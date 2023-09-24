@@ -10,8 +10,9 @@ class CAGCN_loss(nn.Module):
         correct_idx = (torch.argmax(probs, dim=-1) == torch.argmax(gt_label, dim=-1))
         incorrect_idx = (torch.argmax(probs, dim=-1) != torch.argmax(gt_label, dim=-1))
 
-        largest_val = torch.max(probs, dim=-1)[0]
-        second_largest_val = probs[torch.argsort(probs, dim=-1, descending=True)[:, 0]][:, -2]
+        top2_probs, top2_indices = torch.topk(probs, k=2, dim=1)
+        largest_val = top2_probs[:, 0]
+        second_largest_val = top2_probs[:, 1]
 
         correct_loss = 1 / probs.shape[1] * (torch.sum(
             1 - largest_val[correct_idx] + second_largest_val[correct_idx])
@@ -20,6 +21,7 @@ class CAGCN_loss(nn.Module):
             largest_val[incorrect_idx] - second_largest_val[incorrect_idx])
         )
         loss = correct_loss + incorrect_loss
+        loss /= len(probs)
         return loss
 
 

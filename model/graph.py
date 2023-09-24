@@ -9,8 +9,8 @@ class GraphNet(torch.nn.Module):
         super(GraphNet, self).__init__()
         self.cat_cls_len = cat_cls_len
         self.cont_len = cont_len
-        self.conv1 = GCNConv(num_features, 8, bias=True)
-        self.conv2 = GCNConv(8, 4, bias=True)
+        self.conv1 = GCNConv(num_features, 4, bias=True)
+        # self.conv2 = GCNConv(8, 4, bias=True)
 
         print(f"Hello~~~: {cat_cls_len}")
         print(f"Hello 2~~~: {cont_len}")
@@ -46,7 +46,7 @@ class GraphNet(torch.nn.Module):
         # Apply the GCN layers
         x = self.conv1(x, edge_index=edge_index, edge_weight=edge_weight)
         x = F.relu(x)
-        x = self.conv2(x, edge_index=edge_index, edge_weight=edge_weight)
+        # x = self.conv2(x, edge_index=edge_index, edge_weight=edge_weight)
         x = x.reshape(1, -1).repeat(len(vanilla_out), 1)
         x = torch.cat([vanilla_out, x], dim=-1)
 
@@ -79,7 +79,7 @@ class GraphNet_tempscale(torch.nn.Module):
         self.conv1 = GCNConv(num_features, 16, bias=True)
         self.conv2 = GCNConv(16, 8, bias=True)
 
-        self.fc = torch.nn.Linear((len(cat_cls_len) + cont_len) * 8 + 2 * num_classes, 1)
+        self.fc = torch.nn.Linear((len(cat_cls_len) + cont_len) * 8 + 2 * num_classes, num_classes)
         self.type = type
 
         # TODO: linear layer for each categorical feature

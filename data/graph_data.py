@@ -62,7 +62,7 @@ class GraphDataset(torch.utils.data.Dataset):
             cls = self.cls.clone()
 
             # add gaussian noise to the continuous features
-            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * 0.01
+            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * np.random.uniform(0, 0.1)
 
             sorted_feat = feat[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
             sorted_cls = cls[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
@@ -87,7 +87,7 @@ class GraphDataset(torch.utils.data.Dataset):
             cls = self.cls.clone()
 
             # add gaussian noise to the continuous features
-            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * 0.01
+            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * np.random.uniform(0, 0.1)
 
             sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
             sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
@@ -310,6 +310,10 @@ class GraphDataset(torch.utils.data.Dataset):
 
         # GCNConv cannot handle negaive weights
         matrix = torch.abs(matrix)
+
+        # make lower-80% weights to zero
+        matrix = torch.where(matrix < torch.quantile(matrix, 0.5), torch.zeros_like(matrix), matrix)
+
 
         # print('maximum : ', torch.max(matrix))
         # print('minimum : ', torch.min(matrix))

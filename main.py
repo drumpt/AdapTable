@@ -183,9 +183,9 @@ def posttrain(args, model, column_shift_handler, column_shift_handler_optimizer,
     device = args.device
     source_model, best_loss, best_acc = None, float('inf'), 0
     regression = True if dataset.out_dim == 1 else False
-    from utils.calibration_loss_fn import cagcn_loss
-    loss_fn = cagcn_loss
-    # loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
+    from utils.calibration_loss_fn import CAGCN_loss
+    # loss_fn = CAGCN_loss()
+    loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
 
     source_mean_x = torch.zeros(1, dataset.in_dim)
     for train_x, train_y in dataset.train_loader:
@@ -320,17 +320,15 @@ def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
             # if 'threshold' in args.method:
             optimizer.zero_grad()
             loss = F.mse_loss(estimated_test_x * mask, x * mask, reduction='none')
-            loss_idx = torch.where(loss < 2 * np.log(outputs.shape[-1]))
-            loss = loss[loss_idx].mean()
             loss.backward(retain_graph=True)
-            optimizer.first_step()
+            optimizer.step()
 
-            new_estimated_x = model.get_recon_out(x)
-            loss_second = F.mse_loss(new_estimated_x * mask, x * mask, reduction='none')
-            loss_idx = torch.where(loss_second < 2 * np.log(outputs.shape[-1]))
-            loss_second = loss_second[loss_idx].mean()
-            loss_second.backward(retain_graph=True)
-            optimizer.second_step()
+            # new_estimated_x = model.get_recon_out(x)
+            # loss_second = F.mse_loss(new_estimated_x * mask, x * mask, reduction='none')
+            # loss_idx = torch.where(loss_second < 2 * np.log(outputs.shape[-1]))
+            # loss_second = loss_second[loss_idx].mean()
+            # loss_second.backward(retain_graph=True)
+            # optimizer.second_step()
             return
         elif 'double_masking' in args.method:
             with torch.no_grad():
@@ -363,6 +361,29 @@ def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
         else:
             loss = softmax_entropy(outputs / args.temp).mean()
             loss.backward(retain_graph=True)
+    if 'sam' in args.method:
+        # if 'threshold' in args.method:
+        optimizer.zero_grad()
+        if 'tempscale_graph' in args.method:
+            prob_dist = torch.sum(y, dim=0) / len(y)
+            gnn_out = graph_class.get_gnn_out(model, x, prob_dist, wo_softmax=True)
+            loss = softmax_entropy(gnn_out).mean()
+
+            loss.backward(retain_graph=True)
+            optimizer.first_step()
+
+            gnn_second_out = graph_class.get_gnn_out(model, x, prob_dist, wo_softmax=True)
+            loss_second = softmax_entropy(gnn_second_out).mean()
+            loss_second.backward(retain_graph=True)
+            optimizer.second_step()
+
+            return
+        else:
+            loss = softmax_entropy(outputs / args.temp).mean()
+        loss.backward(retain_graph=True)
+        optimizer.step()
+        return
+
     if 'memo' in args.method:
         x = generate_augmentation(x, args)
         outputs = model(x)
@@ -857,7 +878,6 @@ def main(args):
                 # per_sample_temperature = 1 / calibrated_estimated_y.max(dim=-1, keepdim=True)[0]
                 per_sample_temperature = -(calibrated_estimated_y.softmax(dim=-1) * calibrated_estimated_y.log_softmax(dim=-1)).sum(dim=-1)
                 # per_sample_temperature = -(estimated_y.softmax(dim=-1) * estimated_y.log_softmax(dim=-1)).sum(dim=-1)
-
             
                 # per_sample_temperature = torch.mean(torch.var(prediction_list, dim=0), dim=-1, keepdim=True)
                 # source_model.train()
@@ -971,10 +991,78 @@ def main(args):
             #             estimated_y[i] = estimated_y[i] / 100
                 # estimated_y = column_shift_handler(test_x, estimated_y)
             if 'tempscale_graph' in args.method:
-                prob_dist = torch.sum(test_y, dim=0) / len(test_y)
-                estimated_y = graph_class.get_gnn_out(source_model, test_x, prob_dist)
 
-            TARGET_CALIBRATED_PREDICTION_LIST.extend(estimated_y.detach().cpu().tolist())
+                # estimate target distribution from source model
+                before_div_source = torch.mean(F.softmax(estimated_y, dim=-1), dim=0)
+                calibrated_probability = F.normalize(
+                    (F.softmax(estimated_y, dim=-1) * before_div_source / source_label_dist), p=1, dim=-1)
+                target_label_dist = torch.mean(calibrated_probability, dim=0, keepdim=True)
+                logger.info(f'estimated tareget label distribution: {target_label_dist}')
+                logger.info(f'true target label distribution: {torch.mean(test_y, dim=0, keepdim=True)}')
+
+                prob_dist = torch.sum(test_y, dim=0) / len(test_y)
+                # ori_estimated_y = original_source_model(test_x)
+                ori_estimated_y = graph_class.get_gnn_out(original_source_model, test_x, target_label_dist, wo_softmax=True)
+                calibrated_estimated_y = graph_class.get_gnn_out(source_model, test_x, target_label_dist, wo_softmax=True)
+
+                imb_ratio = np.max(dataset.train_counts[1]) / np.min(dataset.train_counts[1]) + 1e-6
+
+                temperature = 3
+
+                uncertainty = -(
+                            calibrated_estimated_y.softmax(dim=-1) * calibrated_estimated_y.log_softmax(dim=-1)).sum(
+                    dim=-1)
+
+                uncertainty_upper_threshold = torch.quantile(uncertainty, 0.8)  # top-k
+                uncertainty_lower_threshold = torch.quantile(uncertainty, 0.2)  # top-k
+
+                pos_mask = (uncertainty <= uncertainty_lower_threshold).long()  # small temperature -> correct case
+                neg_mask = (uncertainty >= uncertainty_upper_threshold).long()  # large temperature -> incorrect case
+
+                for i in range(len(estimated_y)):
+                    if pos_mask[i]:
+                        estimated_y[i] = estimated_y[i] * temperature
+                    elif neg_mask[i]:
+                        estimated_y[i] = estimated_y[i] / temperature
+
+                # target_label_dist = torch.sum(test_y, dim=0) / len(test_y)
+                # target_label_dist = F.softmax(estimated_y, dim=-1)
+
+                calibrated_probability = F.normalize(
+                    (F.softmax(estimated_y, dim=-1) * target_label_dist / source_label_dist), p=1, dim=-1)
+
+                estimated_y = (ori_estimated_y.softmax(dim=-1) / 2 + calibrated_probability / 2).log()
+
+            # per_sample_temperature = -(calibrated_estimated_y.softmax(dim=-1) * calibrated_estimated_y.log_softmax(dim=-1)).sum(dim=-1)
+                # temperature_upper_threshold = torch.quantile(per_sample_temperature, 0.75)  # top-k
+                # temperature_lower_threshold = torch.quantile(per_sample_temperature, 0.25)  # top-k
+                # pos_mask = (
+                #             per_sample_temperature <= temperature_lower_threshold).long()  # small temperature -> correct case
+                # neg_mask = (
+                #             per_sample_temperature >= temperature_upper_threshold).long()  # large temperature -> incorrect case
+                #
+                # # print(f"pos_mask: {pos_mask}")
+                # # print(f"neg_mask: {neg_mask}")
+                #
+                # # only for debugging
+                # estimated_gt_list = []
+                # gt_list = []
+                # for i in range(len(estimated_y)):
+                #     if pos_mask[i] or neg_mask[i]:
+                #         if pos_mask[i]:
+                #             estimated_gt_list.append(1)
+                #         else:
+                #             estimated_gt_list.append(0)
+                #         gt_list.append(1 if (torch.argmax(estimated_y[i]) == torch.argmax(test_y[i])) == 1 else 0)
+                # temperature = 3
+                # for i in range(len(estimated_y)):
+                #     if pos_mask[i]:
+                #         estimated_y[i] = estimated_y[i] * temperature
+                #     elif neg_mask[i]:
+                #         estimated_y[i] = estimated_y[i] / temperature
+            #
+            #
+            # TARGET_CALIBRATED_PREDICTION_LIST.extend(estimated_y.detach().cpu().tolist())
 
             # for i in range(len(estimated_y)):
             #     if torch.argmax(estimated_y[i]) == torch.argmax(test_y[i]):
@@ -1021,16 +1109,24 @@ def main(args):
             # estimated_y = torch.log(cal_use_ratio * calibrated_probability + (1 - cal_use_ratio) * F.softmax(estimated_y, dim=-1))
             # # estimated_y = torch.log(calibrated_probability)
 
-            calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
+            # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
             # calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
             # calibrated_probability = F.softmax(estimated_y, dim=-1)
 
-            estimated_y = (ori_estimated_y.softmax(dim=-1) / 2 + calibrated_probability / 2).log()
+            # estimated_y = (ori_estimated_y.softmax(dim=-1) / 2 + calibrated_probability / 2).log()
+            TARGET_CALIBRATED_PREDICTION_LIST.extend(estimated_y.detach().cpu().tolist())
 
             # print(f"estimated_y after label shift handling: {estimated_y.argmax(dim=-1)}")
+        elif 'tempscale_graph' in args.method and 'label_shift_handler' not in args.method:
+            prob_dist = torch.sum(test_y, dim=0) / len(test_y)
+            estimated_y = graph_class.get_gnn_out(source_model, test_x, prob_dist)
 
+            TARGET_CALIBRATED_PREDICTION_LIST.extend(estimated_y.detach().cpu().tolist())
+            estimated_y = source_model(test_x)
         else:
             estimated_y = source_model(test_x)
+            TARGET_CALIBRATED_PREDICTION_LIST.extend(estimated_y.detach().cpu().tolist())
+
 
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
