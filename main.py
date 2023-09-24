@@ -784,15 +784,15 @@ def main(args):
             # # Print the indices
             # print(top_k_indices)
 
-            # source_model.train()
-            # prediction_list = []
-            # for _ in range(10):
-            #     dropout_estimated_y = source_model(test_x)
-            #     prediction_list.append(dropout_estimated_y.softmax(dim=-1).cpu().tolist())
-            # prediction_list = torch.tensor(prediction_list)
-            # # print(f"prediction_list: {prediction_list[0]}")
-            # # print(f"prediction_list.shape: {prediction_list.shape}")
-            # source_model.eval()
+            source_model.train()
+            prediction_list = []
+            for _ in range(10):
+                dropout_estimated_y = source_model(test_x)
+                prediction_list.append(dropout_estimated_y.softmax(dim=-1).cpu().tolist())
+            prediction_list = torch.tensor(prediction_list)
+            # print(f"prediction_list: {prediction_list[0]}")
+            # print(f"prediction_list.shape: {prediction_list.shape}")
+            source_model.eval()
 
             if 'column_shift_handler' in args.method:
                 calibrated_estimated_y = column_shift_handler(test_x, estimated_y)
@@ -815,6 +815,7 @@ def main(args):
                 # temperature = imb_ratio / (imb_ratio - 1)
                 temperature = 3
                 # per_sample_temperature = column_shift_handler.get_temperature(test_x, estimated_y)
+                # per_sample_temperature = 1 / calibrated_estimated_y.max(dim=-1, keepdim=True)[0]
                 per_sample_temperature = 1 / estimated_y.max(dim=-1, keepdim=True)[0]
 
             
