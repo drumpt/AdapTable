@@ -18,6 +18,7 @@ class GraphDataset(torch.utils.data.Dataset):
         self.feat = torch.FloatTensor(dataset.train_x).type(torch.float32).to(args.device)
         self.cls = torch.tensor(dataset.train_y).to(args.device)
         self.num_batches = len(self.feat) // args.test_batch_size * 2
+        self.dataset = dataset
 
         if hasattr(dataset, 'input_one_hot_encoder'):
             self.cat_len_per_node = [len(category) for category in dataset.input_one_hot_encoder.categories_]
@@ -40,10 +41,10 @@ class GraphDataset(torch.utils.data.Dataset):
         self.created_batches_cls = []
         self.mi_idx = self.cont_indices + self.cat_idx_per_node
         self.type = type
+        print(f'type of dataset is : {type}')
 
-
-        self.preprocessing()
-
+        self.construct_correlated_batches()
+        self.construct_graph_batches()
 
     def construct_correlated_batches(self):
         num_batches = self.num_batches
@@ -52,68 +53,74 @@ class GraphDataset(torch.utils.data.Dataset):
         batch_size = self.args.test_batch_size
         classes = torch.unique(labels, return_counts=False)
 
+        for train_x, train_y in self.dataset.posttrain_loader:
+            train_x, train_y = train_x.to(self.args.device), train_y.to(self.args.device)
+            self.created_batches.append(train_x)
+            self.created_batches_cls.append(train_y)
+
+
         # random permute cont indices:
-        random_cont_indices = np.random.permutation(self.cont_indices)
-        random_cat_indices = np.random.permutation(self.cat_idx_per_node)
+        # random_cont_indices = np.random.permutation(self.cont_indices)
+        # random_cat_indices = np.random.permutation(self.cat_idx_per_node)
+        #
+        # for cat_idx in random_cat_indices:
+        #     # sort features by cat_idx
+        #     feat = self.feat.clone()
+        #     cls = self.cls.clone()
+        #
+        #     # # add gaussian noise to the continuous features
+        #     # feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * np.random.uniform(0, 0.1)
+        #
+        #     sorted_feat = feat[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
+        #     sorted_cls = cls[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
+        #
+        #     # split features by cat_idx
+        #     split_feat = torch.split(sorted_feat, self.args.test_batch_size)
+        #     split_cls = torch.split(sorted_cls, self.args.test_batch_size)
+        #
+        #     if len(sorted_feat) % self.args.test_batch_size != 0:
+        #         split_feat = split_feat[:-1]
+        #         split_cls = split_cls[:-1]
+        #     self.created_batches.extend(list(split_feat))
+        #     self.created_batches_cls.extend(list(split_cls))
+        #
+        #     # random select at maximum 100 batches from self.created_batches
+        #     if len(self.created_batches) > self.num_batches:
+        #         break
+        #
+        # for cont_idx in random_cont_indices:
+        #     # sort features by cont_idx
+        #     feat = self.feat.clone()
+        #     cls = self.cls.clone()
+        #
+        #     # # add gaussian noise to the continuous features
+        #     # feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * np.random.uniform(0, 0.1)
+        #
+        #     sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
+        #     sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
+        #
+        #     # split features by cont_idx
+        #     split_feat = torch.split(sorted_feat, self.args.test_batch_size)
+        #     split_cls = torch.split(sorted_cls, self.args.test_batch_size)
+        #
+        #     if len(sorted_feat) % self.args.test_batch_size != 0:
+        #         split_feat = split_feat[:-1]
+        #         split_cls = split_cls[:-1]
+        #
+        #     # TODO: add robustness to the batch - ex. Gaussian noise
+        #     self.created_batches.extend(list(split_feat))
+        #     self.created_batches_cls.extend(list(split_cls))
+        #
+        #     # random select at maximum 100 batches from self.created_batches
+        #     if len(self.created_batches) > self.num_batches:
+        #         break
 
-        for cat_idx in random_cat_indices:
-            # sort features by cat_idx
-            feat = self.feat.clone()
-            cls = self.cls.clone()
 
-            # add gaussian noise to the continuous features
-            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * np.random.uniform(0, 0.1)
-
-            sorted_feat = feat[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
-            sorted_cls = cls[torch.argsort(torch.argmax(self.feat[:, cat_idx], dim=-1))]
-
-            # split features by cat_idx
-            split_feat = torch.split(sorted_feat, self.args.test_batch_size)
-            split_cls = torch.split(sorted_cls, self.args.test_batch_size)
-
-            if len(sorted_feat) % self.args.test_batch_size != 0:
-                split_feat = split_feat[:-1]
-                split_cls = split_cls[:-1]
-            self.created_batches.extend(list(split_feat))
-            self.created_batches_cls.extend(list(split_cls))
-
-            # random select at maximum 100 batches from self.created_batches
-            if len(self.created_batches) > self.num_batches:
-                break
-
-        for cont_idx in random_cont_indices:
-            # sort features by cont_idx
-            feat = self.feat.clone()
-            cls = self.cls.clone()
-
-            # add gaussian noise to the continuous features
-            feat[:, self.cont_indices] += torch.randn(feat[:, self.cont_indices].shape).to(self.args.device) * np.random.uniform(0, 0.1)
-
-            sorted_feat = feat[torch.argsort(self.feat[:, cont_idx])]
-            sorted_cls = cls[torch.argsort(self.feat[:, cont_idx])]
-
-            # split features by cont_idx
-            split_feat = torch.split(sorted_feat, self.args.test_batch_size)
-            split_cls = torch.split(sorted_cls, self.args.test_batch_size)
-
-            if len(sorted_feat) % self.args.test_batch_size != 0:
-                split_feat = split_feat[:-1]
-                split_cls = split_cls[:-1]
-
-            # TODO: add robustness to the batch - ex. Gaussian noise
-            self.created_batches.extend(list(split_feat))
-            self.created_batches_cls.extend(list(split_cls))
-
-            # random select at maximum 100 batches from self.created_batches
-            if len(self.created_batches) > self.num_batches:
-                break
-
-
-        # random select batches
-        if len(self.created_batches) > self.num_batches:
-            idx = np.random.permutation(len(self.created_batches))
-            self.created_batches = [self.created_batches[i] for i in idx[:self.num_batches]]
-            self.created_batches_cls = [self.created_batches_cls[i] for i in idx[:self.num_batches]]
+        # # random select batches
+        # if len(self.created_batches) > self.num_batches:
+        #     idx = np.random.permutation(len(self.created_batches))
+        #     self.created_batches = [self.created_batches[i] for i in idx[:self.num_batches]]
+        #     self.created_batches_cls = [self.created_batches_cls[i] for i in idx[:self.num_batches]]
 
         # random permutation
         idx = np.random.permutation(len(self.created_batches))
@@ -125,38 +132,15 @@ class GraphDataset(torch.utils.data.Dataset):
             print(f'cls distribution of batch [{idx}/{len(self.created_batches_cls)}], {np.unique(np_cls, return_counts=True)}')
 
 
-
-    def preprocessing(self):
-        self.construct_correlated_batches()
-        self.construct_graph_batches()
-
     def construct_graph_batches(self):
         # create graph batches
         self.created_graph_batches = []
 
         for batch_idx, batch in enumerate(self.created_batches):
             print(f'currently : {batch_idx} / {len(self.created_batches)}')
-            # create graph
-
-            if self.type in [0]: # type 0: mutual info. as adj. matrix + node as cols + node feature as stats
-                mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
-                numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
-                    args=self.args, batch=batch, mi_idx=self.mi_idx
-                )
-            elif self.type in [1]: # type 1: correlation info. as adj. matrix + node as cols  + node feature as stats
-                mi_matrix = GraphDataset.get_correlation_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
-                numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
-                    args=self.args, batch=batch, mi_idx=self.mi_idx
-                )
-            elif self.type in [2]:# correlation info. as adj. matrix + node as cols  + shift as stats
-                mi_matrix = GraphDataset.get_correlation_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
-                numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
-                    args=self.args, batch=batch, mi_idx=self.mi_idx
-                )
-                print('type 2')
-            else:
-                raise NotImplementedError
-
+            mi_matrix, numerical_node_feat, categorical_node_feat = GraphDataset.get_features(
+                args=self.args, batch=batch, mi_idx=self.mi_idx, type=self.type
+            )
             num_nodes = mi_matrix.shape[0]
             edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
             print('max of edge_weights : ', edge_weights.max())
@@ -165,7 +149,6 @@ class GraphDataset(torch.utils.data.Dataset):
 
             graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t,
                               edge_weights=edge_weights)
-
             self.created_graph_batches.append(graph_data)
 
 
@@ -225,42 +208,13 @@ class GraphDataset(torch.utils.data.Dataset):
 
         mi_idx = cont_indices + cat_idx_per_node
 
-        # if type in [0]:  # type 0: mutual info. as adj. matrix + node as cols + node feature as stats
-        #     mi_matrix = GraphDataset.get_mi_matrix(args=args, batch=batch, idx_lists=mi_idx)
-        #     numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
-        #         args=args, batch=batch, mi_idx=mi_idx
-        #     )
-        # elif type in [1]:  # type 1: correlation info. as adj. matrix + node as cols  + node feature as stats
-
-        mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
-        numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
-            args=args, batch=batch, mi_idx=mi_idx
+        mi_matrix, numerical_node_feat, categorical_node_feat = GraphDataset.get_features(
+            args=args, batch=batch, mi_idx=mi_idx, type=type
         )
 
-        # elif type in [2]:  # correlation info. as adj. matrix + node as cols  + shift as stats
-        #     mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
-        #     numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
-        #         args=args, batch=batch, mi_idx=mi_idx
-        #     )
-        # else:
-        #     raise NotImplementedError
-
-        # mi_matrix = GraphDataset.get_mi_matrix(args=self.args, batch=batch, idx_lists=self.mi_idx)
-        # mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
-        #
-        # numerical_node_feat = GraphDataset.get_stacked_distribution_features(
-        #     args=args, batch=batch, mi_idx=mi_idx
-        # )
-
-        # adj_ori = …  # dense
         num_nodes = mi_matrix.shape[0]
         edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
         adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
-
-        # print('_', mi_matrix.shape)
-        # print('max val : ', mi_matrix.max())
-        # print('min val : ', mi_matrix.min())
-
         graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_weights=edge_weights)
 
         return graph_data
@@ -312,7 +266,7 @@ class GraphDataset(torch.utils.data.Dataset):
         matrix = torch.abs(matrix)
 
         # make lower-80% weights to zero
-        matrix = torch.where(matrix < torch.quantile(matrix, 0.5), torch.zeros_like(matrix), matrix)
+        # matrix = torch.where(matrix < torch.quantile(matrix, 0.6), torch.zeros_like(matrix), torch.ones_like(matrix))
 
 
         # print('maximum : ', torch.max(matrix))
@@ -340,7 +294,10 @@ class GraphDataset(torch.utils.data.Dataset):
                     torch.stack([torch.mean(batch[:, i]), torch.std(batch[:, i])]).to(args.device))
 
         numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
-        categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
+        if len(categorical_node_feat) > 0:
+            categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
+        else:
+            categorical_node_feat = torch.tensor([]).to(args.device)
 
         return numerical_node_feat, categorical_node_feat
 
@@ -380,6 +337,70 @@ class GraphDataset(torch.utils.data.Dataset):
         categorical_node_feat = F.normalize(categorical_node_feat, p=2, dim=1)
 
         return numerical_node_feat, categorical_node_feat
+
+    @staticmethod
+    def get_stacked_renormalized_features(args, mi_idx, batch):
+        numerical_node_feat = []
+        categorical_node_feat = []
+
+        max_cat_len = 0
+        for idx, i in enumerate(mi_idx):
+            if isinstance(i, list):
+                max_cat_len = max(max_cat_len, len(i))
+
+        for idx, i in enumerate(mi_idx):
+            if isinstance(i, list):
+                cat_batch = batch[:, i].float()
+                batch_mean = torch.mean(cat_batch, dim=0)
+                cat_features = cat_batch - batch_mean
+                # fill in zeros to match max_cat_len
+                cat_features = torch.cat([cat_features, torch.zeros(len(cat_features), max_cat_len - len(i)).to(args.device)], dim=1)
+                categorical_node_feat.append(cat_features)
+            else:
+                num_batch = batch[:, i]
+                batch_mean = torch.mean(num_batch, dim=0)
+                num_features = num_batch - batch_mean
+                numerical_node_feat.append(num_features)
+
+        numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
+        categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
+
+        # normalize
+        numerical_node_feat = F.normalize(numerical_node_feat, p=2, dim=1)
+        categorical_node_feat = F.normalize(categorical_node_feat, p=2, dim=1)
+
+        return numerical_node_feat, categorical_node_feat
+
+    @staticmethod
+    def get_features(type, args, mi_idx, batch):
+        if type in [0]:  # type 0: mutual info. as adj. matrix + node as cols + node feature as stats
+            mi_matrix = GraphDataset.get_mi_matrix(args=args, batch=batch, idx_lists=mi_idx)
+            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+                args=args, batch=batch, mi_idx=mi_idx
+            )
+            # print('type 0')
+        elif type in [1]:  # type 1: correlation info. as adj. matrix + node as cols  + node feature as stats
+            mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_distribution_features(
+                args=args, batch=batch, mi_idx=mi_idx
+            )
+            # print('type 1')
+        elif type in [2]:  # correlation info. as adj. matrix + node as cols  + shift as stats
+            mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_shift_features(
+                args=args, batch=batch, mi_idx=mi_idx
+            )
+            # print('type 2')
+        elif type in [3]:
+            mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+            numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_renormalized_features(
+                args=args, batch=batch, mi_idx=mi_idx
+            )
+            # print('type 3')
+        else:
+            raise NotImplementedError
+
+        return mi_matrix, numerical_node_feat, categorical_node_feat
 
 
 

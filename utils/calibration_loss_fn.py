@@ -40,7 +40,7 @@ class FocalLoss(nn.Module):
         probs = torch.exp(-ce_loss)
 
         # Compute the focal loss
-        focal_loss = self.alpha * (1 - probs) ** self.gamma * ce_loss
+        focal_loss = torch.mul(self.alpha.repeat(len(probs), 1), (1 - probs)) ** self.gamma * ce_loss
 
         # Reduce the loss
         if self.reduction == 'mean':
