@@ -631,7 +631,7 @@ def main(args):
     if 'tempscale_graph' in args.method:
         from utils.graph import ColumnwiseGraphNet_tempscaling
         graph_class = ColumnwiseGraphNet_tempscaling(args, dataset, source_model)
-        gnn = graph_class.train_gnn()
+        # gnn = graph_class.train_gnn()
         graph_class.gnn.requires_grad_(False)
 
         with torch.no_grad():
@@ -860,9 +860,7 @@ def main(args):
 
 
             temperature = 3
-            uncertainty = -(
-                        calibrated_estimated_y.softmax(dim=-1) * calibrated_estimated_y.log_softmax(dim=-1)).sum(
-                dim=-1)
+            uncertainty = -(calibrated_estimated_y.softmax(dim=-1) * calibrated_estimated_y.log_softmax(dim=-1)).sum(dim=-1)
 
             uncertainty_upper_threshold = torch.quantile(uncertainty, 0.8)  # top-k
             uncertainty_lower_threshold = torch.quantile(uncertainty, 0.2)  # top-k
@@ -926,10 +924,8 @@ def main(args):
                 gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
                 GRADIENT_NORM_LIST.append(gradient_norm)
 
-    logger.info(
-        f"before adaptation | loss {test_loss_before / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_before_label_list, average='macro'):.4f}")
-    logger.info(
-        f"after adaptation | loss {test_loss_before / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_after_label_list, average='macro'):.4f}")
+    logger.info(f"before adaptation | loss {test_loss_before / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_before_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_before_label_list, average='macro'):.4f}")
+    logger.info(f"after adaptation | loss {test_loss_after / len(ground_truth_label_list):.4f}, acc {accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, bacc {balanced_accuracy_score(ground_truth_label_list, estimated_after_label_list):.4f}, macro f1-score {f1_score(ground_truth_label_list, estimated_after_label_list, average='macro'):.4f}")
 
     # print(f"final gt source dist: {source_label_dist}")
     # print(f"final gt target dist: {gt_target_label_dist}")
