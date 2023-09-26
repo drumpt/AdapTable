@@ -4,13 +4,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from einops import rearrange, repeat
+from einops import repeat
 from pytorch_tabnet.tab_network import TabNetEncoder, TabNetDecoder, EmbeddingGenerator, RandomObfuscator
 from tab_transformer_pytorch.tab_transformer_pytorch import Transformer as TabTransformerBlock
 from tab_transformer_pytorch.ft_transformer import NumericalEmbedder, Transformer as FTTransformerBlock
 from tab_transformer_pytorch.tab_transformer_pytorch import MLP as TabTransformerMLP
-
-from data.dataset import Dataset
 
 
 
@@ -432,10 +430,7 @@ class ColumnShiftHandler(nn.Module):
 
 
     def forward(self, shifted_inputs, vanilla_outputs):
-        out = self.input_layer(shifted_inputs)
-        out = self.middle_layer(torch.cat([out, vanilla_outputs], dim=-1))
-        t = self.main_head(out)
-        t = F.softplus(t)
+        t = self.get_temperature(shifted_inputs, vanilla_outputs)
         return torch.div(vanilla_outputs, t)
 
 

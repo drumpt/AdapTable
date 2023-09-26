@@ -95,19 +95,3 @@ def batch_evaluation(args, model, x):
     kernel = affinity(feats)
     Y = laplacian_optimization(unary, kernel)
     return Y
-
-
-def batch_evaluation_tabular(args, model, x):
-    out = model(x)
-    out /= args.temp
-    unary = -torch.log(out.softmax(-1) + 1e-10)  # softmax the output
-
-    feats = torch.nn.functional.normalize(model.get_feature(x), p=2, dim=-1).squeeze()
-
-    knn = 5
-    sigma = 1.0 # from overall_best.yaml in LAME github
-    # affinity = kNN_affinity(knn=knn)
-    affinity = rbf_affinity(sigma=sigma, knn=knn)
-    kernel = affinity(feats)
-    Y = laplacian_optimization(unary, kernel)
-    return Y

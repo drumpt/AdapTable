@@ -27,9 +27,6 @@ class Dataset():
         if args.benchmark in ["openml-cc18", "tableshift", "shifts", "folktables", "openml-regression", "scikit-learn"]:
             benchmark = args.benchmark.replace("-", "_")
             (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = eval(f"self.get_{benchmark}_dataset")(args)
-            # train_x = train_x.fillna(value=0)
-            # valid_x = valid_x.fillna(value=0)
-            # test_x = test_x.fillna(value=0)
         else:
             raise NotImplementedError
 
@@ -63,7 +60,6 @@ class Dataset():
                 imputation_method=args.missing_imputation_method,
             )
             test_cont_x = self.input_scaler.transform(test_cont_x)
-            # self.original_train_x[:, cont_indices] = train_cont_x
         else:
             train_cont_x, test_cont_mask_x, valid_cont_x, test_cont_x = np.array([]), np.array([]), np.array([]), np.array([])
         if len(cat_indices):
@@ -114,18 +110,11 @@ class Dataset():
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
 
-        # # TODO: remove (only for debugging)
-        # print(f"np.argsort(self.train_y, axis=0): {np.argsort(self.train_y, axis=0)[:, 1]}")
-        # print(f"self.train_x[:, 1]: {self.train_x[:, 1]}")
-        # posttrain_data = torch.utils.data.Subset(train_data, indices=np.argsort(self.train_x[:, 1], axis=0))
-        # posttrain_data = torch.utils.data.Subset(train_data, indices=np.argsort(self.train_y, axis=0)[:, 1])
         posttrain_data = torch.utils.data.TensorDataset(
             torch.cat([torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.valid_x).type(torch.float32)], dim=0),
             torch.cat([torch.FloatTensor(self.train_y).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32)], dim=0)
         )
         self.posttrain_loader = torch.utils.data.DataLoader(posttrain_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
-        # self.posttrain_loader = self.valid_loader
-        # self.posttrain_loader = self.train_loader
 
         # for embedding
         self.cont_dim = train_cont_x.shape[-1]
@@ -140,7 +129,6 @@ class Dataset():
 
         # print dataset info
         self.train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
-        print(f"self.train_counts: {self.train_counts}")
         self.valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
         self.test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
 
@@ -202,14 +190,6 @@ class Dataset():
         valid_x, valid_y, _, _ = dataset.get_pandas("validation")
         test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("test")
         cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
-
-        # TODO: remove (only for debugging)        
-        # pd.options.display.max_columns = train_x.shape[1]
-        # print(f"train_x.columns: {train_x.columns}")
-        # print(f"train_x.describe(): {train_x.describe(include='all')}")
-        # print(f"test_x.describe(): {test_x.describe(include='all')}")
-        # print(f"cat_indices: {cat_indices}")
-
         return (train_x, valid_x, test_x), (pd.DataFrame(train_y), pd.DataFrame(valid_y), pd.DataFrame(test_y)), cat_indices, regression
 
 

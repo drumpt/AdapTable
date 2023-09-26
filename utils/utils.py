@@ -1,4 +1,5 @@
 import os
+import math
 import logging
 import random
 from datetime import datetime
@@ -233,7 +234,7 @@ def get_feature_importance(args, dataset, test_data, test_mask, model):
     return feature_importance
 
 
-def get_mask_by_feature_importance(args, dataset, test_data, importance): # TODO: implement importance-aware masking and per-sample masking
+def get_mask_by_feature_importance(args, dataset, test_data, importance):
     input_dim = dataset.cont_dim + len(dataset.cat_start_indices)
     len_keep = int(input_dim * (1 - args.test_mask_ratio))
     idx = np.random.randn(test_data.shape[0], input_dim).argsort(axis=1)
@@ -305,14 +306,17 @@ def draw_tsne(args, feats, cls, title):
     plt.ylabel(None)
     plt.xticks([])
     plt.yticks([])
-
     plt.title(title)
-
-    # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
-
+    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
-import math
+COUNT = 'count'
+CONF = 'conf'
+ACC = 'acc'
+BIN_ACC = 'bin_acc'
+BIN_CONF = 'bin_conf'
+
+
 def _bin_initializer(bin_dict, num_bins=10):
     for i in range(num_bins):
         bin_dict[i][COUNT] = 0
@@ -321,11 +325,6 @@ def _bin_initializer(bin_dict, num_bins=10):
         bin_dict[i][BIN_ACC] = 0
         bin_dict[i][BIN_CONF] = 0
 
-COUNT = 'count'
-CONF = 'conf'
-ACC = 'acc'
-BIN_ACC = 'bin_acc'
-BIN_CONF = 'bin_conf'
 
 def _populate_bins(confs, preds, labels, num_bins=15):
     bin_dict = {}
@@ -333,10 +332,6 @@ def _populate_bins(confs, preds, labels, num_bins=15):
         bin_dict[i] = {}
     _bin_initializer(bin_dict, num_bins)
     num_test_samples = len(confs)
-
-    # print(f"confs: {confs}")
-    # print(f"preds: {preds}")
-    # print(f"labels: {labels}")
 
     for i in range(0, num_test_samples):
         confidence = confs[i]
@@ -358,159 +353,6 @@ def _populate_bins(confs, preds, labels, num_bins=15):
             bin_dict[binn][BIN_CONF] = bin_dict[binn][CONF] / \
                 float(bin_dict[binn][COUNT])
     return bin_dict
-
-
-
-
-def reliability_plot(args, confs, preds, labels, title, num_bins=10):
-    '''
-    Method to draw a reliability plot from a model's predictions and confidences.
-    '''
-    bin_dict = _populate_bins(confs, preds, labels, num_bins)
-    bns = [(i / float(num_bins)) for i in range(num_bins)]
-    y = []
-    for i in range(num_bins):
-        y.append(bin_dict[i][BIN_ACC])
-    plt.figure(figsize=(10, 8))  # width:20, height:3
-    plt.bar(bns, bns, align='edge', width=0.05, color='pink', label='Expected')
-    plt.bar(bns, y, align='edge', width=0.05,
-            color='blue', alpha=0.5, label='Actual')
-    plt.ylabel('Accuracy')
-    plt.xlabel('Confidence')
-    plt.legend()
-    plt.show()
-    # plt.savefig(title)
-    #
-    # plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
-
-
-
-
-# def draw_calibration(args, pred, gt, title):
-#     from sklearn.calibration import CalibrationDisplay
-#     from matplotlib.gridspec import GridSpec
-#     plt.clf()
-#     fig = plt.figure(figsize=(10, 10))
-#     gs = GridSpec(4, 2)
-#     colors = plt.cm.get_cmap("Dark2")
-
-#     ax_calibration_curve = fig.add_subplot(gs[:2, :2])
-#     calibration_displays = {}
-#     display = CalibrationDisplay.from_predictions(y_true=gt, y_prob=pred, n_bins=10)
-#     calibration_displays[f'{args.method}'] = display
-
-#     ax_calibration_curve.grid()
-#     ax_calibration_curve.set_title(title)
-#     # plt.show()
-#     # plt.title(title)
-#
-# plt.savefig(title)
-#     #
-# plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
-#     #
-# plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
-
-
-def draw_feature_change(feat1, feat2):
-    tsne = TSNE(n_components=2, verbose=1, random_state=0)
-
-    if isinstance(feat1, torch.Tensor) or isinstance(feat2, torch.Tensor):
-        feat1_np = feat1.detach().cpu().numpy()
-        feat2_np = feat2.detach().cpu().numpy()
-    else:
-        feat1_np = feat1
-        feat2_np = feat2
-
-
-    X = tsne.fit_transform(np.concatenate([feat1_np, feat2_np], axis=0))
-    plt.scatter(X[:len(feat1_np), 0], X[:len(feat1_np), 1], color='b')
-    plt.scatter(X[len(feat1_np):, 0], X[len(feat1_np):, 1], color='r')
-    plt.title('Feature Change')
-    plt.legend(['Before', 'After'])
-    plt.show()
-
-
-def draw_input_change(input1, input2):
-    if isinstance(input1, torch.Tensor) or isinstance(input2, torch.Tensor):
-        input1_np = input1.detach().cpu().numpy()
-        input2_np = input2.detach().cpu().numpy()
-    else:
-        input1_np = input1
-        input2_np = input2
-
-    plt.subplot(2, 1, 1)
-    plt.gca().set_title('Original input')
-    plt.bar(np.arange(len(input1_np[0])), input1_np[0], color='b')
-    plt.subplot(2, 1, 2)
-    plt.gca().set_title('Changed input')
-    plt.bar(np.arange(len(input2_np[0])), input2_np[0], color='r')
-    plt.tight_layout()
-    plt.show()
-
-
-def draw_feature_change(feat1, feat2):
-    tsne = TSNE(n_components=2, verbose=1, random_state=0)
-
-    if isinstance(feat1, torch.Tensor) or isinstance(feat2, torch.Tensor):
-        feat1_np = feat1.detach().cpu().numpy()
-        feat2_np = feat2.detach().cpu().numpy()
-    else:
-        feat1_np = feat1
-        feat2_np = feat2
-
-    X = tsne.fit_transform(np.concatenate([feat1_np, feat2_np], axis=0))
-    plt.scatter(X[:len(feat1_np), 0], X[:len(feat1_np), 1], color='b')
-    plt.scatter(X[len(feat1_np):, 0], X[len(feat1_np):, 1], color='r')
-    plt.title('Feature Change')
-    plt.legend(['Before', 'After'])
-    plt.show()
-
-
-def ece_score(py, y_test, n_bins=10):
-    py = np.array(py)
-    y_test = np.array(y_test)
-    if y_test.ndim > 1:
-        y_test = np.argmax(y_test, axis=1)
-    py_index = np.argmax(py, axis=1)
-    py_value = []
-    for i in range(py.shape[0]):
-        py_value.append(py[i, py_index[i]])
-    py_value = np.array(py_value)
-    acc, conf = np.zeros(n_bins), np.zeros(n_bins)
-    Bm = np.zeros(n_bins)
-    for m in range(n_bins):
-        a, b = m / n_bins, (m + 1) / n_bins
-        for i in range(py.shape[0]):
-            if py_value[i] > a and py_value[i] <= b:
-                Bm[m] += 1
-                if py_index[i] == y_test[i]:
-                    acc[m] += 1
-                conf[m] += py_value[i]
-        if Bm[m] != 0:
-            acc[m] = acc[m] / Bm[m]
-            conf[m] = conf[m] / Bm[m]
-    ece = 0
-    for m in range(n_bins):
-        ece += Bm[m] * np.abs((acc[m] - conf[m]))
-    return (ece / sum(Bm), acc)
-
-
-def visualize_dataset(X, y): # for scikit-learn benchmark
-    plt.scatter(X[:, 0], X[:, 1], marker='o', c=y, s=100, edgecolor="k", linewidth=2)
-    plt.xlabel("$X_1$")
-    plt.ylabel("$X_2$")
-    plt.show()
-
-
-def save_pickle(saving_object, title,args):
-    if not os.path.exists(args.tsne_dir):
-        os.makedirs(args.tsne_dir)
-
-    file_name = f'{title}_model{args.model}_dataset{args.dataset}_shift_type{args.shift_type}_method{args.method}.pkl'
-    with open(os.path.join(args.tsne_dir, file_name), 'wb') as f:
-        pickle.dump(saving_object, f, pickle.HIGHEST_PROTOCOL)
-    
-
 
 
 class ECELoss(nn.Module):
@@ -609,3 +451,75 @@ class ClasswiseECELoss(nn.Module):
 
         sce = torch.mean(per_class_sce)
         return sce
+
+
+def draw_reliability_plot(args, confs, preds, labels, title, num_bins=10):
+    '''
+    Method to draw a reliability plot from a model's predictions and confidences.
+    '''
+    bin_dict = _populate_bins(confs, preds, labels, num_bins)
+    bns = [(i / float(num_bins)) for i in range(num_bins)]
+    y = []
+    for i in range(num_bins):
+        y.append(bin_dict[i][BIN_ACC])
+    plt.figure(figsize=(10, 8))  # width:20, height:3
+    plt.bar(bns, bns, align='edge', width=0.05, color='pink', label='Expected')
+    plt.bar(bns, y, align='edge', width=0.05,
+            color='blue', alpha=0.5, label='Actual')
+    plt.ylabel('Accuracy')
+    plt.xlabel('Confidence')
+    plt.legend()
+    plt.show()
+    plt.savefig(f"{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
+
+
+def draw_input_change(input1, input2):
+    if isinstance(input1, torch.Tensor) or isinstance(input2, torch.Tensor):
+        input1_np = input1.detach().cpu().numpy()
+        input2_np = input2.detach().cpu().numpy()
+    else:
+        input1_np = input1
+        input2_np = input2
+
+    plt.subplot(2, 1, 1)
+    plt.gca().set_title('Original input')
+    plt.bar(np.arange(len(input1_np[0])), input1_np[0], color='b')
+    plt.subplot(2, 1, 2)
+    plt.gca().set_title('Changed input')
+    plt.bar(np.arange(len(input2_np[0])), input2_np[0], color='r')
+    plt.tight_layout()
+    plt.show()
+
+
+def draw_feature_change(feat1, feat2):
+    tsne = TSNE(n_components=2, verbose=1, random_state=0)
+
+    if isinstance(feat1, torch.Tensor) or isinstance(feat2, torch.Tensor):
+        feat1_np = feat1.detach().cpu().numpy()
+        feat2_np = feat2.detach().cpu().numpy()
+    else:
+        feat1_np = feat1
+        feat2_np = feat2
+
+    X = tsne.fit_transform(np.concatenate([feat1_np, feat2_np], axis=0))
+    plt.scatter(X[:len(feat1_np), 0], X[:len(feat1_np), 1], color='b')
+    plt.scatter(X[len(feat1_np):, 0], X[len(feat1_np):, 1], color='r')
+    plt.title('Feature Change')
+    plt.legend(['Before', 'After'])
+    plt.show()
+
+
+def visualize_dataset(X, y): # for scikit-learn benchmark
+    plt.scatter(X[:, 0], X[:, 1], marker='o', c=y, s=100, edgecolor="k", linewidth=2)
+    plt.xlabel("$X_1$")
+    plt.ylabel("$X_2$")
+    plt.show()
+
+
+def save_pickle(saving_object, title,args):
+    if not os.path.exists(args.tsne_dir):
+        os.makedirs(args.tsne_dir)
+
+    file_name = f'{title}_model{args.model}_dataset{args.dataset}_shift_type{args.shift_type}_method{args.method}.pkl'
+    with open(os.path.join(args.tsne_dir, file_name), 'wb') as f:
+        pickle.dump(saving_object, f, pickle.HIGHEST_PROTOCOL)
