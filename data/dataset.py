@@ -110,13 +110,6 @@ class Dataset():
         self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
 
-        posttrain_data = torch.utils.data.TensorDataset(
-            torch.cat([torch.FloatTensor(self.train_x).type(torch.float32), torch.FloatTensor(self.valid_x).type(torch.float32)], dim=0),
-            torch.cat([torch.FloatTensor(self.train_y).type(torch.float32), torch.FloatTensor(self.valid_y).type(torch.float32)], dim=0)
-        )
-        self.posttrain_loader = torch.utils.data.DataLoader(posttrain_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
-
-        # for embedding
         self.cont_dim = train_cont_x.shape[-1]
         if hasattr(self, 'input_one_hot_encoder'):
             self.emb_dim_list = [(len(category), min(10, (len(category) + 1) // 2)) if len(cat_indices) else (0, 0) for category in self.input_one_hot_encoder.categories_]
@@ -131,6 +124,9 @@ class Dataset():
         self.train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
         self.valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
         self.test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
+
+        self.posttrain_loader = torch.utils.data.DataLoader(train_data, batch_size=args.test_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+        self.posttrain_valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
 
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")
         logger.info(f"Class distribution - train {np.round(self.train_counts[1] / np.sum(self.train_counts[1]), 2)}, {self.train_counts}")

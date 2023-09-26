@@ -21,6 +21,7 @@ from model.model import *
 from utils.utils import *
 from utils.sam import *
 from utils.mae_util import *
+from utils.calibrator import *
 
 
 def get_model(args, dataset):
@@ -167,7 +168,8 @@ def posttrain(args, model, column_distribution_handler, column_distribution_hand
     device = args.device
     source_handler, best_loss = None, float('inf')
     regression = True if dataset.out_dim == 1 else False
-    loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
+    from utils.calibration_loss_fn import Posttrain_loss
+    loss_fn = Posttrain_loss(args.posttrain_shrinkage_factor)
 
     source_mean_x = torch.zeros(1, dataset.in_dim)
     for train_x, train_y in dataset.train_loader:
@@ -176,7 +178,6 @@ def posttrain(args, model, column_distribution_handler, column_distribution_hand
     source_mean_x = source_mean_x.to(args.device)
     patience = args.posttrain_patience
 
-    model = model.train()
     for epoch in range(1, args.posttrain_epochs + 1):
         train_loss, train_acc, train_len = 0, 0, 0
         calibrated_pred_list, label_list = [], []
@@ -205,7 +206,7 @@ def posttrain(args, model, column_distribution_handler, column_distribution_hand
         valid_loss, valid_acc, valid_len = 0, 0, 0
         column_distribution_handler = column_distribution_handler.eval()
         with torch.no_grad():
-            for valid_x, valid_y in dataset.valid_loader:
+            for valid_x, valid_y in dataset.posttrain_validloader:
                 valid_x, valid_y = valid_x.to(device), valid_y.to(device)
 
                 estimated_y = model(valid_x)
@@ -225,16 +226,14 @@ def posttrain(args, model, column_distribution_handler, column_distribution_hand
             patience -= 1
             if patience == 0:
                 break
-        logger.info(f"posttrain epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
 
-        ece_loss_fn = ECELoss()
-        ece_loss = ece_loss_fn(torch.tensor(calibrated_pred_list), torch.tensor(np.argmax(label_list, axis=-1))).item()
-        logger.info(f"posttrain epoch {epoch} | ece_loss {ece_loss:.4f}")
+        logger.info(f"posttrain epoch {epoch} | train_loss {train_loss / train_len:.4f}, train_acc {train_acc / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}, valid_acc {valid_acc / valid_len:.4f}")
     return source_handler
 
 
+
 def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
-    global EMA, original_source_model, eata_params, ttt_params, graph_class
+    global EMA, original_source_model, eata_params, ttt_params
     optimizer.zero_grad()
     outputs = model(x)
 
@@ -292,31 +291,11 @@ def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
             loss = cat_aware_recon_loss(estimated_test_x, x, model)
         loss.backward(retain_graph=True)
     if 'em' in args.method:
-        if 'tempscale_graph' in args.method:
-            prob_dist = torch.sum(y, dim=0) / len(y)
-            gnn_out = graph_class.get_gnn_out(model, x, prob_dist)
-            loss = softmax_entropy(gnn_out).mean()
-            loss.backward(retain_graph=True)
-        else:
-            loss = softmax_entropy(outputs / args.temp).mean()
-            loss.backward(retain_graph=True)
+        loss = softmax_entropy(outputs / args.temp).mean()
+        loss.backward(retain_graph=True)
     if 'sam' in args.method:
         optimizer.zero_grad()
-        if 'tempscale_graph' in args.method:
-            prob_dist = torch.sum(y, dim=0) / len(y)
-            gnn_out = graph_class.get_gnn_out(model, x, prob_dist, wo_softmax=True)
-            loss = softmax_entropy(gnn_out).mean()
-
-            loss.backward(retain_graph=True)
-            optimizer.first_step()
-
-            gnn_second_out = graph_class.get_gnn_out(model, x, prob_dist, wo_softmax=True)
-            loss_second = softmax_entropy(gnn_second_out).mean()
-            loss_second.backward(retain_graph=True)
-            optimizer.second_step()
-            return
-        else:
-            loss = softmax_entropy(outputs / args.temp).mean()
+        loss = softmax_entropy(outputs / args.temp).mean()
         loss.backward(retain_graph=True)
         optimizer.step()
         return
@@ -425,7 +404,7 @@ def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
 
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main(args):
-    global logger, original_source_model, source_model, EMA, eata_params, ttt_params, graph_class
+    global logger, original_source_model, source_model, EMA, eata_params, ttt_params
     EMA, ENTROPY_LIST_BEFORE_ADAPTATION, ENTROPY_LIST_AFTER_ADAPTATION, GRADIENT_NORM_LIST, RECON_LOSS_LIST_BEFORE_ADAPTATION, RECON_LOSS_LIST_AFTER_ADAPTATION, FEATURE_LIST, LABEL_LIST = None, [], [], [], [], [], [], []
     SOURCE_LABEL_LIST, TARGET_PREDICTION_LIST = [], []
     SOURCE_INPUT_LIST, SOURCE_FEATURE_LIST, SOURCE_ENTROPY_LIST = [], [], []
@@ -475,21 +454,14 @@ def main(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
     test_loss_before, test_loss_after = 0, 0
 
-    if 'tempscale_graph' in args.method or 'column_distribution_handler' in args.method:
-        if 'tempscale_graph' in args.method:
-            from utils.graph import ColumnwiseGraphNet_tempscaling
-            graph_class = ColumnwiseGraphNet_tempscaling(args, dataset, source_model)
-            _ = graph_class.train_gnn()
-            graph_class.gnn.requires_grad_(False)
-        else:
-            column_distribution_handler = get_column_distribution_handler(args, dataset, source_model)
-
+    if 'calibrator' in args.method:
+        calibrator = Calibrator(args, dataset, source_model)
+        calibrator.train_gnn()
         with torch.no_grad():
             for train_x, train_y in dataset.train_loader:
                 train_x, train_y = train_x.to(args.device), train_y.to(args.device)
                 estimated_y = source_model(train_x).detach().cpu()
-                prob_dist = torch.sum(train_y, dim=0) / len(train_y)
-                calibrated_y = graph_class.get_gnn_out(source_model, train_x, prob_dist).detach().cpu() if 'tempscale_graph' in args.method else column_distribution_handler(train_x, estimated_y)
+                calibrated_y = calibrator.get_gnn_out(source_model, train_x).detach().cpu()
 
                 SOURCE_PREDICTION_LIST.extend(estimated_y.tolist())
                 SOURCE_CALIBRATED_PREDICTION_LIST.extend(calibrated_y.tolist())
@@ -528,12 +500,11 @@ def main(args):
             cur_target_label_dist = (1 - args.smoothing_factor) * torch.mean(calibrated_probability, dim=0, keepdim=True) + args.smoothing_factor * target_label_dist
 
             if 'column_distribution_handler' in args.method:
+                column_distribution_handler = get_column_distribution_handler(args, dataset, original_source_model)
                 calibrated_estimated_y = column_distribution_handler(test_x, estimated_y)
                 TARGET_CALIBRATED_PREDICTION_LIST.extend(calibrated_estimated_y.detach().cpu().tolist())
-            elif 'tempscale_graph' in args.method:
-                prob_dist = torch.sum(test_y, dim=0) / len(test_y)
-                ori_estimated_y = graph_class.get_gnn_out(original_source_model, test_x, cur_target_label_dist, wo_softmax=True)
-                calibrated_estimated_y = graph_class.get_gnn_out(source_model, test_x, cur_target_label_dist, wo_softmax=True)
+            elif 'calibrator' in args.method:
+                calibrated_estimated_y = calibrator.get_gnn_out(source_model, test_x, wo_softmax=True)
                 TARGET_CALIBRATED_PREDICTION_LIST.extend(calibrated_estimated_y.detach().cpu().tolist())
 
             probs, _ = torch.topk(calibrated_estimated_y.softmax(dim=-1), k=2, dim=1)
@@ -554,7 +525,7 @@ def main(args):
             estimated_y = (estimated_y.softmax(dim=-1) / 2 + calibrated_probability / 2).log()
         else:
             estimated_y = source_model(test_x)
-        target_label_dist = args.smoothing_factor * torch.mean(estimated_y.softmax(dim=-1), dim=0, keepdim=True) + args.smoothing_factor * target_label_dist
+        target_label_dist = (1 - args.smoothing_factor) * torch.mean(estimated_y.softmax(dim=-1), dim=0, keepdim=True) + args.smoothing_factor * target_label_dist
 
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
@@ -621,7 +592,7 @@ def main(args):
         draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST), "Source Latent Space Visualization with t-SNE")
         draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST), "Source Input Space Visualization with t-SNE")
 
-        if 'tempscale_graph' in args.method or 'column_distribution_handler' in args.method:
+        if 'calibrator' in args.method or 'column_distribution_handler' in args.method:
             train_ece_before = ece_loss_fn(torch.tensor(TARGET_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
             train_ece_after = ece_loss_fn(torch.tensor(TARGET_CALIBRATED_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
             logger.info(f"test ece before: {train_ece_before}")

@@ -18,8 +18,8 @@ mlp:
 # folktables: state, time, time_state
 benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 dataset: cmc
-shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0.2
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+shift_severity: 0.3
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd
 
@@ -38,13 +38,6 @@ train_optimizer: AdamW
 train_lr: 1e-4
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
-train_patience: 10
-
-# hyperparmeters for posttraining
-posttrain_lr: 1e-4
-posttrain_epochs: 50
-posttrain_patience: 10
-posttrain_shrinkage_factor: 0.1
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
@@ -56,7 +49,10 @@ test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-method: [calibrator, label_distribution_handler]
+#method: [tempscale_graph, label_shift_handler]
+#method: [tempscale_grasph, sam]
+method: [column_shift_handler, label_shift_handler]
+
 
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: zero, mean, emd
@@ -75,13 +71,15 @@ eata_e_margin: 2.4538776394910684 # for eata
 eata_d_margin: 0.05 # for eata
 ttt_coef: [1.0, 0.1, 1.0] # for ttt++
 
-smoothing_factor: 0.1 # for moving average (high smoothing factor uses previous one much) # TODO: tune for tta
-uncertainty_upper_percentile_threshod: 0.75 # TODO: tune for tta
-uncertainty_lower_percentile_threshod: 0.25 # TODO: tune for tta
-
 # for supervised baselines
 num_estimators: 25
 max_depth: 3
+
+# posttrain
+posttrain_lr: 1e-2
+posttrain_epochs: 500
+posttrain_shrinkage_factor: 0.1
+posttrain_patience: 10
 
 ##################################################################
 ### device

@@ -49,9 +49,9 @@ test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-#method: [tempscale_graph, label_shift_handler]
+method: [tempscale_graph, label_shift_handler]
 #method: [tempscale_graph, em]
-method: [column_shift_handler, label_shift_handler]
+#method: [column_shift_handler, label_shift_handler]
 
 
 # for masked autoencoders

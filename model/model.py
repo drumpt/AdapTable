@@ -422,21 +422,20 @@ class ColumnShiftHandler(nn.Module):
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
         )
-        self.middle_layer = nn.Sequential(
+        self.main_head = nn.Sequential(
             nn.Linear(hidden_dim + output_dim, hidden_dim),
             nn.ReLU(),
+            nn.Linear(hidden_dim, 1)
         )
-        self.main_head = nn.Linear(hidden_dim, 1)
 
 
     def forward(self, shifted_inputs, vanilla_outputs):
         t = self.get_temperature(shifted_inputs, vanilla_outputs)
-        return torch.div(vanilla_outputs, t)
+        return torch.mul(vanilla_outputs, t)
 
 
     def get_temperature(self, shifted_inputs, vanilla_outputs):
         out = self.input_layer(shifted_inputs)
-        out = self.middle_layer(torch.cat([out, vanilla_outputs], dim=-1))
-        t = self.main_head(out)
+        t = self.main_head(torch.cat([out, vanilla_outputs], dim=-1))
         t = F.softplus(t)
         return t
