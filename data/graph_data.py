@@ -143,8 +143,8 @@ class GraphDataset(torch.utils.data.Dataset):
             )
             num_nodes = mi_matrix.shape[0]
             edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
-            print('max of edge_weights : ', edge_weights.max())
-            print('min of edge_weights : ', edge_weights.min())
+            # print('max of edge_weights : ', edge_weights.max())
+            # print('min of edge_weights : ', edge_weights.min())
             adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
 
             graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t,
@@ -362,12 +362,12 @@ class GraphDataset(torch.utils.data.Dataset):
                 num_features = num_batch - batch_mean
                 numerical_node_feat.append(num_features)
 
-        numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
-        categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
-
-        # normalize
-        numerical_node_feat = F.normalize(numerical_node_feat, p=2, dim=1)
-        categorical_node_feat = F.normalize(categorical_node_feat, p=2, dim=1)
+        if numerical_node_feat:
+            numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
+            numerical_node_feat = F.normalize(numerical_node_feat, p=2, dim=1)
+        if categorical_node_feat:
+            categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
+            categorical_node_feat = F.normalize(categorical_node_feat, p=2, dim=1)
 
         return numerical_node_feat, categorical_node_feat
 

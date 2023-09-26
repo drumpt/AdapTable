@@ -2,9 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+
 class CAGCN_loss(nn.Module):
     def __init__(self, alpha=1, gamma=2, reduction='mean'):
         super(CAGCN_loss, self).__init__()
+
 
     def forward(self, probs, gt_label):
         correct_idx = (torch.argmax(probs, dim=-1) == torch.argmax(gt_label, dim=-1))
@@ -25,6 +28,7 @@ class CAGCN_loss(nn.Module):
         return loss
 
 
+
 class FocalLoss(nn.Module):
     def __init__(self, alpha=1, gamma=2, reduction='mean'):
         super(FocalLoss, self).__init__()
@@ -32,15 +36,16 @@ class FocalLoss(nn.Module):
         self.gamma = gamma
         self.reduction = reduction
 
+
     def forward(self, inputs, targets):
         # Compute the cross entropy
-        ce_loss = F.cross_entropy(inputs, targets, reduction='none')
+        ce_loss = F.cross_entropy(inputs, targets, reduction='none').unsqueeze(1)
 
         # Get the probabilities for the true class
-        probs = torch.exp(-ce_loss)
+        probs = torch.exp(-ce_loss).unsqueeze(1)
 
         # Compute the focal loss
-        focal_loss = torch.mul(self.alpha.repeat(len(probs), 1), (1 - probs)) ** self.gamma * ce_loss
+        focal_loss = (torch.mul(self.alpha.repeat(len(probs), 1), (1 - probs)) ** self.gamma) * ce_loss
 
         # Reduce the loss
         if self.reduction == 'mean':

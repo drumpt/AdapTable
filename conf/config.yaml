@@ -16,9 +16,9 @@ mlp:
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
-dataset: cmc
-shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
+benchmark: tableshift # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
+dataset: diabetes_readmission
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0.3
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd
@@ -38,6 +38,12 @@ train_optimizer: AdamW
 train_lr: 1e-4
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
+train_patience: 10
+
+# hyperparmeters for posttraining
+posttrain_lr: 1e-4
+posttrain_epochs: 50
+posttrain_patience: 5
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
@@ -50,9 +56,8 @@ test_lr: 1e-4
 ##################################################################
 ### methods & other hyperparameters
 method: [tempscale_graph, label_shift_handler]
+# method: [column_shift_handler, label_shift_handler]
 #method: [tempscale_graph, sam]
-#method: [column_shift_handler, label_shift_handler]
-
 
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: zero, mean, emd
@@ -74,10 +79,6 @@ ttt_coef: [1.0, 0.1, 1.0] # for ttt++
 # for supervised baselines
 num_estimators: 25
 max_depth: 3
-
-# posttrain
-posttrain_lr: 1e-2
-posttrain_epochs: 500
 
 ##################################################################
 ### device

@@ -298,7 +298,6 @@ class ColumnwiseGraphNet_tempscaling():
         best_model = None
         best_epoch = 0
         patience = 10
-
         num_iter = 0
 
         for epoch in range(self.gnn_epochs):
@@ -380,10 +379,8 @@ class ColumnwiseGraphNet_tempscaling():
                     best_model = deepcopy(self.gnn)
                 else:
                     patience -= 1
-
-                if patience == 0:
-                    break
-
+                    if patience == 0:
+                        break
 
             print(f'epoch {epoch} loss is {loss_total / len(train_graph_dataset.created_batches)}')
             print(f'epoch {epoch} bef_adapt is {np.mean(bef_adapt_list)}')

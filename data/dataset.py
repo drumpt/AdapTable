@@ -27,6 +27,9 @@ class Dataset():
         if args.benchmark in ["openml-cc18", "tableshift", "shifts", "folktables", "openml-regression", "scikit-learn"]:
             benchmark = args.benchmark.replace("-", "_")
             (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression = eval(f"self.get_{benchmark}_dataset")(args)
+            # train_x = train_x.fillna(value=0)
+            # valid_x = valid_x.fillna(value=0)
+            # test_x = test_x.fillna(value=0)
         else:
             raise NotImplementedError
 
@@ -40,15 +43,6 @@ class Dataset():
                 train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
             else:
                 train_x, train_y = SMOTE(random_state=args.seed).fit_resample(train_x, train_y)
-
-        # if isinstance(train_x, pd.DataFrame):
-        #     # cast all to numpy
-        #     np_train_x, np_valid_x, np_test_x = train_x.to_numpy().astype(float), valid_x.to_numpy().astype(float), test_x.to_numpy().astype(float)
-        #     np_train_y, np_valid_y, np_test_y = train_y.to_numpy().astype(float), valid_y.to_numpy().astype(float), test_y.to_numpy().astype(float)
-        # else:
-        #     np_train_x, np_valid_x, np_test_x = train_x, valid_x, test_x
-        #     np_train_y, np_valid_y, np_test_y = train_y, valid_y, test_y        
-        # (self.original_train_x, self.original_valid_x, self.original_test_x), (self.original_train_y, self.original_valid_y, self.original_test_y) = (np_train_x, np_valid_x, np_test_x), (np_train_y, np_valid_y, np_test_y)
 
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
@@ -530,7 +524,6 @@ class Dataset():
         return new_data
 
     def renormalize_data(self, unscaled_data):
-
         if isinstance(unscaled_data, torch.Tensor):
             data = unscaled_data.clone().detach().cpu().numpy()
         elif isinstance(unscaled_data, np.ndarray):
@@ -540,15 +533,11 @@ class Dataset():
 
         # cont_data = self.input_scaler.transform(data[:, :self.cont_dim])
         cont_data = data[:, :self.cont_dim]
-
         if hasattr(self, 'input_one_hot_encoder'):
             cat_data = self.input_one_hot_encoder.transform(data[:, self.cont_dim:])
         else:
             cat_data = []
-
         data = np.concatenate([cont_data, cat_data], axis=1)
-
         if isinstance(unscaled_data, torch.Tensor):
             data = torch.from_numpy(data).to(unscaled_data.device)
-
         return data

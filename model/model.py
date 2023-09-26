@@ -67,8 +67,6 @@ class MLP(nn.Module):
         inputs = self.get_embedding(inputs)
         hidden_repr = self.encoder(inputs)
         recon_out = self.recon_head(hidden_repr)
-        # if len(self.cat_indices_groups):
-        #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -169,8 +167,6 @@ class TabNet(nn.Module):
         embedded_inputs = self.get_embedding(inputs)
         steps_out, _ = self.encoder(embedded_inputs)
         recon_out = self.decoder(steps_out)
-        # if len(self.cat_indices_groups):
-        #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -265,8 +261,6 @@ class TabTransformer(nn.Module):
     def get_recon_out(self, inputs):
         inputs_emb = self.get_embedding(inputs)
         recon_out = self.recon_head(inputs_emb)
-        # if len(self.cat_indices_groups):
-        #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
 
@@ -377,8 +371,6 @@ class FTTransformer(nn.Module):
         x = self.transformer(inputs, return_attn=False)
         feature_out = x[:, 0]
         recon_out = self.recon_head(feature_out)
-        # if len(self.cat_indices_groups):
-        #     recon_out = Dataset.revert_recon_to_onehot(recon_out, self.cat_indices_groups)
         return recon_out
 
     
@@ -428,9 +420,6 @@ class ColumnShiftHandler(nn.Module):
         hidden_dim = 16
         output_dim = dataset.out_dim
 
-        # self.model = nn.Sequential(
-        #     nn.Linear(hidden_dim, 1),
-        # )
         self.input_layer = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
@@ -442,32 +431,12 @@ class ColumnShiftHandler(nn.Module):
         self.main_head = nn.Linear(hidden_dim, 1)
 
 
-        # self.main_head = nn.Linear(hidden_dim + output_dim, output_dim)
-        # self.model = nn.Sequential(
-        #     nn.Linear(input_dim, hidden_dim, bias=False),
-        #     nn.ReLU(),
-        #     nn.Linear(hidden_dim, output_dim, bias=False),
-        # )
-
-
     def forward(self, shifted_inputs, vanilla_outputs):
-        # print(f"shifted_inputs.shape: {shifted_inputs.shape}")
-        # print(F"vanilla_outputs.shape: {vanilla_outputs.shape}")
         out = self.input_layer(shifted_inputs)
         out = self.middle_layer(torch.cat([out, vanilla_outputs], dim=-1))
         t = self.main_head(out)
         t = F.softplus(t)
-
-        # print(f"t: {t}")
-        # print(f"t.shape: {t.shape}")
-        # print(f"vanilla_outputs.shape: {vanilla_outputs.shape}")
-        # outputs = self.model(inputs)
-        # outputs = outputs.repeat(len(vanilla_outputs), 1)
-        # # print(f"outputs: {outputs}")
-        # # print(f"outputs.shape: {outputs.shape}")
-        # return outputs + vanilla_outputs
         return torch.div(vanilla_outputs, t)
-        # return torch.mul(vanilla_outputs, t)
 
 
     def get_temperature(self, shifted_inputs, vanilla_outputs):
