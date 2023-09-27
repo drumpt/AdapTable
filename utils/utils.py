@@ -50,27 +50,28 @@ def get_logger(args):
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(message)s')
 
-    method = "_".join(args.method) if isinstance(args.method, omegaconf.listconfig.ListConfig) else args.method
+    # method = "_".join(args.method) if isinstance(args.method, omegaconf.listconfig.ListConfig) else args.method
 
     log_path = os.path.join(args.log_dir, args.log_prefix)
+
+    # log_path = os.path.join(log_path, f"{args.benchmark}_{args.dataset}_shift_type_{args.shift_type}_shift_severity_{args.shift_severity}_seed_{args.seed}_{method}.txt")
+    #
+    # time_string = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    if isinstance(args.method, omegaconf.listconfig.ListConfig):
+        method = "_".join(args.method) if isinstance(args.method, omegaconf.listconfig.ListConfig) else args.method
+    else:
+        method = args.method
+    log_path += f'{args.benchmark}_{args.dataset}/{method}/{args.model}/shift_type_{args.shift_type}_shift_severity_{args.shift_severity}/'
+
     if not os.path.exists(os.path.join(log_path)):
         os.makedirs(os.path.join(log_path))
-    log_path = os.path.join(log_path, f"{args.benchmark}_{args.dataset}_shift_type_{args.shift_type}_shift_severity_{args.shift_severity}_seed_{args.seed}_{method}.txt")
-
-    # time_string = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-    # if isinstance(args.method, omegaconf.listconfig.ListConfig):
-    #     method = "_".join(args.method) if isinstance(args.method, omegaconf.listconfig.ListConfig) else args.method
-    # else:
-    #     method = args.method
-    # log_path = f'{args.benchmark}_{args.dataset}/{method}/{args.model}/shift_type_{args.shift_type}_shift_severity_{args.shift_severity}/'
 
     # seed and dataset
-    # log_path += f'{args.log_prefix}_seed_{args.seed}_dataset_{args.dataset}_testlr_{args.test_lr}_numstep_{args.num_steps}'
-    # if float(args.train_ratio) != 1:
-    #     log_path += f'_train_ratio_{args.train_ratio}'
-    # if args.test_batch_size != 64:
-    #     log_path += f'_test_batch_size_{args.test_batch_size}'
-    # log_path += '.txt'
+    log_path += f'{args.log_prefix}_seed_{args.seed}_dataset_{args.dataset}'
+    log_path += f'_sf{args.smoothing_factor}_upth{args.uncertainty_upper_percentile_threshod}_lowth{args.uncertainty_lower_percentile_threshod}'
+    log_path += '.txt'
+
+
 
     file_handler = logging.FileHandler(log_path)
     file_handler.setFormatter(formatter)

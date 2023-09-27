@@ -25,7 +25,18 @@ from utils.calibrator import *
 
 
 def get_model(args, dataset):
-    model = eval(args.model)(args, dataset)
+    if args.model == 'tabnet':
+        model = 'TabNet'
+    elif args.model == 'tabtransformer':
+        model = 'TabTransformer'
+    elif args.model == 'mlp':
+        model = 'MLP'
+    elif args.model in ['MLP', 'TabNet', 'TabTransformer']:
+        model = args.model
+    else:
+        raise NotImplementedError
+
+    model = eval(model)(args, dataset)
     model = model.to(args.device)
     return model
 
@@ -294,10 +305,13 @@ def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
         loss = softmax_entropy(outputs / args.temp).mean()
         loss.backward(retain_graph=True)
     if 'sam' in args.method:
-        optimizer.zero_grad()
         loss = softmax_entropy(outputs / args.temp).mean()
         loss.backward(retain_graph=True)
-        optimizer.step()
+        optimizer.first_step()
+        outputs = model(x)
+        loss = softmax_entropy(outputs / args.temp).mean()
+        loss.backward(retain_graph=True)
+        optimizer.second_step()
         return
     if 'memo' in args.method:
         x = generate_augmentation(x, args)
@@ -506,6 +520,8 @@ def main(args):
             elif 'calibrator' in args.method:
                 calibrated_estimated_y = calibrator.get_gnn_out(source_model, test_x, wo_softmax=True)
                 TARGET_CALIBRATED_PREDICTION_LIST.extend(calibrated_estimated_y.detach().cpu().tolist())
+            else:
+                calibrated_estimated_y = estimated_y
 
             probs, _ = torch.topk(calibrated_estimated_y.softmax(dim=-1), k=2, dim=1)
             uncertainty = 1 / (probs[:, 0] - probs[:, 1])

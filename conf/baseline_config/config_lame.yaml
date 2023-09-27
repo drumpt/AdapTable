@@ -48,15 +48,15 @@ posttrain_shrinkage_factor: 0.5
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 1 # optimization steps for each batch
+num_steps: 0 # optimization steps for each batch
+test_lr: 0
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
-test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-method: [em]
+method: [lame]
 # search space - episodic, test_lr : 1e-3~1e-5, num_steps : 1, 5, 10
 # em(tent), sam, sar, pl, ttt++, eata, memo
 # em - true, 1e-4, 1
@@ -124,12 +124,12 @@ slack_channel: experiment
 
 ##################################################################
 ### not to create outputs directory for hydra
-defaults:  
-  - _self_  
-  - override hydra/hydra_logging: disabled  
-  - override hydra/job_logging: disabled  
-  
-hydra:  
-  output_subdir: null  
-  run:  
+defaults:
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+hydra:
+  output_subdir: null
+  run:
     dir: .
