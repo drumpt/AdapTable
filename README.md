@@ -2,7 +2,7 @@
 
 ## Environmental Setup
 ```
-conda create -n matata python=3.8.13 -y
+conda create -n matata python=3.8.16 -y
 conda activate matata
 pip install -r requirements.txt
 ```
