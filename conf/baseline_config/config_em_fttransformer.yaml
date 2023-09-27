@@ -1,7 +1,7 @@
 ### model
 ## currently supported: MLP, TabNet, TabTransformer, FTTransformer
 ## supervised baseline: lr, knn, rf, xgboost, catboost
-model: TabTransformer
+model: FTTransformer
 mlp:
   embedding: false
   num_enc_layers: 2

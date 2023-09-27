@@ -11,8 +11,8 @@ CONF_DIR="conf/baseline_config"
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
   background=($(jobs -p))
-  local default_num_jobs=32 #12
-  local num_max_jobs=32
+  local default_num_jobs=8 #12
+  local num_max_jobs=8
   echo $num_max_jobs
   if ((${#background[@]} >= num_max_jobs)); then
     wait -n
@@ -21,7 +21,7 @@ wait_n() {
 
 openml_mlpbase(){
   SEEDS="0 1 2"
-  MODELS="tabtransformer tabnet mlp"
+  MODELS="fttransformer tabnet mlp"
   METHODS="ttt++ eata em lame memo pl sam sar"
   DATASETS="adult cmc mfeat-karhunen optdigits diabetes semeion mfeat-pixel dna"
   benchmark="openml-cc18"
@@ -134,7 +134,7 @@ openml_mlpbase(){
 
 tableshift_mlpbase(){
   SEEDS="0 1 2"
-  MODELS="mlp tabtransformer tabnet"
+  MODELS="mlp fttransformer tabnet"
   METHODS="eata em lame memo pl sam sar ttt++"
   DATASETS="heloc diabetes_readmission anes"
   benchmark="tableshift"
@@ -149,10 +149,11 @@ tableshift_mlpbase(){
               log_dir=$LOG_DIR \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-              out_dir=${LOSG_LOG_POSTFIX} \
+              out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model} \
               benchmark=$benchmark \
               dataset="${dataset}" \
               shift_type=None \
+              retrain=False \
               shift_severity=1 \
               --config-dir $CONF_DIR \
               --config-name config_${method}_${model}.yaml \
@@ -165,6 +166,6 @@ tableshift_mlpbase(){
   done
 }
 
-openml_mlpbase
 tableshift_mlpbase
+openml_mlpbase
 #python send_email.py

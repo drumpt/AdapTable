@@ -1,7 +1,7 @@
 ### model
 ## currently supported: MLP, TabNet, TabTransformer, FTTransformer
 ## supervised baseline: lr, knn, rf, xgboost, catboost
-model: TabTransformer
+model: FTTransformer
 mlp:
   embedding: false
   num_enc_layers: 2
@@ -48,15 +48,15 @@ posttrain_shrinkage_factor: 0.5
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
-num_steps: 1 # optimization steps for each batch
-test_lr: 1e-4
+num_steps: 10 # optimization steps for each batch
+test_lr: 1e-5
 test_batch_size: 64
 test_optimizer: AdamW
 train_params: [all] # currently supported: all, LN, BN, GN
 
 ##################################################################
 ### methods & other hyperparameters
-method: [pl]
+method: [eata]
 # search space - episodic, test_lr : 1e-3~1e-5, num_steps : 1, 5, 10
 # em(tent), sam, sar, pl, ttt++, eata, memo
 # em - true, 1e-4, 1

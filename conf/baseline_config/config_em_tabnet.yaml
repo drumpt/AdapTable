@@ -35,7 +35,7 @@ retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 2e-2
+train_lr: 1e-3
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
 train_patience: 10
