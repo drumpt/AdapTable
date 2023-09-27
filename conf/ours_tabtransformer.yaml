@@ -27,7 +27,7 @@ missing_imputation_method: emd # currently supported: zero, mean, emd
 pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
-pretrain_lr: 1e-4
+pretrain_lr: 5e-3
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
@@ -41,10 +41,10 @@ smote: false
 train_patience: 10
 
 # hyperparmeters for posttraining
-posttrain_lr: 5e-3
+posttrain_lr: 5e-2
 posttrain_epochs: 50
 posttrain_patience: 10
-posttrain_shrinkage_factor: 0.5
+posttrain_shrinkage_factor: 0.1
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
@@ -85,9 +85,9 @@ eata_e_margin: 2.4538776394910684 # for eata
 eata_d_margin: 0.05 # for eata
 ttt_coef: [1.0, 0.1, 1.0] # for ttt++
 
-smoothing_factor: 0.1 # for moving average (high smoothing factor uses previous one much) # TODO: tune for tta
-uncertainty_upper_percentile_threshod: 0.75 # TODO: tune for tta
-uncertainty_lower_percentile_threshod: 0.25 # TODO: tune for tta
+smoothing_factor: 0.05 # for moving average (high smoothing factor uses previous one much) # TODO: tune for tta
+uncertainty_upper_percentile_threshod: 0.7 # TODO: tune for tta
+uncertainty_lower_percentile_threshod: 0.3 # TODO: tune for tta
 
 # for supervised baselines
 num_estimators: 25

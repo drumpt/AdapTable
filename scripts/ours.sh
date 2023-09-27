@@ -1,6 +1,6 @@
 ############# run in single GPU ##############
-GPUS=(0 1 2 3)
-NUM_GPUS=4
+GPUS=(0 1)
+NUM_GPUS=2
 ##############################################
 i=0
 
@@ -11,8 +11,8 @@ CONF_DIR="conf/baseline_config"
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
   background=($(jobs -p))
-  local default_num_jobs=8 #12
-  local num_max_jobs=8
+  local default_num_jobs=16 #12
+  local num_max_jobs=16
   echo $num_max_jobs
   if ((${#background[@]} >= num_max_jobs)); then
     wait -n

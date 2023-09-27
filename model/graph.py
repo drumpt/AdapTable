@@ -11,8 +11,8 @@ class GraphNet(torch.nn.Module):
         self.num_features = num_features
         self.num_classes = num_classes
 
-        self.conv = GCNConv(num_features, 16, bias=True)
-        self.fc = torch.nn.Linear(16 + num_classes, 1, bias=True)
+        self.conv = GCNConv(num_features, 128, bias=False)
+        self.fc = torch.nn.Linear(128 + num_classes, 1, bias=True)
 
         # TODO: linear layer for each categorical feature
         self.embedding_layer = [
@@ -47,7 +47,7 @@ class GraphNet(torch.nn.Module):
         x = self.fc(x)
 
         # turn into temperature
-        t = F.softplus(x)
+        t = F.softplus(x, beta=1.1)
         t = t.repeat(1, self.num_classes)
 
         x = torch.div(vanilla_out, t)

@@ -35,7 +35,8 @@ class Calibrator():
 
     def train_gnn(self):
         print('========================GNN Training Start========================')
-        loss_fn = Posttrain_loss(self.shrinkage_factor)
+        prob_dist = torch.mean(torch.tensor(self.dataset.train_y), dim=0).to(self.args.device).float()
+        loss_fn = Posttrain_loss(self.shrinkage_factor, prob_dist)
 
         train_graph_dataset = self.train_graph_dataset
         optimizer = torch.optim.AdamW(self.gnn.parameters(), lr=self.lr)
@@ -115,7 +116,6 @@ class Calibrator():
                 break
 
             print(f"posttrain epoch {epoch} | train_loss {loss_total / train_len:.4f}, valid_loss {valid_loss / valid_len:.4f}")
-
         best_model.requires_grad_(False)
         best_model.eval()
         print('best model saved at epoch ', best_epoch)

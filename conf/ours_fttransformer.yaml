@@ -1,7 +1,7 @@
 ### model
 ## currently supported: MLP, TabNet, TabTransformer, FTTransformer
 ## supervised baseline: lr, knn, rf, xgboost, catboost
-model: TabNet
+model: FTTransformer
 mlp:
   embedding: false
   num_enc_layers: 2
@@ -27,7 +27,7 @@ missing_imputation_method: emd # currently supported: zero, mean, emd
 pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
-pretrain_lr: 1e-4
+pretrain_lr: 5e-3
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
@@ -35,16 +35,16 @@ retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-3
+train_lr: 1e-4
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
 train_patience: 10
 
 # hyperparmeters for posttraining
-posttrain_lr: 1e-3
-posttrain_epochs: 100
+posttrain_lr: 5e-3
+posttrain_epochs: 50
 posttrain_patience: 10
-posttrain_shrinkage_factor: 0.0
+posttrain_shrinkage_factor: 0.1
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
@@ -56,7 +56,7 @@ test_lr: 0
 
 ##################################################################
 ### methods & other hyperparameters
-method: [label_distribution_handler]
+method: [calibrator, label_distribution_handler]
 # search space - episodic, test_lr : 1e-3~1e-5, num_steps : 1, 5, 10
 # em(tent), sam, sar, pl, ttt++, eata, memo
 # em - true, 1e-4, 1

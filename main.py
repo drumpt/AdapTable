@@ -31,7 +31,9 @@ def get_model(args, dataset):
         model = 'TabTransformer'
     elif args.model == 'mlp':
         model = 'MLP'
-    elif args.model in ['MLP', 'TabNet', 'TabTransformer']:
+    elif args.model == 'fttransformer':
+        modle = 'FTTransformer'
+    elif args.model in ['MLP', 'TabNet', 'TabTransformer', 'FTTransformer']:
         model = args.model
     else:
         raise NotImplementedError
@@ -483,7 +485,7 @@ def main(args):
                 SOURCE_CALIBRATED_PROB_LIST.extend(calibrated_y.softmax(dim=-1).max(dim=-1)[0].tolist())
                 SOURCE_ONE_HOT_LABEL_LIST.extend(train_y.cpu().tolist())
 
-    source_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(dataset.train_y, axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
+    source_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(np.concatenate([dataset.train_y, dataset.valid_y], axis=0), axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
     target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
@@ -511,6 +513,7 @@ def main(args):
         elif 'label_distribution_handler' in args.method:
             estimated_y = source_model(test_x)
             calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
+            print('calibrated probability: ', calibrated_probability[0])
             cur_target_label_dist = (1 - args.smoothing_factor) * torch.mean(calibrated_probability, dim=0, keepdim=True) + args.smoothing_factor * target_label_dist
 
             if 'column_distribution_handler' in args.method:
@@ -536,13 +539,14 @@ def main(args):
                     estimated_y[i] = estimated_y[i] * temperature
                 elif neg_mask[i]:
                     estimated_y[i] = estimated_y[i] / temperature
-
+            print(f'source label dist is : {source_label_dist}')
+            print(f'true target label dist is : {test_y.mean(dim=0, keepdim=True)}')
+            print(f'target label dist is : {target_label_dist}')
             calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * cur_target_label_dist / source_label_dist), p=1, dim=-1)
             estimated_y = (estimated_y.softmax(dim=-1) / 2 + calibrated_probability / 2).log()
         else:
             estimated_y = source_model(test_x)
         target_label_dist = (1 - args.smoothing_factor) * torch.mean(estimated_y.softmax(dim=-1), dim=0, keepdim=True) + args.smoothing_factor * target_label_dist
-
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         ESTIMATED_AFTER_LABEL_LIST.extend(torch.argmax(estimated_y, dim=-1).cpu().tolist())

@@ -5,18 +5,20 @@ from torch.autograd import Variable
 from utils.utils import *
 
 class Posttrain_loss(nn.Module):
-    def __init__(self, shrinkage_factor):
+    def __init__(self, shrinkage_factor, prob_dist):
         super(Posttrain_loss, self).__init__()
         self.shrinkage_factor = shrinkage_factor
 
-        self.main_loss = FocalLoss(gamma=1)
-        self.aux_loss = CAGCN_entropy()
+        # alpha calculation
+        self.alpha = F.normalize(torch.reciprocal(prob_dist + 1e-6), p=1, dim=0)
+        self.main_loss = FocalLoss(gamma=2, alpha=self.alpha)
+        self.aux_loss = CAGCN_loss()
 
     def forward(self, logits, gt_label):
         # probs are logtis
         # gt_label are one-hot vectors
-        if gt_label.dim() == 1:
-            gt_label = torch.argmax(gt_label, dim=-1)
+        # if gt_label.dim() == 1:
+        #     gt_label = torch.argmax(gt_label, dim=-1)
 
         # cross entropy loss
         main_loss = self.main_loss(logits, gt_label)

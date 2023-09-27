@@ -125,7 +125,7 @@ class Dataset():
         self.valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
         self.test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
 
-        self.posttrain_loader = torch.utils.data.DataLoader(train_data, batch_size=args.test_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+        self.posttrain_loader = torch.utils.data.DataLoader(train_data,  batch_size=args.test_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
         self.posttrain_valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
 
         logger.info(f"dataset size | train: {len(self.train_x)}, valid: {len(self.valid_x)}, test: {len(self.test_x)}")

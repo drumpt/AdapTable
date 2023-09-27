@@ -21,8 +21,8 @@ wait_n() {
 
 openml_mlpbase(){
   SEEDS="0 1 2"
-  MODELS="mlp tabtransformer tabnet"
-  METHODS="eata em lame memo pl sam sar ttt++"
+  MODELS="tabtransformer tabnet mlp"
+  METHODS="ttt++ eata em lame memo pl sam sar"
   DATASETS="adult cmc mfeat-karhunen optdigits diabetes semeion mfeat-pixel dna"
   benchmark="openml-cc18"
 

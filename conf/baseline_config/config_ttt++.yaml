@@ -41,7 +41,7 @@ smote: false
 train_patience: 10
 
 # hyperparmeters for posttraining
-posttrain_lr: 5e-3
+posttrain_lr: 5e-2
 posttrain_epochs: 50
 posttrain_patience: 10
 posttrain_shrinkage_factor: 0.5
