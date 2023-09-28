@@ -11,8 +11,8 @@ CONF_DIR="conf/baseline_config"
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
   background=($(jobs -p))
-  local default_num_jobs=8 #12
-  local num_max_jobs=8
+  local default_num_jobs=4 #12
+  local num_max_jobs=4
   echo $num_max_jobs
   if ((${#background[@]} >= num_max_jobs)); then
     wait -n
@@ -21,7 +21,7 @@ wait_n() {
 
 openml_mlpbase(){
   SEEDS="0 1 2"
-  MODELS="fttransformer tabnet mlp"
+  MODELS="fttransformer tabnet"
   METHODS="ttt++ eata em lame memo pl sam sar"
   DATASETS="adult cmc mfeat-karhunen optdigits diabetes semeion mfeat-pixel dna"
   benchmark="openml-cc18"
@@ -36,7 +36,7 @@ openml_mlpbase(){
               log_dir=$LOG_DIR \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-              out_dir=${LOG_POSTFIX} \
+              out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_numerical \
               benchmark=$benchmark \
               dataset="${dataset}" \
               shift_type=numerical \
@@ -52,7 +52,7 @@ openml_mlpbase(){
               log_dir=$LOG_DIR \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-              out_dir=${LOG_POSTFIX} \
+              out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_categorical \
               benchmark=$benchmark \
               dataset="${dataset}" \
               shift_type=categorical \
@@ -68,7 +68,7 @@ openml_mlpbase(){
               log_dir=$LOG_DIR \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-              out_dir=${LOG_POSTFIX} \
+              out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_gaussian \
               benchmark=$benchmark \
               dataset="${dataset}" \
               shift_type=Gaussian \
@@ -84,7 +84,7 @@ openml_mlpbase(){
               log_dir=$LOG_DIR \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-              out_dir=${LOG_POSTFIX} \
+              out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_uniform \
               benchmark=$benchmark \
               dataset="${dataset}" \
               shift_type=uniform \
@@ -100,7 +100,7 @@ openml_mlpbase(){
               log_dir=$LOG_DIR \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-              out_dir=${LOG_POSTFIX} \
+              out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_rd \
               benchmark=$benchmark \
               dataset="${dataset}" \
               shift_type=random_drop \
@@ -116,7 +116,7 @@ openml_mlpbase(){
               log_dir=$LOG_DIR \
               log_prefix=${LOG_POSTFIX} \
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-              out_dir=${LOG_POSTFIX} \
+              out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_cd \
               benchmark=$benchmark \
               dataset="${dataset}" \
               shift_type=column_drop \
@@ -134,7 +134,7 @@ openml_mlpbase(){
 
 tableshift_mlpbase(){
   SEEDS="0 1 2"
-  MODELS="mlp fttransformer tabnet"
+  MODELS="fttransformer tabnet"
   METHODS="eata em lame memo pl sam sar ttt++"
   DATASETS="heloc diabetes_readmission anes"
   benchmark="tableshift"
@@ -167,5 +167,5 @@ tableshift_mlpbase(){
 }
 
 tableshift_mlpbase
-openml_mlpbase
+#openml_mlpbase
 #python send_email.py

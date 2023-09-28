@@ -13,6 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn import DataParallel
 from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score
 from sklearn.metrics import confusion_matrix
 
@@ -45,7 +46,6 @@ def get_model(args, dataset):
 
 def get_source_model(args, dataset):
     init_model = get_model(args, dataset)  # get initalized model architecture only
-    print(init_model)
     if isinstance(args.method, str):
         args.method = [args.method]
 
@@ -119,6 +119,8 @@ def get_xgb_classifier(args, dataset):
 
 
 def train(args, model, optimizer, dataset, with_mae=False):
+    global TRAIN_GRADIENT_NORM_LIST, TRAIN_SMOOTHNESS_LIST
+    TRAIN_GRADIENT_NORM_LIST, TRAIN_SMOOTHNESS_LIST = [], []
     device = args.device
     source_model, best_loss, best_epoch = None, float('inf'), 0
     regression = True if dataset.out_dim == 1 else False
@@ -127,10 +129,9 @@ def train(args, model, optimizer, dataset, with_mae=False):
 
     for epoch in range(1, args.epochs + 1):
         train_loss, train_acc, train_len = 0, 0, 0
-        model = model.train()
-        for train_x, train_y in dataset.train_loader:
+        model = model.train().requires_grad_(True)
+        for i, (train_x, train_y) in enumerate(dataset.train_loader):
             train_x, train_y = train_x.to(device), train_y.to(device)
-
             estimated_y = model(train_x)
             loss = loss_fn(estimated_y, train_y)
 
@@ -244,7 +245,6 @@ def posttrain(args, model, column_distribution_handler, column_distribution_hand
     return source_handler
 
 
-
 def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
     global EMA, original_source_model, eata_params, ttt_params
     optimizer.zero_grad()
@@ -323,7 +323,7 @@ def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
     if 'sar' in args.method:
         entropy_first = softmax_entropy(outputs)
         filter_id = torch.where(entropy_first < 0.4 * np.log(outputs.shape[-1]))
-        entropy_first = softmax_entropy(outputs)
+        entropy_first = entropy_first[filter_id]
         loss = entropy_first.mean()
         loss.backward(retain_graph=True)
         optimizer.first_step()
@@ -429,6 +429,8 @@ def main(args):
     TARGET_PREDICTION_LIST, TARGET_CALIBRATED_PREDICTION_LIST = [], []
     GROUND_TRUTH_LABEL_LIST, ESTIMATED_BEFORE_LABEL_LIST, ESTIMATED_AFTER_LABEL_LIST = [], [], []
 
+    global TRAIN_GRADIENT_NORM_LIST, TRAIN_SMOOTHNESS_LIST
+    
     eata_params = {'fishers': None, 'current_model_probs': None}
     ttt_params = {'mean': None, 'sigma': None}
     if hasattr(args, 'seed'):
@@ -450,8 +452,21 @@ def main(args):
     loss_fn = nn.MSELoss() if regression else nn.CrossEntropyLoss()
     ece_loss_fn = ECELoss()
 
+    import time
+
+    before_source_model_training = time.time()
+
     source_model = get_source_model(args, dataset)
     source_model.eval().requires_grad_(True)
+
+    with open(file=f"pickle/{args.dataset}_{args.model}_{args.seed}_grad_norm.pickle", mode='wb') as f:
+        pickle.dump(TRAIN_GRADIENT_NORM_LIST, f)
+    with open(file=f"pickle/{args.dataset}_{args.model}_{args.seed}_smoothness.pickle", mode='wb') as f:
+        pickle.dump(TRAIN_SMOOTHNESS_LIST, f)
+
+    source_model_training_time = time.time() - before_source_model_training
+    logger.info(f"source_model_training_time: {source_model_training_time}")
+
     original_source_model = deepcopy(source_model)
     original_source_model.eval().requires_grad_(False)
     params, _ = collect_params(source_model, train_params=args.train_params)
@@ -470,6 +485,8 @@ def main(args):
     original_model_state, original_optimizer_state, _ = copy_model_and_optimizer(source_model, test_optimizer, scheduler=None)
     test_loss_before, test_loss_after = 0, 0
 
+    before_gnn_training = time.time()
+
     if 'calibrator' in args.method:
         calibrator = Calibrator(args, dataset, source_model)
         calibrator.train_gnn()
@@ -485,8 +502,16 @@ def main(args):
                 SOURCE_CALIBRATED_PROB_LIST.extend(calibrated_y.softmax(dim=-1).max(dim=-1)[0].tolist())
                 SOURCE_ONE_HOT_LABEL_LIST.extend(train_y.cpu().tolist())
 
+    gnn_training_time = time.time() - before_gnn_training
+    logger.info(f"gnn_training_time: {gnn_training_time}")
+
     source_label_dist = F.normalize(torch.FloatTensor(np.unique(np.argmax(np.concatenate([dataset.train_y, dataset.valid_y], axis=0), axis=-1), return_counts=True)[1]), p=1, dim=-1).to(args.device)
     target_label_dist = torch.full((1, dataset.out_dim), 1 / dataset.out_dim).to(args.device)
+
+    import time
+    avg_inference_time = 0
+    avg_adaptation_time = 0
+
     for batch_idx, (test_x, test_mask_x, test_y) in enumerate(dataset.test_loader):
         if args.episodic or ("sar" in args.method and EMA != None and EMA < 0.2):
             source_model, test_optimizer, _ = load_model_and_optimizer(source_model, test_optimizer, None,
@@ -495,11 +520,17 @@ def main(args):
         test_x, test_mask_x, test_y = test_x.to(device), test_mask_x.to(device), test_y.to(device)
         GROUND_TRUTH_LABEL_LIST.extend(torch.argmax(test_y, dim=-1).cpu().tolist())
 
+        before_inference = time.time()
         ori_estimated_y = original_source_model(test_x)
+        avg_inference_time += time.time() - before_inference
+
+
         loss = loss_fn(ori_estimated_y, test_y)
         test_loss_before += loss.item() * test_x.shape[0]
         ESTIMATED_BEFORE_LABEL_LIST.extend(torch.argmax(ori_estimated_y, dim=-1).cpu().tolist())
         TARGET_PREDICTION_LIST.extend(ori_estimated_y.detach().cpu().tolist())
+
+        before_adaptation = time.time()
 
         for _ in range(1, args.num_steps + 1):
             forward_and_adapt(args, dataset, test_x, test_y, test_mask_x, source_model, test_optimizer)
@@ -513,8 +544,7 @@ def main(args):
         elif 'label_distribution_handler' in args.method:
             estimated_y = source_model(test_x)
             calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) / source_label_dist), p=1, dim=-1)
-            print('calibrated probability: ', calibrated_probability[0])
-            cur_target_label_dist = (1 - args.smoothing_factor) * torch.mean(calibrated_probability, dim=0, keepdim=True) + args.smoothing_factor * target_label_dist
+            cur_target_label_dist = (1 - float(args.smoothing_factor)) * torch.mean(calibrated_probability, dim=0, keepdim=True) + float(args.smoothing_factor) * target_label_dist
 
             if 'column_distribution_handler' in args.method:
                 column_distribution_handler = get_column_distribution_handler(args, dataset, original_source_model)
@@ -539,14 +569,16 @@ def main(args):
                     estimated_y[i] = estimated_y[i] * temperature
                 elif neg_mask[i]:
                     estimated_y[i] = estimated_y[i] / temperature
-            print(f'source label dist is : {source_label_dist}')
-            print(f'true target label dist is : {test_y.mean(dim=0, keepdim=True)}')
-            print(f'target label dist is : {target_label_dist}')
+
             calibrated_probability = F.normalize((F.softmax(estimated_y, dim=-1) * cur_target_label_dist / source_label_dist), p=1, dim=-1)
             estimated_y = (estimated_y.softmax(dim=-1) / 2 + calibrated_probability / 2).log()
+            target_label_dist = (1 - float(args.smoothing_factor)) * torch.mean(estimated_y.softmax(dim=-1), dim=0, keepdim=True) + float(args.smoothing_factor) * target_label_dist
         else:
             estimated_y = source_model(test_x)
-        target_label_dist = (1 - args.smoothing_factor) * torch.mean(estimated_y.softmax(dim=-1), dim=0, keepdim=True) + args.smoothing_factor * target_label_dist
+
+        avg_adaptation_time += time.time() - before_adaptation
+
+
         loss = loss_fn(estimated_y, test_y)
         test_loss_after += loss.item() * test_x.shape[0]
         ESTIMATED_AFTER_LABEL_LIST.extend(torch.argmax(estimated_y, dim=-1).cpu().tolist())
@@ -570,6 +602,14 @@ def main(args):
                 loss.backward(retain_graph=True)
                 gradient_norm = np.sqrt(np.sum([p.grad.detach().cpu().data.norm(2) ** 2 if p.grad != None else 0 for p in source_model.parameters()]))
                 GRADIENT_NORM_LIST.append(gradient_norm)
+
+    logger.info(f"total_inference_time: {avg_inference_time}")
+    logger.info(f"total_adaptation_time: {avg_adaptation_time}")
+
+    # avg_inference_time  /= len(dataset.test_x)
+
+    logger.info(f"avg_inference_time: {avg_inference_time / len(dataset.test_x)}")
+    logger.info(f"avg_adaptation_time: {avg_adaptation_time / len(dataset.test_x)}")
 
     logger.info(f"before adaptation | loss {test_loss_before / len(GROUND_TRUTH_LABEL_LIST):.4f}, acc {accuracy_score(GROUND_TRUTH_LABEL_LIST, ESTIMATED_BEFORE_LABEL_LIST):.4f}, bacc {balanced_accuracy_score(GROUND_TRUTH_LABEL_LIST, ESTIMATED_BEFORE_LABEL_LIST):.4f}, macro f1-score {f1_score(GROUND_TRUTH_LABEL_LIST, ESTIMATED_BEFORE_LABEL_LIST, average='macro'):.4f}")
     logger.info(f"after adaptation | loss {test_loss_after / len(GROUND_TRUTH_LABEL_LIST):.4f}, acc {accuracy_score(GROUND_TRUTH_LABEL_LIST, ESTIMATED_AFTER_LABEL_LIST):.4f}, bacc {balanced_accuracy_score(GROUND_TRUTH_LABEL_LIST, ESTIMATED_AFTER_LABEL_LIST):.4f}, macro f1-score {f1_score(GROUND_TRUTH_LABEL_LIST, ESTIMATED_AFTER_LABEL_LIST, average='macro'):.4f}")
@@ -596,42 +636,42 @@ def main(args):
         for label, probs in probs_per_label.items():
             draw_histogram(args, probs, f"class {label} probability distribution", "Confidence", "Number of Instances")
 
-        draw_histogram(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution", "Entropy", "Number of Instances")
-        draw_histogram(args, np.array(SOURCE_PROB_LIST), "Source Confidence Distribution", "Confidence", "Number of Instances")
+        # draw_histogram(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution", "Entropy", "Number of Instances")
+        # draw_histogram(args, np.array(SOURCE_PROB_LIST), "Source Confidence Distribution", "Confidence", "Number of Instances")
 
         draw_histogram(args, ENTROPY_LIST_BEFORE_ADAPTATION, "Entropy Distribution Before Adaptation", "Entropy", "Number of Instances")
-        draw_histogram(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation", "Entropy", "Number of Instances")
-        draw_histogram(args, np.array(PROB_LIST_BEFORE_ADAPTATION), "Target Confidence Distribution Before Adaptation", "Confidence", "Number of Instances")
-        draw_histogram(args, np.array(PROB_LIST_AFTER_ADAPTATION), "Target Confidence Distribution After Adaptation", "Confidence", "Number of Instances")
+        # draw_histogram(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation", "Entropy", "Number of Instances")
+        # draw_histogram(args, np.array(PROB_LIST_BEFORE_ADAPTATION), "Target Confidence Distribution Before Adaptation", "Confidence", "Number of Instances")
+        # draw_histogram(args, np.array(PROB_LIST_AFTER_ADAPTATION), "Target Confidence Distribution After Adaptation", "Confidence", "Number of Instances")
 
-        draw_label_distribution_plot(args, SOURCE_LABEL_LIST, "Source Label Distribution")
-        draw_label_distribution_plot(args, LABEL_LIST, "Target Label Distribution")
-        draw_label_distribution_plot(args, TARGET_PREDICTION_LIST, "Pseudo Label Distribution")
+        # draw_label_distribution_plot(args, SOURCE_LABEL_LIST, "Source Label Distribution")
+        # draw_label_distribution_plot(args, LABEL_LIST, "Target Label Distribution")
+        # draw_label_distribution_plot(args, TARGET_PREDICTION_LIST, "Pseudo Label Distribution")
 
         draw_tsne(args, np.array(FEATURE_LIST), np.array(LABEL_LIST), "Target Latent Space Visualization with t-SNE")
-        draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST), "Source Latent Space Visualization with t-SNE")
-        draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST), "Source Input Space Visualization with t-SNE")
+        # draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST), "Source Latent Space Visualization with t-SNE")
+        # draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST), "Source Input Space Visualization with t-SNE")
 
         if 'calibrator' in args.method or 'column_distribution_handler' in args.method:
-            train_ece_before = ece_loss_fn(torch.tensor(TARGET_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
-            train_ece_after = ece_loss_fn(torch.tensor(TARGET_CALIBRATED_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
-            logger.info(f"test ece before: {train_ece_before}")
-            logger.info(f"test ece after: {train_ece_after}")
+            # train_ece_before = ece_loss_fn(torch.tensor(TARGET_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
+            # train_ece_after = ece_loss_fn(torch.tensor(TARGET_CALIBRATED_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
+            # logger.info(f"test ece before: {train_ece_before}")
+            # logger.info(f"test ece after: {train_ece_after}")
 
-            test_ece_before = ece_loss_fn(torch.tensor(SOURCE_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
-            test_ece_after = ece_loss_fn(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
-            logger.info(f"train_ece_before: {test_ece_before}")
-            logger.info(f"train_ece_after: {test_ece_after}")
+            # test_ece_before = ece_loss_fn(torch.tensor(SOURCE_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
+            # test_ece_after = ece_loss_fn(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST), torch.tensor(SOURCE_LABEL_LIST)).item()
+            # logger.info(f"train_ece_before: {test_ece_before}")
+            # logger.info(f"train_ece_after: {test_ece_after}")
 
-            draw_histogram(args, np.array(SOURCE_CALIBRATED_ENTROPY_LIST), "Source Entropy Distribution After Calibration", "Entropy", "Number of Instances")
-            draw_histogram(args, np.array(SOURCE_CALIBRATED_PROB_LIST), "Source Confidence Distribution After Calibration", "Confidence", "Number of Instances")
-            draw_histogram(args, np.array(PROB_LIST_AFTER_CALIBRATION), "Target Confidence Distribution After Calibration", "Confidence", "Number of Instances")
+            # draw_histogram(args, np.array(SOURCE_CALIBRATED_ENTROPY_LIST), "Source Entropy Distribution After Calibration", "Entropy", "Number of Instances")
+            # draw_histogram(args, np.array(SOURCE_CALIBRATED_PROB_LIST), "Source Confidence Distribution After Calibration", "Confidence", "Number of Instances")
+            # draw_histogram(args, np.array(PROB_LIST_AFTER_CALIBRATION), "Target Confidence Distribution After Calibration", "Confidence", "Number of Instances")
 
             draw_reliability_plot(args, np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration_before_calibration.png")
-            draw_reliability_plot(args, np.array(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_CALIBRATED_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration_after_calibration.png")
+            # draw_reliability_plot(args, np.array(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_CALIBRATED_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration_after_calibration.png")
 
-    if args.entropy_gradient_vis:
-        draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
+    # if args.entropy_gradient_vis:
+    #     draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")
 
 
 if __name__ == "__main__":

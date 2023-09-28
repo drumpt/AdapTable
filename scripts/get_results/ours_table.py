@@ -102,8 +102,8 @@ def main(args):
         for dataset in ['heloc', 'anes', 'diabetes_readmission']:
         # for dataset in ['adult', 'cmc', 'mfeat-karhunen', 'optdigits', 'diabetes', 'semeion', 'mfeat-pixel', 'dna']:
             print(dataset)
-            for idx, method in enumerate(['calibrator_label_distribution_handler']):
-            # for idx, method in enumerate(['pl', 'em', 'sam', 'sar', 'memo', 'ttt++', 'eata', 'lame']):
+            # for idx, method in enumerate(['calibrator_label_distribution_handler']):
+            for idx, method in enumerate(['pl', 'em', 'sam', 'sar', 'memo', 'ttt++', 'eata', 'lame']):
                 # pl
                 # em
                 # sam
@@ -156,6 +156,10 @@ def format_print(filtered_dict, args, is_first=False):
                 list_path.append(path)
     # print(list_acc)
     # print(list_path)
+    # remove -1 from both lists
+    list_acc_before = [x for x in list_acc_before if x != -1]
+    list_acc = [x for x in list_acc if x != -1]
+
     if args.debug:
         print(len(list_path))
     if is_first:

@@ -43,6 +43,10 @@ class Dataset():
 
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
+        train_x.iloc[:, cont_indices] = train_x.iloc[:, cont_indices].fillna(0)
+        valid_x.iloc[:, cont_indices] = valid_x.iloc[:, cont_indices].fillna(0)
+        test_x.iloc[:, cont_indices] = test_x.iloc[:, cont_indices].fillna(0)
+
         self.emb_dim = []
         if len(cont_indices):
             self.input_scaler = getattr(sklearn.preprocessing, args.normalizer)()
@@ -143,6 +147,25 @@ class Dataset():
 
 
     def get_openml_cc18_dataset(self, args):
+        def preprocess_dna_dataset(x):
+            def binary_to_string(array):
+                array = list(array)
+                if array == ['1', '0', '0']:
+                    return 0 # "A"
+                elif array == ['0', '1', '0']:
+                    return 1 # "T"
+                elif array == ['0', '0', '1']:
+                    return 2 # "G"
+                else:
+                    return 3 # "C"
+            x = x.to_numpy()
+            x_string = []
+            for col_idx in range(0, x.shape[-1], 3):
+                x_string.append(list(map(lambda x: binary_to_string(x), list(x[:, col_idx:col_idx + 3]))))
+            x_string = pd.DataFrame(x_string).T
+            cat_indicator = [True for _ in range(x_string.shape[-1])]
+            return x_string, cat_indicator
+
         benchmark_list_path = "data/OpenML-CC18/benchmark_list.csv"
         if not os.path.exists(benchmark_list_path):
             benchmark = openml.study.get_suite("OpenML-CC18")
@@ -154,9 +177,13 @@ class Dataset():
 
         dataset = openml.datasets.get_dataset(args.dataset)
         x, y, cat_indicator, _ = dataset.get_data(target=target_feature, dataset_format="dataframe")
+        if args.dataset == "dna":
+            x, cat_indicator = preprocess_dna_dataset(x)
         y = pd.DataFrame(y)
         cat_indices = np.argwhere(np.array(cat_indicator) == True).flatten()
         regression = False
+
+        print(f"cat_indices: {cat_indices}")
 
         if args.shift_type in ["numerical", "categorical"]:
             if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):
@@ -169,6 +196,7 @@ class Dataset():
         else:
             train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
             valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+        # print(f"train_x original: {train_x}")
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
 
@@ -186,6 +214,14 @@ class Dataset():
         valid_x, valid_y, _, _ = dataset.get_pandas("validation")
         test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("test")
         cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
+
+        print(f"train_x: {train_x}")
+        print(f"train_x: {train_x.iloc[0]}")
+        print(f"train_x.shape: {train_x.shape}")
+        print(f"train_y: {train_y}")
+        print(f"train_y.shape: {train_y.shape}")
+        print(f"cat_indices: {cat_indices}")
+
         return (train_x, valid_x, test_x), (pd.DataFrame(train_y), pd.DataFrame(valid_y), pd.DataFrame(test_y)), cat_indices, regression
 
 

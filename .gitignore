@@ -1,6 +1,7 @@
 **/__pycache__
 .idea/
 
+data/*
 data/UCI
 data/shifts/
 data/tableshift/

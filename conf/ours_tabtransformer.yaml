@@ -27,7 +27,7 @@ missing_imputation_method: emd # currently supported: zero, mean, emd
 pretrain_epochs: 50
 pretrain_batch_size: 64
 pretrain_optimizer: AdamW
-pretrain_lr: 5e-3
+pretrain_lr: 2e-2
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training

@@ -16,8 +16,8 @@ mlp:
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
-dataset: cmc
+benchmark: tableshift # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
+dataset: diabetes_readmission
 shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0.2
 normalizer: StandardScaler
@@ -35,16 +35,16 @@ retrain: true
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW
-train_lr: 1e-3
+train_lr: 1e-4
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
-train_patience: 10
+train_patience: 5
 
 # hyperparmeters for posttraining
-posttrain_lr: 5e-3
-posttrain_epochs: 100
+posttrain_lr: 5e-2
+posttrain_epochs: 1
 posttrain_patience: 10
-posttrain_shrinkage_factor: 1
+posttrain_shrinkage_factor: 0
 
 ### hyperparameters for tta
 episodic: true # reset model to the pretrained one for every batch if true
@@ -85,9 +85,9 @@ eata_e_margin: 2.4538776394910684 # for eata
 eata_d_margin: 0.05 # for eata
 ttt_coef: [1.0, 0.1, 1.0] # for ttt++
 
-smoothing_factor: 0.05 # for moving average (high smoothing factor uses previous one much) # TODO: tune for tta
-uncertainty_upper_percentile_threshod: 0.5 # TODO: tune for tta
-uncertainty_lower_percentile_threshod: 0.2 # TODO: tune for tta
+smoothing_factor: 0.0 # for moving average (high smoothing factor uses previous one much) # TODO: tune for tta
+uncertainty_upper_percentile_threshod: 0.9 # TODO: tune for tta
+uncertainty_lower_percentile_threshod: 0.25 # TODO: tune for tta
 
 # for supervised baselines
 num_estimators: 25
@@ -108,7 +108,7 @@ out_dir: exps/test_mae
 vis_dir: imgs
 
 # visualization
-vis: false
+vis: true
 entropy_gradient_vis: false
 
 # graph

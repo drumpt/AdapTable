@@ -16,10 +16,10 @@ mlp:
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
-dataset: cmc
+benchmark: tableshift # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
+dataset: anes
 shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0.2
+shift_severity: 0.5
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd
 

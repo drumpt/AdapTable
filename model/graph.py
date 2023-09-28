@@ -2,10 +2,12 @@ import torch
 from torch_geometric.nn import GCNConv, global_mean_pool
 import torch.nn.functional as F
 
+
+
 class GraphNet(torch.nn.Module):
-    # GraphNet for temperature scaling
-    def __init__(self, num_features, num_classes, cat_cls_len, cont_len):
-        super(GraphNet, self).__init__()
+    def __init__(self, args, num_features, num_classes, cat_cls_len, cont_len):
+        super().__init__()
+        self.args = args
         self.cat_cls_len = cat_cls_len
         self.cont_len = cont_len
         self.num_features = num_features
@@ -19,10 +21,11 @@ class GraphNet(torch.nn.Module):
             torch.nn.Linear(cat_len, 1, bias=False) for cat_len in self.cat_cls_len
         ]
 
+
     def forward(self, data, vanilla_out):
         num_x, cat_x, edge_index, edge_weight = data.num_x, data.cat_x, data.edge_index, data.edge_weights
 
-        x = [num_x]
+        x = [torch.tensor(num_x).to(self.args.device)]
         for idx, cat_len in enumerate(self.cat_cls_len):
             x.append(self.embedding_layer[idx](cat_x[idx][:, :cat_len]).squeeze().unsqueeze(0))
 
@@ -54,10 +57,10 @@ class GraphNet(torch.nn.Module):
 
         return x
 
+
     def _apply(self, fn):
-        super(GraphNet, self)._apply(fn)
+        super()._apply(fn)
         # Apply the linear embedding layer to the categorical features
         for i in self.embedding_layer:
             i._apply(fn)
         return self
-

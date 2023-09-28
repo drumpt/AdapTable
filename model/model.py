@@ -61,6 +61,26 @@ class MLP(nn.Module):
         return outputs
 
 
+    # def forward(self, inputs):
+    #     def get_embedding(inputs):
+    #         if self.embedding and len(self.emb_layers):
+    #             inputs_cont = inputs[:, :self.cat_start_index]
+    #             inputs_cat = inputs[:, self.cat_start_index:]
+    #             inputs_cat_emb = []
+    #             for i, emb_layer in enumerate(self.emb_layers):
+    #                 inputs_cat_emb.append(emb_layer(torch.argmax(inputs_cat[:, self.cat_start_indices[i]:self.cat_end_indices[i]], dim=-1)))
+    #             inputs_cat = torch.cat(inputs_cat_emb, dim=-1)
+    #             inputs = torch.cat([inputs_cont, inputs_cat], 1)
+    #         return inputs
+
+    #     inputs = get_embedding(inputs)
+    #     print(f"inputs.device: {inputs.device}")
+        
+    #     hidden_repr = self.encoder(inputs)
+    #     outputs = self.main_head(hidden_repr)
+    #     return outputs
+
+
     def get_recon_out(self, inputs):
         inputs = self.get_embedding(inputs)
         hidden_repr = self.encoder(inputs)

@@ -140,21 +140,20 @@ class GraphDataset(torch.utils.data.Dataset):
             if isinstance(i, list):
                 cat_batch = batch[:, i].float()
                 train_cat_batch = torch_train_datset[:, i].float()
-                cat_features = cat_batch
+                cat_features = cat_batch - torch.mean(train_cat_batch, dim=0)
                 # fill in zeros to match max_cat_len
                 cat_features = torch.cat([cat_features, torch.zeros(len(cat_features), max_cat_len - len(i)).to(args.device)], dim=1)
                 categorical_node_feat.append(cat_features)
             else:
                 num_batch = batch[:, i]
-                num_features = num_batch
+                train_num_batch = torch_train_datset[:, i]
+                num_features = num_batch - torch.mean(train_num_batch, dim=0)
                 numerical_node_feat.append(num_features)
 
         if numerical_node_feat:
             numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
-            numerical_node_feat = F.normalize(numerical_node_feat, p=2, dim=1)
         if categorical_node_feat:
             categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
-            categorical_node_feat = F.normalize(categorical_node_feat, p=2, dim=1)
 
         return numerical_node_feat, categorical_node_feat
 

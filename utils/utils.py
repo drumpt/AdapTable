@@ -71,7 +71,7 @@ def get_logger(args):
     log_path += f'_sf{args.smoothing_factor}_upth{args.uncertainty_upper_percentile_threshod}_lowth{args.uncertainty_lower_percentile_threshod}'
     log_path += '.txt'
 
-
+    print(f"log_path: {log_path}")
 
     file_handler = logging.FileHandler(log_path)
     file_handler.setFormatter(formatter)
@@ -254,6 +254,9 @@ def get_mask_by_feature_importance(args, dataset, test_data, importance):
 ##################################################################
 # for visualization
 def draw_histogram(args, x_list, title, xlabel, ylabel):
+    with open(file=f"pickle/{args.dataset}_{args.model}_{args.seed}_ent.pickle", mode='wb') as f:
+        pickle.dump(x_list, f)
+
     plt.clf()
     plt.hist(x_list, bins=20)
 
@@ -296,19 +299,28 @@ def draw_tsne(args, feats, cls, title):
     feats = np.array(feats)
     z = tsne.fit_transform(feats)
 
-    df = pd.DataFrame()
-    df["y"] = cls
-    df["d1"] = z[:, 0]
-    df["d2"] = z[:, 1]
-    plt.clf()
-    sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), palette=sns.color_palette("hls", cls.max() + 1), data=df)
+    print(f"before saving pickles")
 
-    plt.xlabel(None)
-    plt.ylabel(None)
-    plt.xticks([])
-    plt.yticks([])
-    plt.title(title)
-    plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
+    with open(file=f"pickle/{args.dataset}_{args.model}_{args.seed}_tsne.pickle", mode='wb') as f:
+        pickle.dump(z, f)
+        print(f"pickle/{args.dataset}_{args.model}_{args.seed}_tsne.pickle is saved!")
+    with open(file=f"pickle/{args.dataset}_{args.model}_{args.seed}_tsne_cls.pickle", mode='wb') as f:
+        pickle.dump(cls, f)
+        print(f"pickle/{args.dataset}_{args.model}_{args.seed}_tsne_cls.pickle is saved!")
+
+    # df = pd.DataFrame()
+    # df["y"] = cls
+    # df["d1"] = z[:, 0]
+    # df["d2"] = z[:, 1]
+    # plt.clf()
+    # sns.scatterplot(x="d1", y="d2", hue=df.y.tolist(), palette=sns.color_palette("hls", cls.max() + 1), data=df)
+
+    # plt.xlabel(None)
+    # plt.ylabel(None)
+    # plt.xticks([])
+    # plt.yticks([])
+    # plt.title(title)
+    # plt.savefig(f"{args.vis_dir}/{args.benchmark}_{args.dataset}_{args.shift_type}_{args.shift_severity}_{args.model}_{'_'.join(args.method)}_{title}.png")
 
 
 COUNT = 'count'
@@ -461,9 +473,17 @@ def draw_reliability_plot(args, confs, preds, labels, title, num_bins=10):
     bin_dict = _populate_bins(confs, preds, labels, num_bins)
     bns = [(i / float(num_bins)) for i in range(num_bins)]
     y = []
+
     for i in range(num_bins):
         y.append(bin_dict[i][BIN_ACC])
-    plt.figure(figsize=(10, 8))  # width:20, height:3
+
+    with open(file=f"pickle/calibration_bns_{args.dataset}_{args.model}_{args.seed}.pickle", mode='wb') as f:
+        pickle.dump(bns, f)
+
+    with open(file=f"pickle/calibration_y_{args.dataset}_{args.model}_{args.seed}.pickle", mode='wb') as f:
+        pickle.dump(y, f)
+
+    plt.figure(figsize=(10, 8))
     plt.bar(bns, bns, align='edge', width=0.05, color='pink', label='Expected')
     plt.bar(bns, y, align='edge', width=0.05,
             color='blue', alpha=0.5, label='Actual')
