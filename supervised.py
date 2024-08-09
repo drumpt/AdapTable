@@ -1,5 +1,6 @@
 import os
 import warnings
+
 warnings.filterwarnings("ignore")
 import hydra
 from omegaconf import OmegaConf
@@ -13,7 +14,7 @@ from utils.utils import *
 @hydra.main(version_base=None, config_path="conf", config_name="config.yaml")
 def main_sup_baseline(args):
     global logger
-    if hasattr(args, 'seed'):
+    if hasattr(args, "seed"):
         set_seed(args.seed)
         print(f"set seed as {args.seed}")
     if not os.path.exists(args.log_dir):
@@ -30,16 +31,19 @@ def main_sup_baseline(args):
 
     param_grid = get_param_grid(args)
 
-    if args.model == 'lr':
+    if args.model == "lr":
         if regression:
             from sklearn.linear_model import LinearRegression
+
             source_model = LinearRegression()
         else:
             from sklearn.linear_model import LogisticRegression
+
             source_model = LogisticRegression()
         source_model = source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
-    elif args.model == 'knn':
+    elif args.model == "knn":
         from sklearn.neighbors import KNeighborsClassifier
+
         source_model = KNeighborsClassifier()
         rs = RandomizedSearchCV(
             estimator=source_model,
@@ -47,19 +51,24 @@ def main_sup_baseline(args):
             n_iter=100,
             cv=5,
             verbose=1,
-            n_jobs=-1
+            n_jobs=-1,
         )
         rs.fit(dataset.train_x, dataset.train_y.argmax(1))
 
         best_params = rs.best_params_
-        print(f'best params are: {rs.best_params_}')
+        print(f"best params are: {rs.best_params_}")
 
         source_model = KNeighborsClassifier(**best_params)
         source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
-    elif args.model == 'rf':
+    elif args.model == "rf":
         from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+
         if regression:
-            source_model = RandomForestRegressor(n_estimators=args.num_estimators, max_depth=args.max_depth, random_state=args.seed)
+            source_model = RandomForestRegressor(
+                n_estimators=args.num_estimators,
+                max_depth=args.max_depth,
+                random_state=args.seed,
+            )
             source_model = source_model.fit(dataset.train_x, dataset.train_y)
         else:
             source_model = RandomForestClassifier(random_state=args.seed)
@@ -69,16 +78,16 @@ def main_sup_baseline(args):
                 n_iter=100,
                 cv=5,
                 verbose=1,
-                n_jobs=-1
+                n_jobs=-1,
             )
             rs.fit(dataset.train_x, dataset.train_y.argmax(1))
 
             best_params = rs.best_params_
-            print(f'best params are: {rs.best_params_}')
+            print(f"best params are: {rs.best_params_}")
 
             source_model = RandomForestClassifier(**best_params, random_state=args.seed)
             source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
-    elif args.model == 'xgboost':
+    elif args.model == "xgboost":
         if regression:
             objective = "reg:linear"
         elif dataset.train_y.argmax(1).max() == 1:
@@ -87,11 +96,14 @@ def main_sup_baseline(args):
             objective = "multi:softprob"
 
         from xgboost import XGBRegressor, XGBClassifier
+
         if regression:
             source_model = XGBRegressor(objective=objective, random_state=args.seed)
-            rs = RandomizedSearchCV(source_model, param_grid, n_iter=100, cv=5, verbose=1, n_jobs=-1)
+            rs = RandomizedSearchCV(
+                source_model, param_grid, n_iter=100, cv=5, verbose=1, n_jobs=-1
+            )
             rs.fit(dataset.train_x, dataset.train_y)
-            print(f'best params are: {rs.best_params_}')
+            print(f"best params are: {rs.best_params_}")
             # source_model = source_model.fit(dataset.train_x, dataset.train_y)
         else:
             source_model = XGBClassifier(random_state=args.seed)
@@ -101,18 +113,19 @@ def main_sup_baseline(args):
                 n_iter=100,
                 cv=5,
                 verbose=1,
-                n_jobs=-1
+                n_jobs=-1,
             )
             rs.fit(dataset.train_x, dataset.train_y.argmax(1))
 
             best_params = rs.best_params_
-            print(f'best params are: {rs.best_params_}')
+            print(f"best params are: {rs.best_params_}")
 
             source_model = XGBClassifier(**best_params, random_state=args.seed)
             source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
             # source_model = source_model.fit(dataset.train_x, dataset.train_y.argmax(1))
-    elif args.model == 'catboost':
+    elif args.model == "catboost":
         from catboost import CatBoostClassifier, CatBoostRegressor
+
         train_x = dataset.train_x
         if regression:
             catboost_model = CatBoostRegressor()
@@ -123,10 +136,10 @@ def main_sup_baseline(args):
                 n_iter=100,
                 cv=5,
                 verbose=1,
-                n_jobs=-1
+                n_jobs=-1,
             )
             rs.fit(train_x, train_y)
-            print(f'best params are: {rs.best_params_}')
+            print(f"best params are: {rs.best_params_}")
             source_model = CatBoostRegressor(**rs.best_params_, random_state=args.seed)
             source_model.fit(train_x, train_y)
         else:
@@ -138,10 +151,10 @@ def main_sup_baseline(args):
                 n_iter=100,
                 cv=5,
                 verbose=1,
-                n_jobs=-1
+                n_jobs=-1,
             )
             rs.fit(train_x, train_y)
-            print(f'best params are: {rs.best_params_}')
+            print(f"best params are: {rs.best_params_}")
             source_model = CatBoostClassifier(**rs.best_params_, random_state=args.seed)
             source_model.fit(train_x, train_y)
     else:
@@ -159,38 +172,36 @@ def main_sup_baseline(args):
 
 def get_param_grid(args):
     param_grid = {}
-    if args.model == 'xgboost':
+    if args.model == "xgboost":
         param_grid = {
-            'n_estimators': np.arange(50, 200, 5),
-            'learning_rate': np.linspace(0.01, 1, 20),
-            'max_depth': np.arange(2, 12, 1),
+            "n_estimators": np.arange(50, 200, 5),
+            "learning_rate": np.linspace(0.01, 1, 20),
+            "max_depth": np.arange(2, 12, 1),
             # 'subsample': np.linspace(0.5, 1, 10),
             # 'colsample_bytree': np.linspace(0.5, 1, 10),
-            'gamma': np.linspace(0, 0.5, 11)
+            "gamma": np.linspace(0, 0.5, 11),
         }
-    elif args.model == 'rf':
+    elif args.model == "rf":
         param_grid = {
-            'n_estimators': np.arange(50, 200, 5),
-            'max_depth': np.arange(2, 12, 1),
+            "n_estimators": np.arange(50, 200, 5),
+            "max_depth": np.arange(2, 12, 1),
         }
-    elif args.model == 'knn':
+    elif args.model == "knn":
         param_grid = {
-            'n_neighbors': np.arange(2, 12, 1),
+            "n_neighbors": np.arange(2, 12, 1),
         }
-    elif args.model == 'lr':
+    elif args.model == "lr":
         pass
-    elif args.model == 'catboost':
+    elif args.model == "catboost":
         param_grid = {
-            'iterations': np.arange(50, 2000, 50),
-            'learning_rate': np.linspace(0.01, 1, 20),
-            'depth': np.arange(5, 40, 5),
+            "iterations": np.arange(50, 2000, 50),
+            "learning_rate": np.linspace(0.01, 1, 20),
+            "depth": np.arange(5, 40, 5),
         }
     else:
         raise NotImplementedError
 
     return param_grid
-
-
 
 
 if __name__ == "__main__":

@@ -16,8 +16,9 @@ mlp:
 # openml-regression: abalone, cholestrol
 # shifts: weather_reg, weather_cls, power
 # folktables: state, time, time_state
-benchmark: openml-cc18 # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
-dataset: mfeat-pixel
+benchmark: tableshift # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
+dataset: heloc
+dataset_save_dir: data/raw_data
 shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
 shift_severity: 0.5
 normalizer: StandardScaler
@@ -57,7 +58,8 @@ test_lr: 1e-4
 ##################################################################
 ### methods & other hyperparameters
 # method: [calibrator, label_distribution_handler]
-method: [calibrator, label_distribution_handler]
+# method: [calibrator, label_distribution_handler]
+method: [em]
 # search space - episodic, test_lr : 1e-3~1e-5, num_steps : 1, 5, 10
 # em(tent), sam, sar, pl, ttt++, eata, memo
 # em - true, 1e-4, 1

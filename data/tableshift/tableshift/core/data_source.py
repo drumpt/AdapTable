@@ -653,7 +653,7 @@ class GrinstajnHFDataSource(DataSource):
         _preprocess_fn = partial(preprocess_fn, name=dataset_name)
         super().__init__(preprocess_fn=_preprocess_fn, **kwargs)
 
-    def _load_data(self, hf_split: str = datasets.Split.TRAIN) -> pd.DataFrame:
+    def _load_data(self, hf_split: str) -> pd.DataFrame:
         """
         Loading function with special logic to support Grinstajn benchmark.
         """

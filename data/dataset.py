@@ -2,7 +2,10 @@ import os
 from os import path
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift"))
+
 from collections import Counter
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -15,7 +18,7 @@ import openml
 from openml import tasks, runs
 
 from tableshift import get_dataset, get_iid_dataset
-from datasets import load_dataset
+# from datasets import load_dataset
 from data.utils.util_functions import load_opt
 from utils import utils
 
@@ -31,8 +34,8 @@ class Dataset():
             raise NotImplementedError
 
         if float(args.train_ratio) < 1:
-            train_x = train_x.iloc[:int(len(train_x) * float(args.train_ratio)), :]
-            train_y = train_y.iloc[:int(len(train_y) * float(args.train_ratio)), :]
+            train_x = train_x[:int(len(train_x) * float(args.train_ratio)), :]
+            train_y = train_y[:int(len(train_y) * float(args.train_ratio)), :]
 
         if args.smote:
             from imblearn.over_sampling import SMOTENC, SMOTE
@@ -40,6 +43,10 @@ class Dataset():
                 train_x, train_y = SMOTENC(categorical_features=cat_indices, random_state=args.seed).fit_resample(train_x, train_y)
             else:
                 train_x, train_y = SMOTE(random_state=args.seed).fit_resample(train_x, train_y)
+
+        train_x, train_y = pd.DataFrame(train_x), pd.DataFrame(train_y)
+        valid_x, valid_y = pd.DataFrame(valid_x), pd.DataFrame(valid_y)
+        test_x, test_y = pd.DataFrame(test_x), pd.DataFrame(test_y)
 
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
@@ -199,30 +206,53 @@ class Dataset():
         # print(f"train_x original: {train_x}")
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
-
     def get_tableshift_dataset(self, args):
-        from tableshift.core.features import PreprocessorConfig, get_categorical_columns
-        dataset = get_dataset(
-            args.dataset,
-            cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift/tmp"),
-            preprocessor_config=PreprocessorConfig(categorical_features="passthrough", numeric_features="passthrough")
-        )
-        self.logger.info(f'out-of-distribution dataset') if dataset.is_domain_split else self.logger.info(f'in-distribution dataset')
-        regression = False
+        dataset_dir = os.path.join(args.dataset_save_dir, f"{args.benchmark}")
+        print(f"{os.path.exists(os.path.join(dataset_dir, f'{args.dataset}.pkl'))=}")
+        if os.path.exists(os.path.join(dataset_dir, f"{args.dataset}.pkl")):
+            dataset_dict = pickle.load(open(os.path.join(dataset_dir, f"{args.dataset}.pkl"), "rb"))
+            train_x = dataset_dict["train_x"]
+            valid_x = dataset_dict["valid_x"]
+            test_x = dataset_dict["test_x"]
+            train_y = dataset_dict["train_y"]
+            valid_y = dataset_dict["valid_y"]
+            test_y = dataset_dict["test_y"]
+            cat_indices = dataset_dict["cat_indices"]
+        else:
+            # customize preprocessor
+            from tableshift.core.features import get_categorical_columns
+            from tableshift.configs.benchmark_configs import BENCHMARK_CONFIGS
+            from tableshift.configs.non_benchmark_configs import NON_BENCHMARK_CONFIGS
+            EXPERIMENT_CONFIGS = {**BENCHMARK_CONFIGS, **NON_BENCHMARK_CONFIGS}
+            expt_config = EXPERIMENT_CONFIGS[args.dataset]
+            preprocessor_config = expt_config.preprocessor_config
+            preprocessor_config.categorical_features="passthrough"
+            preprocessor_config.numeric_features="passthrough"
 
-        train_x, train_y, _, _ = dataset.get_pandas("train")
-        valid_x, valid_y, _, _ = dataset.get_pandas("validation")
-        test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("test")
-        cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
+            dataset = get_dataset(args.dataset, cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift/tmp"), preprocessor_config=preprocessor_config)
+            train_x, train_y, _, _ = dataset.get_pandas("train")
+            valid_x, valid_y, _, _ = dataset.get_pandas("validation")
+            test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("test")
+            cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
 
-        print(f"train_x: {train_x}")
-        print(f"train_x: {train_x.iloc[0]}")
-        print(f"train_x.shape: {train_x.shape}")
-        print(f"train_y: {train_y}")
-        print(f"train_y.shape: {train_y.shape}")
-        print(f"cat_indices: {cat_indices}")
+            train_x, valid_x, test_x = np.array(train_x), np.array(valid_x), np.array(test_x)
+            train_y, valid_y, test_y = np.array(train_y)[:, None], np.array(valid_y)[:, None], np.array(test_y)[:, None]
 
-        return (train_x, valid_x, test_x), (pd.DataFrame(train_y), pd.DataFrame(valid_y), pd.DataFrame(test_y)), cat_indices, regression
+            dataset_dict = dict()
+            dataset_dict["train_x"] = train_x
+            dataset_dict["valid_x"] = valid_x
+            dataset_dict["test_x"] = test_x
+            dataset_dict["train_y"] = train_y
+            dataset_dict["valid_y"] = valid_y
+            dataset_dict["test_y"] = test_y
+            dataset_dict["cat_indices"] = cat_indices
+            with open(os.path.join(dataset_dir, f"{args.dataset}.pkl"), "wb") as f:
+                pickle.dump(dataset_dict, f)
+
+        print(f"{train_x.shape=}")
+        print(f"{valid_x.shape=}")
+        print(f"{test_x.shape=}")
+        return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, False
 
 
     def get_shifts_dataset(self, args):
