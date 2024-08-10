@@ -30,7 +30,7 @@ class MLP(nn.Module):
 
         if self.embedding:
             self.emb_layers = nn.ModuleList([nn.Embedding(x, y) for x, y in dataset.emb_dim_list])
-        self.encoder = nn.Sequential()
+        self.encoder = []
         for layer_idx, hidden_dim in zip(range(args.mlp.num_enc_layers - 1), hidden_dim_list):
             self.encoder.extend([
                 nn.Linear(input_dim if layer_idx == 0 else hidden_dim_list[layer_idx - 1], hidden_dim),
@@ -39,6 +39,8 @@ class MLP(nn.Module):
                 nn.Dropout(args.mlp.dropout_rate),
             ])
         self.encoder.append(nn.Linear(hidden_dim_list[-2], hidden_dim_list[-1]))
+        self.encoder = nn.Sequential(*self.encoder)
+
         self.main_head = nn.Sequential(
             nn.Linear(hidden_dim_list[-1], hidden_dim_list[-1]),
             nn.ReLU(),

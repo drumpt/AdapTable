@@ -29,7 +29,7 @@ class GraphNet(torch.nn.Module):
         for idx, cat_len in enumerate(self.cat_cls_len):
             x.append(self.embedding_layer[idx](cat_x[idx][:, :cat_len]).squeeze().unsqueeze(0))
 
-        x = torch.concatenate(x, dim=0).float()
+        x = torch.cat(x, dim=0).float()
 
         if x.shape[1] != self.num_features:
             # pad with zeros to match the number of features

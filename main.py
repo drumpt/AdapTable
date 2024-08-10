@@ -168,9 +168,12 @@ def train(args, model, optimizer, dataset, with_mae=False):
         train_loss, train_acc, train_len = 0, 0, 0
         model = model.train().requires_grad_(True)
         for i, (train_x, train_y) in enumerate(dataset.train_loader):
-            train_x, train_y = train_x.to(device), train_y.to(device)
+            train_x, train_y = train_x.to(device), train_y.to(device).float()
             estimated_y = model(train_x)
-            loss = loss_fn(estimated_y, train_y)
+            if regression:
+                loss = loss_fn(estimated_y.squeeze(), train_y.squeeze().float())
+            else:
+                loss = loss_fn(estimated_y, train_y.argmax(1))
 
             if with_mae:
                 do = nn.Dropout(p=args.test_mask_ratio)
@@ -196,8 +199,10 @@ def train(args, model, optimizer, dataset, with_mae=False):
                 valid_x, valid_y = valid_x.to(device), valid_y.to(device)
 
                 estimated_y = model(valid_x)
-                loss = loss_fn(estimated_y, valid_y)
-
+                if regression:
+                    loss = loss_fn(estimated_y.squeeze(), valid_y.squeeze().float())
+                else:
+                    loss = loss_fn(estimated_y, valid_y.argmax(1))
                 valid_loss += loss.item() * valid_x.shape[0]
                 valid_acc += (
                     (torch.argmax(estimated_y, dim=-1) == torch.argmax(valid_y, dim=-1))
@@ -662,7 +667,16 @@ def main(args):
 
     if "calibrator" in args.method:
         calibrator = Calibrator(args, dataset, source_model)
-        calibrator.train_gnn()
+        if os.path.exists(os.path.join(args.out_dir, "calibrator_gnn.pth")):
+            calibrator.gnn.load_state_dict(
+                torch.load(os.path.join(args.out_dir, "calibrator_gnn.pth"))
+            )
+        else:
+            calibrator.train_gnn()
+            torch.save(
+                calibrator.gnn.state_dict(),
+                os.path.join(args.out_dir, "calibrator_gnn.pth"),
+            )
         with torch.no_grad():
             for train_x, train_y in dataset.train_loader:
                 train_x, train_y = train_x.to(args.device), train_y.to(args.device)
@@ -728,7 +742,10 @@ def main(args):
         ori_estimated_y = original_source_model(test_x)
         avg_inference_time += time.time() - before_inference
 
-        loss = loss_fn(ori_estimated_y, test_y)
+        if regression:
+            loss = loss_fn(ori_estimated_y.squeeze(), test_y.squeeze().float())
+        else:
+            loss = loss_fn(ori_estimated_y, test_y.argmax(1))
         test_loss_before += loss.item() * test_x.shape[0]
         ESTIMATED_BEFORE_LABEL_LIST.extend(
             torch.argmax(ori_estimated_y, dim=-1).cpu().tolist()
@@ -818,7 +835,10 @@ def main(args):
 
         avg_adaptation_time += time.time() - before_adaptation
 
-        loss = loss_fn(estimated_y, test_y)
+        if regression:
+            loss = loss_fn(estimated_y.squeeze(), test_y.squeeze().float())
+        else:
+            loss = loss_fn(estimated_y, test_y.argmax(1))
         test_loss_after += loss.item() * test_x.shape[0]
         ESTIMATED_AFTER_LABEL_LIST.extend(
             torch.argmax(estimated_y, dim=-1).cpu().tolist()

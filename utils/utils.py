@@ -17,6 +17,8 @@ import torch.nn.functional as F
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import seaborn as sns
+import sys
+# logging.basicConfig(level = logging.INFO)
 
 
 def set_seed(seed):
@@ -47,6 +49,7 @@ def get_generator(seed):
 
 def get_logger(args):
     logger = logging.getLogger(__name__)
+    logger.addHandler(logging.StreamHandler(sys.stdout))
     logger.setLevel(logging.INFO)
     formatter = logging.Formatter('%(message)s')
 
