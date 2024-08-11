@@ -10,7 +10,7 @@ from pytorch_tabnet.tab_network import TabNetEncoder, TabNetDecoder, EmbeddingGe
 from tab_transformer_pytorch.tab_transformer_pytorch import Transformer as TabTransformerBlock
 from tab_transformer_pytorch.ft_transformer import NumericalEmbedder, Transformer as FTTransformerBlock
 from tab_transformer_pytorch.tab_transformer_pytorch import MLP as TabTransformerMLP
-# from rtdl_revisiting_models import ResNet
+# from rtdl_revisiting_models import ResNet as RTDLResNet
 # import sys
 # sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data/tableshift"))
 # from tableshift.models.utils import get_estimator
@@ -725,3 +725,497 @@ class NODE(nn.Module):
             inputs_cat = torch.stack(inputs_cat_emb, dim=-1)
             inputs = torch.cat([inputs_cont, inputs_cat], dim=-1)
         return inputs
+
+
+
+import math
+import typing as ty
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch import Tensor
+
+def reglu(x: Tensor) -> Tensor:
+    a, b = x.chunk(2, dim=-1)
+    return a * F.relu(b)
+
+
+def geglu(x: Tensor) -> Tensor:
+    a, b = x.chunk(2, dim=-1)
+    return a * F.gelu(b)
+
+
+def get_activation_fn(name: str) -> ty.Callable[[Tensor], Tensor]:
+    return (
+        reglu
+        if name == 'reglu'
+        else geglu
+        if name == 'geglu'
+        else torch.sigmoid
+        if name == 'sigmoid'
+        else getattr(F, name)
+    )
+
+
+def get_nonglu_activation_fn(name: str) -> ty.Callable[[Tensor], Tensor]:
+    return (
+        F.relu
+        if name == 'reglu'
+        else F.gelu
+        if name == 'geglu'
+        else get_activation_fn(name)
+    )
+
+# %%
+class RTDLResNet(nn.Module):
+    def __init__(
+        self,
+        *,
+        d_numerical: int,
+        categories: ty.Optional[ty.List[int]],
+        d_embedding: int,
+        d: int,
+        d_hidden_factor: float,
+        n_layers: int,
+        activation: str,
+        normalization: str,
+        hidden_dropout: float,
+        residual_dropout: float,
+        d_out: int,
+    ) -> None:
+        super().__init__()
+
+        def make_normalization():
+            return {'batchnorm': nn.BatchNorm1d, 'layernorm': nn.LayerNorm}[
+                normalization
+            ](d)
+
+        self.main_activation = get_activation_fn(activation)
+        self.last_activation = get_nonglu_activation_fn(activation)
+        self.residual_dropout = residual_dropout
+        self.hidden_dropout = hidden_dropout
+
+        d_in = d_numerical
+        d_hidden = int(d * d_hidden_factor)
+
+        if categories is not None:
+            d_in += len(categories) * d_embedding
+            category_offsets = torch.tensor([0] + categories[:-1]).cumsum(0)
+            self.register_buffer('category_offsets', category_offsets)
+            self.category_embeddings = nn.Embedding(sum(categories), d_embedding)
+            nn.init.kaiming_uniform_(self.category_embeddings.weight, a=math.sqrt(5))
+            print(f'{self.category_embeddings.weight.shape=}')
+
+        self.first_layer = nn.Linear(d_in, d)
+        self.layers = nn.ModuleList(
+            [
+                nn.ModuleDict(
+                    {
+                        'norm': make_normalization(),
+                        'linear0': nn.Linear(
+                            d, d_hidden * (2 if activation.endswith('glu') else 1)
+                        ),
+                        'linear1': nn.Linear(d_hidden, d),
+                    }
+                )
+                for _ in range(n_layers)
+            ]
+        )
+        self.last_normalization = make_normalization()
+        self.head = nn.Linear(d, d_out)
+
+    def forward(self, x_num: Tensor, x_cat: ty.Optional[Tensor]) -> Tensor:
+        x = []
+        if x_num is not None:
+            x.append(x_num)
+        if x_cat is not None:
+            x.append(
+                self.category_embeddings(x_cat + self.category_offsets[None]).view(
+                    x_cat.size(0), -1
+                )
+            )
+        x = torch.cat(x, dim=-1)
+
+        x = self.first_layer(x)
+        for layer in self.layers:
+            layer = ty.cast(ty.Dict[str, nn.Module], layer)
+            z = x
+            z = layer['norm'](z)
+            z = layer['linear0'](z)
+            z = self.main_activation(z)
+            if self.hidden_dropout:
+                z = F.dropout(z, self.hidden_dropout, self.training)
+            z = layer['linear1'](z)
+            if self.residual_dropout:
+                z = F.dropout(z, self.residual_dropout, self.training)
+            x = x + z
+        x = self.last_normalization(x)
+        x = self.last_activation(x)
+        x = self.head(x)
+        x = x.squeeze(-1)
+        return x
+    
+    def get_feature(self, inputs):
+        x = []
+        if x_num is not None:
+            x.append(x_num)
+        if x_cat is not None:
+            x.append(
+                self.category_embeddings(x_cat + self.category_offsets[None]).view(
+                    x_cat.size(0), -1
+                )
+            )
+        x = torch.cat(x, dim=-1)
+
+        x = self.first_layer(x)
+        for layer in self.layers:
+            layer = ty.cast(ty.Dict[str, nn.Module], layer)
+            z = x
+            z = layer['norm'](z)
+            z = layer['linear0'](z)
+            z = self.main_activation(z)
+            if self.hidden_dropout:
+                z = F.dropout(z, self.hidden_dropout, self.training)
+            z = layer['linear1'](z)
+            if self.residual_dropout:
+                z = F.dropout(z, self.residual_dropout, self.training)
+            x = x + z
+        x = self.last_normalization(x)
+        x = self.last_activation(x)
+        return x
+
+
+
+class ResNet(nn.Module):
+    def __init__(self, args, dataset):
+        super().__init__()
+
+        self.cat_start_index = dataset.cont_dim
+        self.cat_end_indices = np.cumsum([num_category for num_category, _ in dataset.emb_dim_list])
+        self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+        self.cat_indices_groups = dataset.cat_indices_groups
+
+        input_dim = dataset.in_dim
+        output_dim = dataset.out_dim
+
+        self.model = RTDLResNet(
+            d_in=input_dim,
+            d_out=output_dim,
+            n_blocks=2,
+            d_block=192,
+            d_hidden=None,
+            d_hidden_multiplier=2.0,
+            dropout1=0.15,
+            dropout2=0.0,
+        )
+
+    def forward(self, inputs, graph_embedding=None):
+        outputs = self.model(inputs)
+        return outputs
+
+    def get_feature(self, inputs):
+        features = self.model.get_feature(inputs)
+        return outputs
+
+
+import math
+import typing as ty
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.nn.init as nn_init
+from torch import Tensor
+
+
+
+class Tokenizer(nn.Module):
+    category_offsets: ty.Optional[Tensor]
+
+    def __init__(
+        self,
+        d_numerical: int,
+        categories: ty.Optional[ty.List[int]],
+        n_latent_tokens: int,
+        d_token: int,
+    ) -> None:
+        super().__init__()
+        assert n_latent_tokens == 0
+        self.n_latent_tokens = n_latent_tokens
+        if d_numerical:
+            self.weight = nn.Parameter(Tensor(d_numerical + n_latent_tokens, d_token))
+            # The initialization is inspired by nn.Linear
+            nn_init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        else:
+            self.weight = None
+            assert categories is not None
+        if categories is None:
+            self.category_offsets = None
+            self.category_embeddings = None
+        else:
+            category_offsets = torch.tensor([0] + categories[:-1]).cumsum(0)
+            self.register_buffer('category_offsets', category_offsets)
+            self.category_embeddings = nn.Embedding(sum(categories), d_token)
+            nn_init.kaiming_uniform_(self.category_embeddings.weight, a=math.sqrt(5))
+            print(f'{self.category_embeddings.weight.shape=}')
+
+    @property
+    def n_tokens(self) -> int:
+        return (0 if self.weight is None else len(self.weight)) + (
+            0 if self.category_offsets is None else len(self.category_offsets)
+        )
+
+    def forward(self, x_num: ty.Optional[Tensor], x_cat: ty.Optional[Tensor]) -> Tensor:
+        if x_num is None:
+            return self.category_embeddings(x_cat + self.category_offsets[None])  # type: ignore[code]
+        x_num = torch.cat(
+            [
+                torch.ones(len(x_num), self.n_latent_tokens, device=x_num.device),
+                x_num,
+            ],
+            dim=1,
+        )
+        x = self.weight[None] * x_num[:, :, None]  # type: ignore[code]
+        if x_cat is not None:
+            x = torch.cat(
+                [x, self.category_embeddings(x_cat + self.category_offsets[None])],  # type: ignore[code]
+                dim=1,
+            )
+        return x
+
+
+class MultiheadAttention(nn.Module):
+    def __init__(
+        self, d: int, n_heads: int, dropout: float, initialization: str
+    ) -> None:
+        if n_heads > 1:
+            assert d % n_heads == 0
+        assert initialization in ['xavier', 'kaiming']
+
+        super().__init__()
+        self.W_q = nn.Linear(d, d)
+        self.W_k = nn.Linear(d, d)
+        self.W_v = nn.Linear(d, d)
+        self.W_out = None
+        self.n_heads = n_heads
+        self.dropout = nn.Dropout(dropout) if dropout else None
+
+        for m in [self.W_q, self.W_k, self.W_v]:
+            if initialization == 'xavier' and (n_heads > 1 or m is not self.W_v):
+                # gain is needed since W_qkv is represented with 3 separate layers
+                nn_init.xavier_uniform_(m.weight, gain=1 / math.sqrt(2))
+            nn_init.zeros_(m.bias)
+        if self.W_out is not None:
+            nn_init.zeros_(self.W_out.bias)
+
+    def _reshape(self, x: Tensor) -> Tensor:
+        batch_size, n_tokens, d = x.shape
+        d_head = d // self.n_heads
+        return (
+            x.reshape(batch_size, n_tokens, self.n_heads, d_head)
+            .transpose(1, 2)
+            .reshape(batch_size * self.n_heads, n_tokens, d_head)
+        )
+
+    def forward(
+        self,
+        x_q: Tensor,
+        x_kv: Tensor,
+        key_compression: ty.Optional[nn.Linear],
+        value_compression: ty.Optional[nn.Linear],
+    ) -> Tensor:
+        q, k, v = self.W_q(x_q), self.W_k(x_kv), self.W_v(x_kv)
+        for tensor in [q, k, v]:
+            assert tensor.shape[-1] % self.n_heads == 0
+        if key_compression is not None:
+            assert value_compression is not None
+            k = key_compression(k.transpose(1, 2)).transpose(1, 2)
+            v = value_compression(v.transpose(1, 2)).transpose(1, 2)
+        else:
+            assert value_compression is None
+
+        batch_size = len(q)
+        d_head_key = k.shape[-1] // self.n_heads
+        d_head_value = v.shape[-1] // self.n_heads
+        n_q_tokens = q.shape[1]
+
+        q = self._reshape(q)
+        k = self._reshape(k)
+        attention = F.softmax(q @ k.transpose(1, 2) / math.sqrt(d_head_key), dim=-1)
+        if self.dropout is not None:
+            attention = self.dropout(attention)
+        x = attention @ self._reshape(v)
+        x = (
+            x.reshape(batch_size, self.n_heads, n_q_tokens, d_head_value)
+            .transpose(1, 2)
+            .reshape(batch_size, n_q_tokens, self.n_heads * d_head_value)
+        )
+        if self.W_out is not None:
+            x = self.W_out(x)
+        return x
+
+
+class RTDLAutoInt(nn.Module):
+    def __init__(
+        self,
+        *,
+        d_numerical: int,
+        categories: ty.Optional[ty.List[int]],
+        n_layers: int,
+        d_token: int,
+        n_heads: int,
+        attention_dropout: float,
+        residual_dropout: float,
+        activation: str,
+        prenormalization: bool,
+        initialization: str,
+        kv_compression: ty.Optional[float],
+        kv_compression_sharing: ty.Optional[str],
+        d_out: int,
+    ) -> None:
+        assert not prenormalization
+        assert activation == 'relu'
+        assert (kv_compression is None) ^ (kv_compression_sharing is not None)
+
+        super().__init__()
+        self.tokenizer = Tokenizer(d_numerical, categories, 0, d_token)
+        n_tokens = self.tokenizer.n_tokens
+
+        def make_kv_compression():
+            assert kv_compression
+            compression = nn.Linear(
+                n_tokens, int(n_tokens * kv_compression), bias=False
+            )
+            if initialization == 'xavier':
+                nn_init.xavier_uniform_(compression.weight)
+            return compression
+
+        self.shared_kv_compression = (
+            make_kv_compression()
+            if kv_compression and kv_compression_sharing == 'layerwise'
+            else None
+        )
+
+        def make_normalization():
+            return nn.LayerNorm(d_token)
+
+        self.layers = nn.ModuleList([])
+        for layer_idx in range(n_layers):
+            layer = nn.ModuleDict(
+                {
+                    'attention': MultiheadAttention(
+                        d_token, n_heads, attention_dropout, initialization
+                    ),
+                    'linear': nn.Linear(d_token, d_token, bias=False),
+                }
+            )
+            if not prenormalization or layer_idx:
+                layer['norm0'] = make_normalization()
+            if kv_compression and self.shared_kv_compression is None:
+                layer['key_compression'] = make_kv_compression()
+                if kv_compression_sharing == 'headwise':
+                    layer['value_compression'] = make_kv_compression()
+                else:
+                    assert kv_compression_sharing == 'key-value'
+            self.layers.append(layer)
+
+        self.activation = get_activation_fn(activation)
+        self.prenormalization = prenormalization
+        self.last_normalization = make_normalization() if prenormalization else None
+        self.residual_dropout = residual_dropout
+        self.head = nn.Linear(d_token * n_tokens, d_out)
+
+    def _get_kv_compressions(self, layer):
+        return (
+            (self.shared_kv_compression, self.shared_kv_compression)
+            if self.shared_kv_compression is not None
+            else (layer['key_compression'], layer['value_compression'])
+            if 'key_compression' in layer and 'value_compression' in layer
+            else (layer['key_compression'], layer['key_compression'])
+            if 'key_compression' in layer
+            else (None, None)
+        )
+
+    def _start_residual(self, x, layer, norm_idx):
+        x_residual = x
+        if self.prenormalization:
+            norm_key = f'norm{norm_idx}'
+            if norm_key in layer:
+                x_residual = layer[norm_key](x_residual)
+        return x_residual
+
+    def _end_residual(self, x, x_residual, layer, norm_idx):
+        if self.residual_dropout:
+            x_residual = F.dropout(x_residual, self.residual_dropout, self.training)
+        x = x + x_residual
+        if not self.prenormalization:
+            x = layer[f'norm{norm_idx}'](x)
+        return x
+
+    def forward(self, x_num: ty.Optional[Tensor], x_cat: ty.Optional[Tensor]) -> Tensor:
+        x = self.tokenizer(x_num, x_cat)
+
+        for layer in self.layers:
+            layer = ty.cast(ty.Dict[str, nn.Module], layer)
+
+            x_residual = self._start_residual(x, layer, 0)
+            x_residual = layer['attention'](
+                x_residual,
+                x_residual,
+                *self._get_kv_compressions(layer),
+            )
+            x = layer['linear'](x)
+            x = self._end_residual(x, x_residual, layer, 0)
+            x = self.activation(x)
+
+        x = x.flatten(1, 2)
+        x = self.head(x)
+        x = x.squeeze(-1)
+        return x
+
+
+class AutoInt(nn.Module):
+    def __init__(self, args, dataset):
+        super().__init__()
+
+        self.cat_start_index = dataset.cont_dim
+        self.cat_end_indices = np.cumsum([num_category for num_category, _ in dataset.emb_dim_list])
+        self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+        self.cat_indices_groups = dataset.cat_indices_groups
+
+        self.model = RTDLAutoInt(
+            d_numerical=dataset.cont_dim,
+            categories=[num_category for num_category, _ in dataset.emb_dim_list],
+            d_out=dataset.out_dim,
+            n_layers=3,
+            d_token=62,
+            n_heads=2,
+            attention_dropout=0.1826903968910185,
+            residual_dropout=0.0,
+            activation='relu',
+            prenormalization=False,
+            initialization='kaiming',
+            kv_compression=None,
+            kv_compression_sharing=None,
+        )
+
+    def forward(self, inputs, graph_embedding=None):
+        if len(self.cat_start_indices):
+            inputs_cont = inputs[:, :self.cat_start_index]
+            inputs_cat = inputs[:, self.cat_start_index:]
+            inputs_cat_emb = [] # translate one-hot encoding to label encoding
+            for i in range(len(self.cat_end_indices)):
+                inputs_cat_emb.append(torch.argmax(inputs_cat[:, self.cat_start_indices[i]:self.cat_end_indices[i]], dim=-1))
+            inputs_cat = torch.stack(inputs_cat_emb, dim=-1)
+        else:
+            inputs_cont = inputs
+            inputs_cat = None
+        outputs = self.model(inputs_cont, inputs_cat)
+        return outputs
+
+    def get_feature(self, inputs):
+        features = self.model.get_feature(inputs)
+        return outputs

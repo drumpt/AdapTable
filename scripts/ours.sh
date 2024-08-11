@@ -190,7 +190,47 @@ tableshift_shiftcheck() {
     done
 }
 
-# tableshift_mlpbase
-tableshift_shiftcheck
+
+tableshift_modelcheck() {
+    SEEDS="0"
+    MODELS="ResNet AutoInt"
+    METHODS="ours"
+    DATASETS="heloc"
+    benchmark="tableshift"
+
+    SHIFT_TYPE_LIST="temp_corr"
+    for shift_type in ${SHIFT_TYPE_LIST}; do
+        for seed in ${SEEDS}; do
+            for dataset in ${DATASETS}; do
+                for model in ${MODELS}; do
+                    for method in ${METHODS}; do
+                        python main.py \
+                            model=${model} \
+                            seed=${seed} \
+                            train_lr=1e-4 \
+                            method=[calibrator,label_distribution_handler] \
+                            log_dir=$LOG_DIR \
+                            log_prefix=${LOG_POSTFIX} \
+                            device=cuda:${GPUS[i % ${NUM_GPUS}]} \
+                            out_dir=checkounts \
+                            benchmark=${benchmark} \
+                            dataset=${dataset} \
+                            shift_type=${shift_type} \
+                            retrain=false \
+                            shift_severity=1 \
+                            2>&1
+                        wait_n
+                        i=$((i + 1))
+                    done
+                done
+            done
+        done
+    done
+}
+
+
 # openml_mlpbase
+# tableshift_mlpbase
+# tableshift_shiftcheck
+tableshift_modelcheck
 # python send_email.py

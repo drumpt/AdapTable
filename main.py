@@ -32,7 +32,7 @@ def get_model(args, dataset):
         model = "MLP"
     elif args.model == "fttransformer":
         model = "FTTransformer"
-    elif args.model in ["MLP", "TabNet", "TabTransformer", "FTTransformer", "NODE"]:
+    elif args.model in ["MLP", "TabNet", "TabTransformer", "FTTransformer", "ResNet", "AutoInt", "NODE"]:
         model = args.model
     else:
         raise NotImplementedError
