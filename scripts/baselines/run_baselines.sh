@@ -21,7 +21,7 @@ wait_n() {
 
 openml_mlpbase(){
   SEEDS="0 1 2"
-  MODELS="fttransformer tabnet"
+  MODELS="mlp"
   METHODS="ttt++ eata em lame memo pl sam sar"
   DATASETS="adult cmc mfeat-karhunen optdigits diabetes semeion mfeat-pixel dna"
   benchmark="openml-cc18"
@@ -38,6 +38,7 @@ openml_mlpbase(){
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_numerical \
               benchmark=$benchmark \
+              dataset_save_dir=data/raw_data \
               dataset="${dataset}" \
               shift_type=numerical \
               shift_severity=0.5 \
@@ -54,6 +55,7 @@ openml_mlpbase(){
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_categorical \
               benchmark=$benchmark \
+              dataset_save_dir=data/raw_data \
               dataset="${dataset}" \
               shift_type=categorical \
               shift_severity=0.5 \
@@ -70,6 +72,7 @@ openml_mlpbase(){
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_gaussian \
               benchmark=$benchmark \
+              dataset_save_dir=data/raw_data \
               dataset="${dataset}" \
               shift_type=Gaussian \
               shift_severity=0.1 \
@@ -86,6 +89,7 @@ openml_mlpbase(){
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_uniform \
               benchmark=$benchmark \
+              dataset_save_dir=data/raw_data \
               dataset="${dataset}" \
               shift_type=uniform \
               shift_severity=0.1 \
@@ -102,6 +106,7 @@ openml_mlpbase(){
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_rd \
               benchmark=$benchmark \
+              dataset_save_dir=data/raw_data \
               dataset="${dataset}" \
               shift_type=random_drop \
               shift_severity=0.2 \
@@ -119,6 +124,7 @@ openml_mlpbase(){
               out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model}_cd \
               benchmark=$benchmark \
               dataset="${dataset}" \
+              dataset_save_dir=data/raw_data \
               shift_type=column_drop \
               shift_severity=0.2 \
               --config-dir $CONF_DIR \
@@ -151,6 +157,7 @@ tableshift_mlpbase(){
               device=cuda:${GPUS[i % ${NUM_GPUS}]} \
               out_dir=${LOG_POSTFIX}_seed${seed}_dataset${dataset}_model${model} \
               benchmark=$benchmark \
+              dataset_save_dir=data/raw_data \
               dataset="${dataset}" \
               shift_type=None \
               retrain=False \

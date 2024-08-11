@@ -12,6 +12,30 @@ from copy import deepcopy
 import torch.nn.functional as F
 
 
+def torch_corrcoef(x):
+    # Ensure input is 2D
+    if x.dim() == 1:
+        x = x.unsqueeze(0)
+    elif x.dim() != 2:
+        raise ValueError("Input must be a 1D or 2D tensor")
+
+    # Compute the covariance matrix
+    mean_x = torch.mean(x, dim=1, keepdim=True)
+    xm = x - mean_x
+    c = xm @ xm.t() / (x.size(1) - 1)
+
+    # Compute the standard deviations
+    d = torch.diag(c)
+    stddev = torch.sqrt(d)
+
+    # Compute the correlation coefficient matrix
+    corr_matrix = c / (stddev[:, None] * stddev[None, :])
+
+    # Clamp values to the range [-1, 1] to avoid floating point errors
+    corr_matrix = torch.clamp(corr_matrix, -1.0, 1.0)
+
+    return corr_matrix
+
 class GraphDataset(torch.utils.data.Dataset):
     def __init__(self, args, dataset):
         self.cont_indices = [i for i in range(dataset.cont_dim)]
@@ -115,7 +139,7 @@ class GraphDataset(torch.utils.data.Dataset):
             else:
                 new_batch[:, idx] = batch[:, i]
 
-        matrix = torch.corrcoef(new_batch.T) - torch.eye(len(idx_lists)).to(args.device)
+        matrix = torch_corrcoef(new_batch.T) - torch.eye(len(idx_lists)).to(args.device)
 
         if torch.isnan(matrix).any():
             matrix = torch.nan_to_num(matrix, nan=0.0, posinf=1.0, neginf=0.0)

@@ -1,5 +1,5 @@
 ############# run in single GPU ##############
-GPUS=(0 1 2 3 4 5 6 7)
+GPUS=(0 1 2 3)
 NUM_GPUS=8
 ##############################################
 i=0
@@ -11,8 +11,8 @@ CONF_DIR="conf/baseline_config"
 wait_n() {
   #limit the max number of jobs as NUM_MAX_JOB and wait
   background=($(jobs -p))
-  local default_num_jobs=64 #12
-  local num_max_jobs=64
+  local default_num_jobs=12 #12
+  local num_max_jobs=12
   echo $num_max_jobs
   if ((${#background[@]} >= num_max_jobs)); then
     wait -n
@@ -122,7 +122,7 @@ openml_mlpbase(){
 
 tableshift_mlpbase(){
   SEEDS="0 1 2"
-  MODELS="fttransformer"
+  MODELS="mlp"
   METHODS="ours"
   DATASETS="heloc diabetes_readmission anes"
   benchmark="tableshift"
@@ -152,7 +152,7 @@ tableshift_mlpbase(){
   done
 }
 
-#tableshift_mlpbase
-openml_mlpbase
+tableshift_mlpbase
+#openml_mlpbase
 
 #python send_email.py

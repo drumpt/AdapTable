@@ -22,6 +22,7 @@ shift_type: numerical # null, Gaussian, uniform, random_drop, column_drop, numer
 shift_severity: 0.2
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd
+dataset_save_dir: data/raw_data
 
 ### hyperparameters for pretraining
 pretrain_epochs: 50
