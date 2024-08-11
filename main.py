@@ -884,7 +884,7 @@ def main(args):
                 )
                 GRADIENT_NORM_LIST.append(gradient_norm)
 
-    print(f"{3}")
+    print(f"{3``}")
 
     logger.info(f"total_inference_time: {avg_inference_time}")
     logger.info(f"total_adaptation_time: {avg_adaptation_time}")
