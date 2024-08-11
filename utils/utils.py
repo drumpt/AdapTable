@@ -54,7 +54,6 @@ def get_logger(args):
     formatter = logging.Formatter('%(message)s')
 
     # method = "_".join(args.method) if isinstance(args.method, omegaconf.listconfig.ListConfig) else args.method
-
     log_path = os.path.join(args.log_dir, args.log_prefix)
 
     # log_path = os.path.join(log_path, f"{args.benchmark}_{args.dataset}_shift_type_{args.shift_type}_shift_severity_{args.shift_severity}_seed_{args.seed}_{method}.txt")
@@ -75,6 +74,8 @@ def get_logger(args):
     log_path += '.txt'
 
     print(f"log_path: {log_path}")
+    if not os.path.exists(os.path.dirname(log_path)):
+        os.makedirs(os.path.dirname(log_path))
 
     file_handler = logging.FileHandler(log_path)
     file_handler.setFormatter(formatter)
@@ -120,6 +121,7 @@ def collect_params(model, train_params):
     for nm, m in model.named_modules():
         if 'all' in train_params:
             for np, p in m.named_parameters():
+                print(f"{np=}")
                 p.requires_grad = True
                 if not f"{nm}.{np}" in names:
                     params.append(p)

@@ -5,10 +5,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from einops import repeat
+
 from pytorch_tabnet.tab_network import TabNetEncoder, TabNetDecoder, EmbeddingGenerator, RandomObfuscator
 from tab_transformer_pytorch.tab_transformer_pytorch import Transformer as TabTransformerBlock
 from tab_transformer_pytorch.ft_transformer import NumericalEmbedder, Transformer as FTTransformerBlock
 from tab_transformer_pytorch.tab_transformer_pytorch import MLP as TabTransformerMLP
+# from rtdl_revisiting_models import ResNet
+# import sys
+# sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../data/tableshift"))
+# from tableshift.models.utils import get_estimator
 
 
 
@@ -461,3 +466,262 @@ class ColumnShiftHandler(nn.Module):
         t = self.main_head(torch.cat([out, vanilla_outputs], dim=-1))
         t = F.softplus(t)
         return t
+
+
+
+
+
+from warnings import warn
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+
+from . import nn_utils
+from .nn_utils import sparsemax, sparsemoid, ModuleWithInit
+
+
+def check_numpy(x):
+    """ Makes sure x is a numpy array """
+    if isinstance(x, torch.Tensor):
+        x = x.detach().cpu().numpy()
+    x = np.asarray(x)
+    assert isinstance(x, np.ndarray)
+    return x
+
+
+
+class ODST(ModuleWithInit):
+    def __init__(self, in_features, num_trees, depth=6, tree_dim=1, flatten_output=True,
+                 choice_function=sparsemax, bin_function=sparsemoid,
+                 initialize_response_=nn.init.normal_, initialize_selection_logits_=nn.init.uniform_,
+                 threshold_init_beta=1.0, threshold_init_cutoff=1.0,
+                 ):
+        """
+        Oblivious Differentiable Sparsemax Trees. http://tinyurl.com/odst-readmore
+        One can drop (sic!) this module anywhere instead of nn.Linear
+        :param in_features: number of features in the input tensor
+        :param num_trees: number of trees in this layer
+        :param tree_dim: number of response channels in the response of individual tree
+        :param depth: number of splits in every tree
+        :param flatten_output: if False, returns [..., num_trees, tree_dim],
+            by default returns [..., num_trees * tree_dim]
+        :param choice_function: f(tensor, dim) -> R_simplex computes feature weights s.t. f(tensor, dim).sum(dim) == 1
+        :param bin_function: f(tensor) -> R[0, 1], computes tree leaf weights
+
+        :param initialize_response_: in-place initializer for tree output tensor
+        :param initialize_selection_logits_: in-place initializer for logits that select features for the tree
+        both thresholds and scales are initialized with data-aware init (or .load_state_dict)
+        :param threshold_init_beta: initializes threshold to a q-th quantile of data points
+            where q ~ Beta(:threshold_init_beta:, :threshold_init_beta:)
+            If this param is set to 1, initial thresholds will have the same distribution as data points
+            If greater than 1 (e.g. 10), thresholds will be closer to median data value
+            If less than 1 (e.g. 0.1), thresholds will approach min/max data values.
+
+        :param threshold_init_cutoff: threshold log-temperatures initializer, \in (0, inf)
+            By default(1.0), log-remperatures are initialized in such a way that all bin selectors
+            end up in the linear region of sparse-sigmoid. The temperatures are then scaled by this parameter.
+            Setting this value > 1.0 will result in some margin between data points and sparse-sigmoid cutoff value
+            Setting this value < 1.0 will cause (1 - value) part of data points to end up in flat sparse-sigmoid region
+            For instance, threshold_init_cutoff = 0.9 will set 10% points equal to 0.0 or 1.0
+            Setting this value > 1.0 will result in a margin between data points and sparse-sigmoid cutoff value
+            All points will be between (0.5 - 0.5 / threshold_init_cutoff) and (0.5 + 0.5 / threshold_init_cutoff)
+        """
+        super().__init__()
+        self.depth, self.num_trees, self.tree_dim, self.flatten_output = depth, num_trees, tree_dim, flatten_output
+        self.choice_function, self.bin_function = choice_function, bin_function
+        self.threshold_init_beta, self.threshold_init_cutoff = threshold_init_beta, threshold_init_cutoff
+
+        self.response = nn.Parameter(torch.zeros([num_trees, tree_dim, 2 ** depth]), requires_grad=True)
+        initialize_response_(self.response)
+
+        self.feature_selection_logits = nn.Parameter(
+            torch.zeros([in_features, num_trees, depth]), requires_grad=True
+        )
+        initialize_selection_logits_(self.feature_selection_logits)
+
+        self.feature_thresholds = nn.Parameter(
+            torch.full([num_trees, depth], float('nan'), dtype=torch.float32), requires_grad=True
+        )  # nan values will be initialized on first batch (data-aware init)
+
+        self.log_temperatures = nn.Parameter(
+            torch.full([num_trees, depth], float('nan'), dtype=torch.float32), requires_grad=True
+        )
+
+        # binary codes for mapping between 1-hot vectors and bin indices
+        with torch.no_grad():
+            indices = torch.arange(2 ** self.depth)
+            offsets = 2 ** torch.arange(self.depth)
+            bin_codes = (indices.view(1, -1) // offsets.view(-1, 1) % 2).to(torch.float32)
+            bin_codes_1hot = torch.stack([bin_codes, 1.0 - bin_codes], dim=-1)
+            self.bin_codes_1hot = nn.Parameter(bin_codes_1hot, requires_grad=False)
+            # ^-- [depth, 2 ** depth, 2]
+
+        # print(f"{self.response=}")
+        # print(f"{self.feature_selection_logits=}")
+        print(f"{self.feature_thresholds.dtype=}")
+        print(f"{self.log_temperatures.dtype=}")
+        # print(f"{self.bin_codes_1hot=}")
+
+    def forward(self, input):
+        assert len(input.shape) >= 2
+        if len(input.shape) > 2:
+            return self.forward(input.view(-1, input.shape[-1])).view(*input.shape[:-1], -1)
+        # new input shape: [batch_size, in_features]
+
+        feature_logits = self.feature_selection_logits
+        feature_selectors = self.choice_function(feature_logits, dim=0)
+        # ^--[in_features, num_trees, depth]
+
+        feature_values = torch.einsum('bi,ind->bnd', input, feature_selectors)
+        # ^--[batch_size, num_trees, depth]
+
+        threshold_logits = (feature_values - self.feature_thresholds) * torch.exp(-self.log_temperatures)
+
+        threshold_logits = torch.stack([-threshold_logits, threshold_logits], dim=-1)
+        # ^--[batch_size, num_trees, depth, 2]
+
+        bins = self.bin_function(threshold_logits)
+        # ^--[batch_size, num_trees, depth, 2], approximately binary
+
+        bin_matches = torch.einsum('btds,dcs->btdc', bins, self.bin_codes_1hot)
+        # ^--[batch_size, num_trees, depth, 2 ** depth]
+
+        response_weights = torch.prod(bin_matches, dim=-2)
+        # ^-- [batch_size, num_trees, 2 ** depth]
+
+        response = torch.einsum('bnd,ncd->bnc', response_weights, self.response)
+        # ^-- [batch_size, num_trees, tree_dim]
+
+        return response.flatten(1, 2) if self.flatten_output else response
+
+    def initialize(self, input, eps=1e-6):
+        # data-aware initializer
+        assert len(input.shape) == 2
+        if input.shape[0] < 1000:
+            warn("Data-aware initialization is performed on less than 1000 data points. This may cause instability."
+                 "To avoid potential problems, run this model on a data batch with at least 1000 data samples."
+                 "You can do so manually before training. Use with torch.no_grad() for memory efficiency.")
+        with torch.no_grad():
+            feature_selectors = self.choice_function(self.feature_selection_logits, dim=0)
+            # ^--[in_features, num_trees, depth]
+
+            feature_values = torch.einsum('bi,ind->bnd', input, feature_selectors)
+            # ^--[batch_size, num_trees, depth]
+
+            # initialize thresholds: sample random percentiles of data
+            percentiles_q = 100 * np.random.beta(self.threshold_init_beta, self.threshold_init_beta,
+                                                 size=[self.num_trees, self.depth])
+            self.feature_thresholds.data[...] = torch.as_tensor(
+                list(map(np.percentile, check_numpy(feature_values.flatten(1, 2).t()), percentiles_q.flatten())),
+                dtype=feature_values.dtype, device=feature_values.device
+            ).view(self.num_trees, self.depth)
+
+            # init temperatures: make sure enough data points are in the linear region of sparse-sigmoid
+            temperatures = np.percentile(check_numpy(abs(feature_values - self.feature_thresholds)),
+                                         q=100 * min(1.0, self.threshold_init_cutoff), axis=0)
+
+            # if threshold_init_cutoff > 1, scale everything down by it
+            temperatures /= max(1.0, self.threshold_init_cutoff)
+            self.log_temperatures.data[...] = torch.log(torch.as_tensor(temperatures) + eps)
+
+    def __repr__(self):
+        return "{}(in_features={}, num_trees={}, depth={}, tree_dim={}, flatten_output={})".format(
+            self.__class__.__name__, self.feature_selection_logits.shape[0],
+            self.num_trees, self.depth, self.tree_dim, self.flatten_output
+        )
+
+
+
+class DenseBlock(nn.Sequential):
+    def __init__(self, input_dim, layer_dim, num_layers, tree_dim=1, max_features=None,
+                 input_dropout=0.0, flatten_output=True, Module=ODST, **kwargs):
+        layers = []
+        for i in range(num_layers):
+            oddt = Module(input_dim, layer_dim, tree_dim=tree_dim, flatten_output=True, **kwargs)
+            input_dim = min(input_dim + layer_dim * tree_dim, max_features or float('inf'))
+            layers.append(oddt)
+
+        super().__init__(*layers)
+        self.num_layers, self.layer_dim, self.tree_dim = num_layers, layer_dim, tree_dim
+        self.max_features, self.flatten_output = max_features, flatten_output
+        self.input_dropout = input_dropout
+
+    def forward(self, x):
+        initial_features = x.shape[-1]
+        for layer in self:
+            layer_inp = x
+            if self.max_features is not None:
+                tail_features = min(self.max_features, layer_inp.shape[-1]) - initial_features
+                if tail_features != 0:
+                    layer_inp = torch.cat([layer_inp[..., :initial_features], layer_inp[..., -tail_features:]], dim=-1)
+            if self.training and self.input_dropout:
+                layer_inp = F.dropout(layer_inp, self.input_dropout)
+            h = layer(layer_inp)
+            x = torch.cat([x, h], dim=-1)
+
+        outputs = x[..., initial_features:]
+        if not self.flatten_output:
+            outputs = outputs.view(*outputs.shape[:-1], self.num_layers * self.layer_dim, self.tree_dim)
+        return outputs
+
+
+
+class NODE(nn.Module):
+    def __init__(self, args, dataset):
+        super().__init__()
+
+        self.cat_start_index = dataset.cont_dim
+        self.cat_end_indices = np.cumsum([num_category for num_category, _ in dataset.emb_dim_list])
+        self.cat_start_indices = np.concatenate([[0], self.cat_end_indices], axis=0)[:-1]
+        self.cat_indices_groups = dataset.cat_indices_groups
+
+        self.in_features = dataset.cont_dim + len(dataset.emb_dim_list)
+        self.dim_out = dataset.out_dim
+
+        self.encoder = DenseBlock(
+            self.in_features,
+            2048,
+            num_layers=1,
+            tree_dim=3,
+            depth=6,
+            flatten_output=False,
+            choice_function=nn_utils.entmax15,
+            bin_function=nn_utils.entmoid15
+        )
+        print(f"{self.encoder=}")
+        self.lda = nn_utils.Lambda(lambda x: x[..., :self.dim_out].mean(dim=-2))
+
+
+    def forward(self, inputs):
+        inputs = self.get_le_from_oe(inputs)
+        x = self.encoder(inputs)
+        outputs = self.lda(x)
+        return outputs
+
+
+    # def get_recon_out(self, inputs):
+    #     inputs = self.get_embedding(inputs)
+    #     x = self.transformer(inputs, return_attn=False)
+    #     feature_out = x[:, 0]
+    #     recon_out = self.recon_head(feature_out)
+    #     return recon_out
+
+    
+    # def get_feature(self, inputs):
+    #     inputs = self.get_embedding(inputs)
+    #     x = self.transformer(inputs, return_attn=False)
+    #     feature_out = x[:, 0]
+    #     return feature_out
+
+
+    def get_le_from_oe(self, inputs): # one-hot encoding -> label encoding
+        if len(self.cat_start_indices):
+            inputs_cont = inputs[:, :self.cat_start_index]
+            inputs_cat = inputs[:, self.cat_start_index:]
+            inputs_cat_emb = [] # translate one-hot encoding to label encoding
+            for i in range(len(self.cat_end_indices)):
+                inputs_cat_emb.append(torch.argmax(inputs_cat[:, self.cat_start_indices[i]:self.cat_end_indices[i]], dim=-1))
+            inputs_cat = torch.stack(inputs_cat_emb, dim=-1)
+            inputs = torch.cat([inputs_cont, inputs_cat], dim=-1)
+        return inputs

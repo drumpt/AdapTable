@@ -1,11 +1,9 @@
 import os
-
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 from functools import partial
 from itertools import chain
 from collections import defaultdict
 import warnings
-
 warnings.filterwarnings("ignore")
 from copy import deepcopy
 import hydra
@@ -15,9 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn import DataParallel
-from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score, balanced_accuracy_score, f1_score, confusion_matrix
 
 from data.dataset import *
 from model.model import *
@@ -35,8 +31,8 @@ def get_model(args, dataset):
     elif args.model == "mlp":
         model = "MLP"
     elif args.model == "fttransformer":
-        modle = "FTTransformer"
-    elif args.model in ["MLP", "TabNet", "TabTransformer", "FTTransformer"]:
+        model = "FTTransformer"
+    elif args.model in ["MLP", "TabNet", "TabTransformer", "FTTransformer", "NODE"]:
         model = args.model
     else:
         raise NotImplementedError
@@ -52,11 +48,11 @@ def get_source_model(args, dataset):
         args.method = [args.method]
 
     if (
-        os.path.exists(os.path.join(args.out_dir, "source_model.pth"))
+        os.path.exists(os.path.join(args.out_dir, f"source_model_{args.dataset}_{args.model}.pth"))
         and not args.retrain
     ):
         init_model.load_state_dict(
-            torch.load(os.path.join(args.out_dir, "source_model.pth"))
+            torch.load(os.path.join(args.out_dir, f"source_model_{args.dataset}_{args.model}.pth"))
         )
         source_model = init_model
     elif set(args.method).intersection(
@@ -77,8 +73,11 @@ def get_source_model(args, dataset):
         )  # supervised learning (main task)
     else:
         train_optimizer = getattr(torch.optim, args.train_optimizer)(
-            collect_params(init_model, train_params="all")[0], lr=args.train_lr
+            list(init_model.parameters()), lr=args.train_lr
         )
+        # train_optimizer = getattr(torch.optim, args.train_optimizer)(
+        #     collect_params(init_model, train_params="all")[0], lr=args.train_lr
+        # )
         source_model = train(args, init_model, train_optimizer, dataset)
     return source_model
 
@@ -166,7 +165,8 @@ def train(args, model, optimizer, dataset, with_mae=False):
 
     for epoch in range(1, args.epochs + 1):
         train_loss, train_acc, train_len = 0, 0, 0
-        model = model.train().requires_grad_(True)
+        # model = model.train().requires_grad_(True)
+        model = model.train()
         for i, (train_x, train_y) in enumerate(dataset.train_loader):
             train_x, train_y = train_x.to(device), train_y.to(device).float()
             estimated_y = model(train_x)
@@ -218,7 +218,7 @@ def train(args, model, optimizer, dataset, with_mae=False):
             source_model = deepcopy(model)
             torch.save(
                 source_model.state_dict(),
-                os.path.join(args.out_dir, "source_model.pth"),
+                os.path.join(args.out_dir, f"source_model_{args.dataset}_{args.model}.pth"),
             )
             dataset.best_valid_acc = valid_acc / valid_len
         else:
@@ -321,6 +321,9 @@ def posttrain(
 
 
 def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
+    if not set(args.method).intersection(["mae", "em", "sam", "memo", "sar", "pl", "ttt++", "eata", "dem", "gem", "ns", "dm", "kld"]):
+        return
+
     global EMA, original_source_model, eata_params, ttt_params
     optimizer.zero_grad()
     outputs = model(x)
@@ -425,17 +428,18 @@ def forward_and_adapt(args, dataset, x, y, mask, model, optimizer):
         loss.backward(retain_graph=True)
     if "sar" in args.method:
         entropy_first = softmax_entropy(outputs)
-        filter_id = torch.where(entropy_first < 0.4 * np.log(outputs.shape[-1]))
-        entropy_first = entropy_first[filter_id]
+        filter_id1 = torch.where(entropy_first < 0.4 * np.log(outputs.shape[-1]))
+        entropy_first = entropy_first[filter_id1]
         loss = entropy_first.mean()
         loss.backward(retain_graph=True)
-        optimizer.first_step()
 
+        optimizer.first_step(zero_grad=True)
         new_outputs = model(x)
         entropy_second = softmax_entropy(new_outputs)
-        entropy_second = entropy_second[filter_id]
-        filter_id = torch.where(entropy_second < 0.4 * np.log(outputs.shape[-1]))
-        loss_second = entropy_second[filter_id].mean()
+        entropy_second = entropy_second[filter_id1]
+        filter_id2 = torch.where(entropy_second < 0.4 * np.log(outputs.shape[-1]))
+        loss_second = entropy_second[filter_id2].mean()
+
         loss_second.backward(retain_graph=True)
         optimizer.second_step()
 
@@ -616,8 +620,6 @@ def main(args):
     import time
 
     before_source_model_training = time.time()
-
-    print(f"{1}")
 
     source_model = get_source_model(args, dataset)
     source_model.eval().requires_grad_(True)
@@ -903,8 +905,6 @@ def main(args):
                     )
                 )
                 GRADIENT_NORM_LIST.append(gradient_norm)
-
-    print(f"{3``}")
 
     logger.info(f"total_inference_time: {avg_inference_time}")
     logger.info(f"total_adaptation_time: {avg_adaptation_time}")

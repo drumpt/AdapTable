@@ -1,24 +1,25 @@
 import os
-from os import path
 import sys
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift"))
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift"))
-
-from collections import Counter
 import pickle
+from collections import Counter
 
 import numpy as np
 import pandas as pd
+from scipy.stats import norm, multinomial, dirichlet
 import sklearn.preprocessing
-from sklearn.preprocessing import OneHotEncoder, StandardScaler, MinMaxScaler
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
+# from sklearn.impute import SimpleImputer
 import torch
 import torch.nn.functional as F
+from torch.utils.data import Sampler
+import torch.distributions as dist
 import openml
 from openml import tasks, runs
 
 from tableshift import get_dataset, get_iid_dataset
-# from datasets import load_dataset
 from data.utils.util_functions import load_opt
 from utils import utils
 
@@ -50,9 +51,11 @@ class Dataset():
 
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
-        train_x.iloc[:, cont_indices] = train_x.iloc[:, cont_indices].fillna(0)
-        valid_x.iloc[:, cont_indices] = valid_x.iloc[:, cont_indices].fillna(0)
-        test_x.iloc[:, cont_indices] = test_x.iloc[:, cont_indices].fillna(0)
+        train_x.iloc[:, cont_indices] = train_x.iloc[:, cont_indices].fillna(0).astype(float)
+        valid_x.iloc[:, cont_indices] = valid_x.iloc[:, cont_indices].fillna(0).astype(float)
+        test_x.iloc[:, cont_indices] = test_x.iloc[:, cont_indices].fillna(0).astype(float)
+        # train_y, valid_y, test_y = train_y.astype(float), valid_y.astype(float), test_y.astype(float)
+        test_sampler = self.get_sampler(args, train_x, train_y, test_x, test_y, cat_indices)
 
         self.emb_dim = []
         if len(cont_indices):
@@ -60,8 +63,8 @@ class Dataset():
             self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
-                args.shift_type = None
+            # if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
+            #     args.shift_type = None
             test_cont_x, test_cont_mask_x = Dataset.get_corrupted_data_by_modality(
                 np.array(test_x.iloc[:, cont_indices]),
                 np.array(train_x.iloc[:, cont_indices]),
@@ -78,8 +81,8 @@ class Dataset():
             self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
-                args.shift_type = None
+            # if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
+            #     args.shift_type = None
             test_cat_x, test_cat_mask_x = Dataset.get_corrupted_data_by_modality(
                 np.array(test_x.iloc[:, cat_indices]),
                 np.array(train_x.iloc[:, cat_indices]),
@@ -117,9 +120,28 @@ class Dataset():
         test_data = torch.utils.data.TensorDataset(torch.FloatTensor(self.test_x).type(torch.float32), torch.FloatTensor(self.test_mask_x).type(torch.float32), torch.FloatTensor(self.test_y).type(torch.float32))
 
         self.in_dim, self.out_dim = self.train_x.shape[-1], self.train_y.shape[-1]
-        self.train_loader = torch.utils.data.DataLoader(train_data, batch_size=args.train_batch_size, shuffle=True, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
-        self.valid_loader = torch.utils.data.DataLoader(valid_data, batch_size=args.train_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
-        self.test_loader = torch.utils.data.DataLoader(test_data, batch_size=args.test_batch_size, shuffle=False, worker_init_fn=utils.set_seed_worker, generator=utils.get_generator(args.seed))
+        self.train_loader = torch.utils.data.DataLoader(
+            train_data,
+            batch_size=args.train_batch_size,
+            shuffle=True,
+            worker_init_fn=utils.set_seed_worker,
+            generator=utils.get_generator(args.seed)
+        )
+        self.valid_loader = torch.utils.data.DataLoader(
+            valid_data,
+            batch_size=args.train_batch_size,
+            shuffle=False,
+            worker_init_fn=utils.set_seed_worker,
+            generator=utils.get_generator(args.seed)
+        )
+        self.test_loader = torch.utils.data.DataLoader(
+            dataset=test_data,
+            batch_size=args.test_batch_size,
+            shuffle=False,
+            worker_init_fn=utils.set_seed_worker,
+            generator=utils.get_generator(args.seed),
+            sampler=test_sampler
+        )
 
         self.cont_dim = train_cont_x.shape[-1]
         if hasattr(self, 'input_one_hot_encoder'):
@@ -144,6 +166,64 @@ class Dataset():
         logger.info(f"Class distribution - valid {np.round(self.valid_counts[1] / np.sum(self.valid_counts[1]), 2)}, {self.valid_counts}")
         logger.info(f"Class distribution - test {np.round(self.test_counts[1] / np.sum(self.test_counts[1]), 2)}, {self.test_counts}")
 
+
+    def get_sampler(self, args, train_x, train_y, test_x, test_y, cat_indices):
+        train_x, train_y, test_x, test_y = np.array(train_x), np.array(train_y).squeeze(), np.array(test_x), np.array(test_y).squeeze()
+        if args.shift_type == "temp_corr":
+            sampler = TemporallyCorrelatedSampler(test_y, args.temp_corr_alpha, args.temp_corr_window_size)
+        elif args.shift_type == "imbalanced":
+            sampler = ImbalancedSampler(train_y, args.imb_ratio)
+        elif args.shift_type == "numerical" or args.shift_type == "categorical":
+            from xgboost import XGBClassifier
+
+            # for cat_index in cat_indices:
+            #     train_x.iloc[:, cat_index] = train_x.iloc[:, cat_index].astype('category').cat.codes
+            #     test_x.iloc[:, cat_index] = test_x.iloc[:, cat_index].astype('category').cat.codes
+
+            le = LabelEncoder()
+            train_y = le.fit_transform(train_y)
+            xgb = XGBClassifier()
+            xgb.fit(train_x, train_y)
+            test_y = le.transform(test_y)
+
+            if args.shift_type == "numerical":
+                cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
+                important_feature_idx = cont_indices[np.argmax(xgb.feature_importances_[cont_indices])]
+
+                mean = np.mean(train_x[:, important_feature_idx])
+                std = np.std(train_x[:, important_feature_idx])
+
+                likelihoods = []
+                for numerical in test_x[:, important_feature_idx]:
+                    likelihood = norm.pdf(
+                        numerical,
+                        mean,
+                        std,
+                    )
+                    likelihoods.append(likelihood)
+                likelihoods_numerical = np.array(likelihoods)
+                sampler = InverseLikelihoodSampler(likelihoods_numerical)
+            elif args.shift_type == "categorical":
+                important_feature_idx = cat_indices[np.argmax(xgb.feature_importances_[cat_indices])]
+
+                label_encoder = LabelEncoder()
+                train_cat_encoded = label_encoder.fit_transform(train_x[:, important_feature_idx])
+                test_cat_encoded = label_encoder.transform(test_x[:, important_feature_idx])
+
+                category_counts = np.bincount(train_cat_encoded, minlength=len(np.unique(train_cat_encoded)))
+                category_probs = category_counts / np.sum(category_counts)
+
+                likelihoods = []
+                for category in test_cat_encoded:
+                    category_one_hot = np.zeros(len(category_counts))
+                    category_one_hot[category] = 1
+                    likelihood = multinomial.pmf(category_one_hot, n=np.sum(category_one_hot), p=category_probs)
+                    likelihoods.append(likelihood)
+                likelihoods_categorical = np.array(likelihoods)
+                sampler = InverseLikelihoodSampler(likelihoods_categorical)
+        else:
+            sampler = UniformSampler(test_y)
+        return sampler
 
     def get_shifted_column(self):
         if self.shift_at == -1:
@@ -192,25 +272,30 @@ class Dataset():
 
         print(f"cat_indices: {cat_indices}")
 
-        if args.shift_type in ["numerical", "categorical"]:
-            if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):
-                raise Exception(f'No {args.shift_type} columns in {args.dataset} dataset!')
+        # if args.shift_type in ["numerical", "categorical"]:
+        #     if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):
+        #         raise Exception(f'No {args.shift_type} columns in {args.dataset} dataset!')
 
-            train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, args.shift_severity, regression=False)
-            train_x, train_y = x.iloc[train_indices, :], y.iloc[train_indices, :]
-            test_x, test_y = x.iloc[test_indices, :], y.iloc[test_indices, :]
-            train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
-        else:
-            train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
-            valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+        #     train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, args.shift_severity, regression=False)
+        #     train_x, train_y = x.iloc[train_indices, :], y.iloc[train_indices, :]
+        #     test_x, test_y = x.iloc[test_indices, :], y.iloc[test_indices, :]
+        #     train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
+        # else:
+        #     train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
+        #     valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
+        train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
+        valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
         # print(f"train_x original: {train_x}")
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
     def get_tableshift_dataset(self, args):
-        dataset_dir = os.path.join(args.dataset_save_dir, f"{args.benchmark}")
-        print(f"{os.path.exists(os.path.join(dataset_dir, f'{args.dataset}.pkl'))=}")
-        if os.path.exists(os.path.join(dataset_dir, f"{args.dataset}.pkl")):
-            dataset_dict = pickle.load(open(os.path.join(dataset_dir, f"{args.dataset}.pkl"), "rb"))
+        if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
+            dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}_id_test.pkl")
+        else:
+            dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}.pkl")
+
+        if os.path.exists(dataset_dir):
+            dataset_dict = pickle.load(open(dataset_dir, "rb"))
             train_x = dataset_dict["train_x"]
             valid_x = dataset_dict["valid_x"]
             test_x = dataset_dict["test_x"]
@@ -232,7 +317,14 @@ class Dataset():
             dataset = get_dataset(args.dataset, cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift/tmp"), preprocessor_config=preprocessor_config)
             train_x, train_y, _, _ = dataset.get_pandas("train")
             valid_x, valid_y, _, _ = dataset.get_pandas("validation")
-            test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("test")
+
+            # id여야 하는 경우: Gaussian, uniform, random_drop, column_drop
+            # ood여야 하는 경우: null, numerical, categorical, temp corr, imbalanced
+            if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
+                test_x, test_y, _, _ = dataset.get_pandas("id_test")
+            else:
+                test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("id_test")
+
             cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
 
             train_x, valid_x, test_x = np.array(train_x), np.array(valid_x), np.array(test_x)
@@ -246,7 +338,7 @@ class Dataset():
             dataset_dict["valid_y"] = valid_y
             dataset_dict["test_y"] = test_y
             dataset_dict["cat_indices"] = cat_indices
-            with open(os.path.join(dataset_dir, f"{args.dataset}.pkl"), "wb") as f:
+            with open(dataset_dir, "wb") as f:
                 pickle.dump(dataset_dict, f)
 
         print(f"{train_x.shape=}")
@@ -583,3 +675,103 @@ class Dataset():
         if isinstance(unscaled_data, torch.Tensor):
             data = torch.from_numpy(data).to(unscaled_data.device)
         return data
+
+
+
+class UniformSampler(Sampler):
+    def __init__(self, data_source):
+        self.data_source = data_source
+        self.num_samples = len(data_source)
+
+    def __iter__(self):
+        return iter(torch.randperm(self.num_samples).tolist())
+
+    def __len__(self):
+        return self.num_samples
+
+
+
+class ImbalancedSampler(Sampler):
+    def __init__(self, train_y, imb_ratio):
+        self.train_y = train_y
+        self.imb_ratio = imb_ratio
+        
+        class_counts = np.bincount(self.train_y)
+        class_ranks = np.argsort(np.argsort(class_counts))
+        
+        max_rank = class_ranks.max()
+        sampling_probs = np.zeros_like(self.train_y, dtype=float)
+        
+        for class_index in range(len(class_counts)):
+            rank = class_ranks[class_index]
+            prob = (1 - (rank / max_rank)) * (imb_ratio - 1) + 1
+            sampling_probs[self.train_y == class_index] = prob
+        
+        self.probabilities = sampling_probs / sampling_probs.sum()
+
+    def __iter__(self):
+        return iter(torch.multinomial(torch.tensor(self.probabilities), len(self.train_y), replacement=True).tolist())
+
+    def __len__(self):
+        return len(self.train_y)
+
+
+
+class TemporallyCorrelatedSampler(Sampler):
+    def __init__(self, test_y, alpha=1.0, window_size=5, epsilon=1e-6):
+        self.test_y = test_y
+        self.num_classes = len(np.unique(self.test_y))
+        self.alpha = alpha  # Dirichlet distribution parameter
+        self.window_size = window_size  # Window size for temporal correlation
+        self.epsilon = epsilon  # Smoothing parameter for Dirichlet distribution
+
+        # Start with a uniform distribution over labels
+        self.current_probs = np.ones(self.num_classes) / self.num_classes
+
+    def __iter__(self):
+        sampled_indices = []
+        for i in range(len(self.test_y)):
+            # Sample a new probability distribution over labels using a Dirichlet distribution
+            dirichlet_dist = dist.Dirichlet(torch.tensor(self.current_probs * self.alpha, dtype=torch.float32))
+            sampled_probs = dirichlet_dist.sample().numpy()
+            
+            # Avoid zero probabilities
+            sampled_probs = np.clip(sampled_probs, a_min=self.epsilon, a_max=None)
+            sampled_probs = sampled_probs / sampled_probs.sum()
+            
+            # Sample a label based on the sampled_probs
+            sampled_label = np.random.choice(np.arange(self.num_classes), p=sampled_probs)
+            
+            # Find an index of that label in the original dataset
+            possible_indices = np.where(self.test_y == sampled_label)[0]
+            sampled_index = np.random.choice(possible_indices)
+            sampled_indices.append(sampled_index)
+            
+            # Update the probabilities based on the recent history (temporal correlation)
+            if len(sampled_indices) >= self.window_size:
+                recent_labels = self.test_y[sampled_indices[-self.window_size:]]
+                label_counts = np.bincount(recent_labels, minlength=self.num_classes)
+                self.current_probs = label_counts / label_counts.sum()
+                
+                # Avoid zero probabilities in updated current_probs
+                self.current_probs = np.clip(self.current_probs, a_min=self.epsilon, a_max=None)
+                self.current_probs = self.current_probs / self.current_probs.sum()
+
+        return iter(sampled_indices)
+
+    def __len__(self):
+        return len(self.test_y)
+
+
+
+class InverseLikelihoodSampler(Sampler):
+    def __init__(self, likelihoods):
+        self.likelihoods = torch.tensor(likelihoods, dtype=torch.float32)
+        self.inverse_likelihoods = 1 / self.likelihoods
+        self.probabilities = self.inverse_likelihoods / self.inverse_likelihoods.sum()
+
+    def __iter__(self):
+        return iter(torch.multinomial(self.probabilities, len(self.probabilities), replacement=True).tolist())
+
+    def __len__(self):
+        return len(self.probabilities)

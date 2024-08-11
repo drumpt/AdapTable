@@ -19,8 +19,12 @@ mlp:
 benchmark: tableshift # tableshift, openml-cc18, folktables, shifts, openml-regression, scikit-learn
 dataset: heloc
 dataset_save_dir: data/raw_data
-shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical
-shift_severity: 0.5
+shift_type: null # null, Gaussian, uniform, random_drop, column_drop, numerical, categorical / temp_corr, imbalanced
+shift_severity: 0.2
+imb_ratio: 10
+temp_corr_alpha: 1
+temp_corr_window_size: 200
+
 normalizer: StandardScaler
 missing_imputation_method: emd # currently supported: zero, mean, emd
 
@@ -35,7 +39,7 @@ pretrain_mask_ratio: 0.75
 retrain: true
 epochs: 50
 train_batch_size: 64
-train_optimizer: Adam
+train_optimizer: AdamW
 train_lr: 1e-4
 train_ratio: 1 # for evaluating on limited number of train instances
 smote: false
@@ -57,8 +61,6 @@ test_lr: 1e-4
 
 ##################################################################
 ### methods & other hyperparameters
-# method: [calibrator, label_distribution_handler]
-# method: [calibrator, label_distribution_handler]
 method: [em]
 # search space - episodic, test_lr : 1e-3~1e-5, num_steps : 1, 5, 10
 # em(tent), sam, sar, pl, ttt++, eata, memo
@@ -107,7 +109,7 @@ seed: 0
 ### log_dir for logging, out_dir for saving model, and vis_dir for visualization
 log_dir: log
 log_prefix: log_final
-out_dir: exps/test_mae
+out_dir: checkpoints
 vis_dir: imgs
 
 # visualization
