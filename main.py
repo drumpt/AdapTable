@@ -48,11 +48,11 @@ def get_source_model(args, dataset):
         args.method = [args.method]
 
     if (
-        os.path.exists(os.path.join(args.out_dir, f"source_model_{args.dataset}_{args.model}.pth"))
+        os.path.exists(os.path.join(args.out_dir, f"{args.model}_{args.dataset}.pth"))
         and not args.retrain
     ):
         init_model.load_state_dict(
-            torch.load(os.path.join(args.out_dir, f"source_model_{args.dataset}_{args.model}.pth"))
+            torch.load(os.path.join(args.out_dir, f"{args.model}_{args.dataset}.pth"))
         )
         source_model = init_model
     elif set(args.method).intersection(
@@ -218,7 +218,7 @@ def train(args, model, optimizer, dataset, with_mae=False):
             source_model = deepcopy(model)
             torch.save(
                 source_model.state_dict(),
-                os.path.join(args.out_dir, f"source_model_{args.dataset}_{args.model}.pth"),
+                os.path.join(args.out_dir, f"{args.model}_{args.dataset}.pth"),
             )
             dataset.best_valid_acc = valid_acc / valid_len
         else:

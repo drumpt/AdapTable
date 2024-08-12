@@ -169,12 +169,12 @@ tableshift_shiftcheck() {
                         python main.py \
                             model=${model} \
                             seed=${seed} \
-                            train_lr=1e-2 \
+                            train_lr=1e-4 \
                             method=[calibrator,label_distribution_handler] \
                             log_dir=$LOG_DIR \
                             log_prefix=${LOG_POSTFIX} \
                             device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                            out_dir=checkounts \
+                            out_dir=checkpoints \
                             benchmark=${benchmark} \
                             dataset=${dataset} \
                             shift_type=${shift_type} \
@@ -212,7 +212,7 @@ tableshift_modelcheck() {
                             log_dir=$LOG_DIR \
                             log_prefix=${LOG_POSTFIX} \
                             device=cuda:${GPUS[i % ${NUM_GPUS}]} \
-                            out_dir=checkounts \
+                            out_dir=checkpoints \
                             benchmark=${benchmark} \
                             dataset=${dataset} \
                             shift_type=${shift_type} \
