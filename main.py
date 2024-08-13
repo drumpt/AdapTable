@@ -606,7 +606,7 @@ def main(args):
 
     logger = get_logger(args)
     logger.info(OmegaConf.to_yaml(args))
-    disable_logger(args)
+    disable_logger()
     if not os.path.exists(args.out_dir):
         os.makedirs(args.out_dir)
 
@@ -652,6 +652,8 @@ def main(args):
             params, lr=args.test_lr
         )
 
+    print(f"{1}")
+
     if "ttt++" in args.method:  # for TTT++
         from utils.ttt import summarize  # offline summarization
 
@@ -667,40 +669,47 @@ def main(args):
 
     before_gnn_training = time.time()
 
+    print(f"{2}")
+
     if "calibrator" in args.method:
+        print(f"2-1")
         calibrator = Calibrator(args, dataset, source_model)
-        if os.path.exists(os.path.join(args.out_dir, "calibrator_gnn.pth")):
+        print(f"2-2")
+        if os.path.exists(os.path.join(args.out_dir, f"calibrator_{args.model}_{args.dataset}.pth")):
             calibrator.gnn.load_state_dict(
-                torch.load(os.path.join(args.out_dir, "calibrator_gnn.pth"))
+                torch.load(os.path.join(args.out_dir, f"calibrator_{args.model}_{args.dataset}.pth"))
             )
         else:
+            print(f"2-3")
             calibrator.train_gnn()
+            print(f"2-4")
             torch.save(
                 calibrator.gnn.state_dict(),
-                os.path.join(args.out_dir, "calibrator_gnn.pth"),
+                os.path.join(args.out_dir, f"calibrator_{args.model}_{args.dataset}.pth"),
             )
-        with torch.no_grad():
-            for train_x, train_y in dataset.train_loader:
-                train_x, train_y = train_x.to(args.device), train_y.to(args.device)
-                estimated_y = source_model(train_x).detach().cpu()
-                calibrated_y = (
-                    calibrator.get_gnn_out(source_model, train_x).detach().cpu()
-                )
+            print(f"2-5")
+        # with torch.no_grad():
+        #     for train_x, train_y in dataset.train_loader:
+        #         train_x, train_y = train_x.to(args.device), train_y.to(args.device)
+        #         estimated_y = source_model(train_x).detach().cpu()
+        #         calibrated_y = (
+        #             calibrator.get_gnn_out(source_model, train_x).detach().cpu()
+        #         )
 
-                SOURCE_PREDICTION_LIST.extend(estimated_y.tolist())
-                SOURCE_CALIBRATED_PREDICTION_LIST.extend(calibrated_y.tolist())
-                SOURCE_CALIBRATED_ENTROPY_LIST.extend(
-                    softmax_entropy(calibrated_y).tolist()
-                )
-                SOURCE_CALIBRATED_PROB_LIST.extend(
-                    calibrated_y.softmax(dim=-1).max(dim=-1)[0].tolist()
-                )
-                SOURCE_ONE_HOT_LABEL_LIST.extend(train_y.cpu().tolist())
+        #         SOURCE_PREDICTION_LIST.extend(estimated_y.tolist())
+        #         SOURCE_CALIBRATED_PREDICTION_LIST.extend(calibrated_y.tolist())
+        #         SOURCE_CALIBRATED_ENTROPY_LIST.extend(
+        #             softmax_entropy(calibrated_y).tolist()
+        #         )
+        #         SOURCE_CALIBRATED_PROB_LIST.extend(
+        #             calibrated_y.softmax(dim=-1).max(dim=-1)[0].tolist()
+        #         )
+        #         SOURCE_ONE_HOT_LABEL_LIST.extend(train_y.cpu().tolist())
+
+    print(f"{3}")
 
     gnn_training_time = time.time() - before_gnn_training
     logger.info(f"gnn_training_time: {gnn_training_time}")
-
-    print(f"{2}")
 
     source_label_dist = F.normalize(
         torch.FloatTensor(
@@ -930,72 +939,72 @@ def main(args):
     logger.info(f"before adaptation | confusion matrix\n{confusion_matrix_before}")
     logger.info(f"after adaptation | confusion matrix\n{confusion_matrix_after}")
 
-    if args.vis:
-        probs_per_label = defaultdict(list)
-        for train_x, train_y in dataset.train_loader:
-            train_x, train_y = train_x.to(args.device), train_y.to(args.device)
-            estimated_y = source_model(train_x)
-            SOURCE_INPUT_LIST.extend(
-                original_source_model.get_embedding(train_x.to(args.device))
-                .cpu()
-                .tolist()
-            )
-            SOURCE_FEATURE_LIST.extend(
-                original_source_model.get_feature(train_x.to(args.device))
-                .cpu()
-                .tolist()
-            )
-            SOURCE_ENTROPY_LIST.extend(
-                softmax_entropy(original_source_model(train_x.to(args.device))).tolist()
-            )
-            SOURCE_LABEL_LIST.extend(torch.argmax(train_y, dim=-1).tolist())
-            SOURCE_PROB_LIST.extend(
-                original_source_model(train_x.to(args.device))
-                .softmax(dim=-1)
-                .max(dim=-1)[0]
-                .tolist()
-            )
+    # if args.vis:
+        # probs_per_label = defaultdict(list)
+        # for train_x, train_y in dataset.train_loader:
+        #     train_x, train_y = train_x.to(args.device), train_y.to(args.device)
+        #     estimated_y = source_model(train_x)
+        #     SOURCE_INPUT_LIST.extend(
+        #         original_source_model.get_embedding(train_x.to(args.device))
+        #         .cpu()
+        #         .tolist()
+        #     )
+        #     SOURCE_FEATURE_LIST.extend(
+        #         original_source_model.get_feature(train_x.to(args.device))
+        #         .cpu()
+        #         .tolist()
+        #     )
+        #     SOURCE_ENTROPY_LIST.extend(
+        #         softmax_entropy(original_source_model(train_x.to(args.device))).tolist()
+        #     )
+        #     SOURCE_LABEL_LIST.extend(torch.argmax(train_y, dim=-1).tolist())
+        #     SOURCE_PROB_LIST.extend(
+        #         original_source_model(train_x.to(args.device))
+        #         .softmax(dim=-1)
+        #         .max(dim=-1)[0]
+        #         .tolist()
+        #     )
 
-            probs = estimated_y.softmax(dim=-1)
-            for class_idx in range(estimated_y.shape[-1]):
-                probs_per_label[class_idx].extend(probs[:, class_idx].cpu().tolist())
-        for label, probs in probs_per_label.items():
-            draw_histogram(
-                args,
-                probs,
-                f"class {label} probability distribution",
-                "Confidence",
-                "Number of Instances",
-            )
+        #     probs = estimated_y.softmax(dim=-1)
+        #     for class_idx in range(estimated_y.shape[-1]):
+        #         probs_per_label[class_idx].extend(probs[:, class_idx].cpu().tolist())
+        # for label, probs in probs_per_label.items():
+        #     draw_histogram(
+        #         args,
+        #         probs,
+        #         f"class {label} probability distribution",
+        #         "Confidence",
+        #         "Number of Instances",
+        #     )
 
         # draw_histogram(args, np.array(SOURCE_ENTROPY_LIST), "Source Entropy Distribution", "Entropy", "Number of Instances")
         # draw_histogram(args, np.array(SOURCE_PROB_LIST), "Source Confidence Distribution", "Confidence", "Number of Instances")
 
-        draw_histogram(
-            args,
-            ENTROPY_LIST_BEFORE_ADAPTATION,
-            "Entropy Distribution Before Adaptation",
-            "Entropy",
-            "Number of Instances",
-        )
-        # draw_histogram(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation", "Entropy", "Number of Instances")
-        # draw_histogram(args, np.array(PROB_LIST_BEFORE_ADAPTATION), "Target Confidence Distribution Before Adaptation", "Confidence", "Number of Instances")
-        # draw_histogram(args, np.array(PROB_LIST_AFTER_ADAPTATION), "Target Confidence Distribution After Adaptation", "Confidence", "Number of Instances")
+        # draw_histogram(
+        #     args,
+        #     ENTROPY_LIST_BEFORE_ADAPTATION,
+        #     "Entropy Distribution Before Adaptation",
+        #     "Entropy",
+        #     "Number of Instances",
+        # )
+        # # draw_histogram(args, ENTROPY_LIST_AFTER_ADAPTATION, "Entropy Distribution After Adaptation", "Entropy", "Number of Instances")
+        # # draw_histogram(args, np.array(PROB_LIST_BEFORE_ADAPTATION), "Target Confidence Distribution Before Adaptation", "Confidence", "Number of Instances")
+        # # draw_histogram(args, np.array(PROB_LIST_AFTER_ADAPTATION), "Target Confidence Distribution After Adaptation", "Confidence", "Number of Instances")
 
-        # draw_label_distribution_plot(args, SOURCE_LABEL_LIST, "Source Label Distribution")
-        # draw_label_distribution_plot(args, LABEL_LIST, "Target Label Distribution")
-        # draw_label_distribution_plot(args, TARGET_PREDICTION_LIST, "Pseudo Label Distribution")
+        # # draw_label_distribution_plot(args, SOURCE_LABEL_LIST, "Source Label Distribution")
+        # # draw_label_distribution_plot(args, LABEL_LIST, "Target Label Distribution")
+        # # draw_label_distribution_plot(args, TARGET_PREDICTION_LIST, "Pseudo Label Distribution")
 
-        draw_tsne(
-            args,
-            np.array(FEATURE_LIST),
-            np.array(LABEL_LIST),
-            "Target Latent Space Visualization with t-SNE",
-        )
-        # draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST), "Source Latent Space Visualization with t-SNE")
-        # draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST), "Source Input Space Visualization with t-SNE")
+        # draw_tsne(
+        #     args,
+        #     np.array(FEATURE_LIST),
+        #     np.array(LABEL_LIST),
+        #     "Target Latent Space Visualization with t-SNE",
+        # )
+        # # draw_tsne(args, np.array(SOURCE_FEATURE_LIST), np.array(SOURCE_LABEL_LIST), "Source Latent Space Visualization with t-SNE")
+        # # draw_tsne(args, np.array(SOURCE_INPUT_LIST), np.array(SOURCE_LABEL_LIST), "Source Input Space Visualization with t-SNE")
 
-        if "calibrator" in args.method or "column_distribution_handler" in args.method:
+        # if "calibrator" in args.method or "column_distribution_handler" in args.method:
             # train_ece_before = ece_loss_fn(torch.tensor(TARGET_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
             # train_ece_after = ece_loss_fn(torch.tensor(TARGET_CALIBRATED_PREDICTION_LIST), torch.tensor(LABEL_LIST)).item()
             # logger.info(f"test ece before: {train_ece_before}")
@@ -1010,16 +1019,16 @@ def main(args):
             # draw_histogram(args, np.array(SOURCE_CALIBRATED_PROB_LIST), "Source Confidence Distribution After Calibration", "Confidence", "Number of Instances")
             # draw_histogram(args, np.array(PROB_LIST_AFTER_CALIBRATION), "Target Confidence Distribution After Calibration", "Confidence", "Number of Instances")
 
-            draw_reliability_plot(
-                args,
-                np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(
-                    axis=-1
-                ),
-                np.array(SOURCE_PREDICTION_LIST).argmax(axis=-1),
-                np.array(SOURCE_LABEL_LIST),
-                "calibration_before_calibration.png",
-            )
-            # draw_reliability_plot(args, np.array(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_CALIBRATED_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration_after_calibration.png")
+            # draw_reliability_plot(
+            #     args,
+            #     np.array(torch.tensor(SOURCE_PREDICTION_LIST).softmax(axis=-1)).max(
+            #         axis=-1
+            #     ),
+            #     np.array(SOURCE_PREDICTION_LIST).argmax(axis=-1),
+            #     np.array(SOURCE_LABEL_LIST),
+            #     "calibration_before_calibration.png",
+            # )
+            # # draw_reliability_plot(args, np.array(torch.tensor(SOURCE_CALIBRATED_PREDICTION_LIST).softmax(axis=-1)).max(axis=-1), np.array(SOURCE_CALIBRATED_PREDICTION_LIST).argmax(axis=-1), np.array(SOURCE_LABEL_LIST), "calibration_after_calibration.png")
 
     # if args.entropy_gradient_vis:
     #     draw_entropy_gradient_plot(args, ENTROPY_LIST_BEFORE_ADAPTATION, GRADIENT_NORM_LIST, "Entropy vs. Gradient Norm")

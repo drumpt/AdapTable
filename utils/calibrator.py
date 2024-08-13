@@ -8,20 +8,24 @@ from utils.utils import *
 
 class Calibrator():
     def __init__(self, args, dataset, source_model):
+        print("2-1-1")
         self.args = args
         self.dataset = dataset
 
         self.model = source_model
         self.model.requires_grad_(False)
+        print("2-1-2")
 
         # parameters
         self.gnn_epochs = self.args.posttrain_epochs
         self.shrinkage_factor = self.args.posttrain_shrinkage_factor
         self.lr = self.args.posttrain_lr
+        print("2-1-3")
 
         # graph data
         from data.graph_data import GraphDataset
         self.train_graph_dataset = GraphDataset(args, dataset)
+        print("2-1-4")
 
         self.gnn = GraphNet(
             args=args,
@@ -30,11 +34,12 @@ class Calibrator():
             cat_cls_len=self.train_graph_dataset.cat_len_per_node,
             cont_len=len(self.train_graph_dataset.cont_indices)
         ).to(args.device).float()
-
+        print("2-1-5")
 
         self.gnn.requires_grad_(True)
-        self.gnn.train()
+        # self.gnn.train()
         self.model.requires_grad_(False)
+        print("2-1-6")
 
     def train_gnn(self):
         print('========================GNN Training Start========================')

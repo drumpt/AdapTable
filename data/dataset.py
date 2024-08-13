@@ -55,7 +55,7 @@ class Dataset():
         valid_x.iloc[:, cont_indices] = valid_x.iloc[:, cont_indices].fillna(0).astype(float)
         test_x.iloc[:, cont_indices] = test_x.iloc[:, cont_indices].fillna(0).astype(float)
         # train_y, valid_y, test_y = train_y.astype(float), valid_y.astype(float), test_y.astype(float)
-        test_sampler = self.get_sampler(args, train_x, train_y, test_x, test_y, cat_indices)
+        test_sampler = self.get_sampler(args, train_x, train_y, valid_x, valid_y, test_x, test_y, cat_indices)
 
         self.emb_dim = []
         if len(cont_indices):
@@ -167,8 +167,8 @@ class Dataset():
         logger.info(f"Class distribution - test {np.round(self.test_counts[1] / np.sum(self.test_counts[1]), 2)}, {self.test_counts}")
 
 
-    def get_sampler(self, args, train_x, train_y, test_x, test_y, cat_indices):
-        train_x, train_y, test_x, test_y = np.array(train_x), np.array(train_y).squeeze(), np.array(test_x), np.array(test_y).squeeze()
+    def get_sampler(self, args, train_x, train_y, valid_x, valid_y, test_x, test_y, cat_indices):
+        train_x, train_y, valid_x, valid_y, test_x, test_y = np.array(train_x), np.array(train_y).squeeze(), np.array(valid_x), np.array(valid_y).squeeze(), np.array(test_x), np.array(test_y).squeeze()
         if args.shift_type == "temp_corr":
             sampler = TemporallyCorrelatedSampler(test_y, args.temp_corr_alpha, args.temp_corr_window_size)
         elif args.shift_type == "imbalanced":
@@ -176,15 +176,25 @@ class Dataset():
         elif args.shift_type == "numerical" or args.shift_type == "categorical":
             from xgboost import XGBClassifier
 
-            # for cat_index in cat_indices:
-            #     train_x.iloc[:, cat_index] = train_x.iloc[:, cat_index].astype('category').cat.codes
-            #     test_x.iloc[:, cat_index] = test_x.iloc[:, cat_index].astype('category').cat.codes
+            for cat_index in cat_indices:
+                input_le = LabelEncoder()
+                input_le.fit(np.concatenate([
+                    train_x[:, cat_index], valid_x[:, cat_index], test_x[:, cat_index]
+                ]))
+                train_x[:, cat_index] = input_le.transform(train_x[:, cat_index]).astype(np.int32)
+                valid_x[:, cat_index] = input_le.transform(valid_x[:, cat_index]).astype(np.int32)
+                test_x[:, cat_index] = input_le.transform(test_x[:, cat_index]).astype(np.int32)
+            train_x = train_x.astype(np.float32)
+            valid_x = valid_x.astype(np.float32)
+            test_x = test_x.astype(np.float32)
 
-            le = LabelEncoder()
-            train_y = le.fit_transform(train_y)
+            output_le = LabelEncoder()
+            output_le.fit(np.concatenate([train_y, valid_y, test_y]))
+            train_y = output_le.transform(train_y)
+            valid_y = output_le.transform(valid_y)
+            test_y = output_le.transform(test_y)
             xgb = XGBClassifier()
             xgb.fit(train_x, train_y)
-            test_y = le.transform(test_y)
 
             if args.shift_type == "numerical":
                 cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
@@ -205,13 +215,15 @@ class Dataset():
                 sampler = InverseLikelihoodSampler(likelihoods_numerical)
             elif args.shift_type == "categorical":
                 important_feature_idx = cat_indices[np.argmax(xgb.feature_importances_[cat_indices])]
-
-                label_encoder = LabelEncoder()
-                train_cat_encoded = label_encoder.fit_transform(train_x[:, important_feature_idx])
-                test_cat_encoded = label_encoder.transform(test_x[:, important_feature_idx])
-
-                category_counts = np.bincount(train_cat_encoded, minlength=len(np.unique(train_cat_encoded)))
+                train_cat_encoded = train_x[:, important_feature_idx].astype(np.int32)
+                test_cat_encoded = test_x[:, important_feature_idx].astype(np.int32)
+                
+                category_counts = np.bincount(train_cat_encoded, minlength=len(np.unique(train_cat_encoded))) + 1
                 category_probs = category_counts / np.sum(category_counts)
+
+                print(f"{train_cat_encoded=}")
+                print(f"{category_counts=}")
+                print(f"{category_probs=}")
 
                 likelihoods = []
                 for category in test_cat_encoded:
@@ -289,10 +301,11 @@ class Dataset():
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
     def get_tableshift_dataset(self, args):
-        if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
-            dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}_id_test.pkl")
-        else:
-            dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}.pkl")
+        # if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
+        #     dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}_id_test.pkl")
+        # else:
+        #     dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}.pkl")
+        dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}.pkl")
 
         if os.path.exists(dataset_dir):
             dataset_dict = pickle.load(open(dataset_dir, "rb"))
@@ -320,10 +333,11 @@ class Dataset():
 
             # id여야 하는 경우: Gaussian, uniform, random_drop, column_drop
             # ood여야 하는 경우: null, numerical, categorical, temp corr, imbalanced
-            if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
-                test_x, test_y, _, _ = dataset.get_pandas("id_test")
-            else:
-                test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("id_test")
+            # if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
+            #     test_x, test_y, _, _ = dataset.get_pandas("id_test")
+            # else:
+            #     test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("id_test")
+            test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("id_test")
 
             cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
 

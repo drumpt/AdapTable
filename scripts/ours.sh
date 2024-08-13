@@ -190,7 +190,6 @@ tableshift_shiftcheck() {
     done
 }
 
-
 tableshift_modelcheck() {
     SEEDS="0"
     MODELS="ResNet AutoInt"
@@ -227,7 +226,6 @@ tableshift_modelcheck() {
         done
     done
 }
-
 
 # openml_mlpbase
 # tableshift_mlpbase

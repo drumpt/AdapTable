@@ -5,9 +5,9 @@ import sys
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser()
-    parser.add_argument('--sender_email', type=str, default="maxkim139@gmail.com")
-    parser.add_argument('--receiver_email', type=str, default="maxkim139@gmail.com")
-    parser.add_argument('--password', type=str, default="fbcfecbthtlxbhdg")
+    parser.add_argument('--sender_email', type=str, default="ssohot1@gmail.com")
+    parser.add_argument('--receiver_email', type=str, default="ssohot1@gmail.com")
+    parser.add_argument('--password', type=str, default="nfiunmyiwrsqupld")
     parser.add_argument('--message', type=str, default='DONE!', help='message to send')
     return parser.parse_args()
 

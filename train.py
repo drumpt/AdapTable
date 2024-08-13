@@ -206,8 +206,6 @@ def train(args, model, optimizer, dataset, with_mae=False):
         for i, (train_x, train_y) in enumerate(dataset.train_loader):
             train_x, train_y = train_x.to(device), train_y.to(device).float()
             estimated_y = model(train_x)
-            feature = model.get_feature(train_x)
-            print(f"{feature.shape=}")
             if regression:
                 loss = loss_fn(estimated_y.squeeze(), train_y.squeeze().float())
             else:

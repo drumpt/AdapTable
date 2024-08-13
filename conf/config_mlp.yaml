@@ -54,7 +54,6 @@ test_lr: 1e-4
 #method: [tempscale_grasph, sam]
 method: [column_shift_handler, label_shift_handler]
 
-
 # for masked autoencoders
 mae_imputation_method: emd # imputation for unnormalized data: zero, mean, emd
 test_mask_ratio: 0.75

@@ -12,7 +12,6 @@ args = None
 
 def get_avg_online_acc(file_path):
     if os.path.exists(file_path):
-        # Read the entire file content as a single string
         with open(file_path, 'r') as file:
             content = file.read()
 
