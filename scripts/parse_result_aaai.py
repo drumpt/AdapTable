@@ -124,7 +124,7 @@ def parse_common_corruption():
 
 def parse_various_architectures():
     LOG_DIR = "log"
-    LOG_PREFIX = "common_corruption"
+    LOG_PREFIX = "various_architectures"
 
     SEEDS = [0, 1, 2]
     MODEL_LIST = ["ResNet", "AutoInt", "TabNet", "FTTransformer"]
@@ -174,19 +174,23 @@ def parse_various_architectures():
                     )
                 except:
                     mean_list, sem_list = [np.nan] * 6, [np.nan] * 6
-                temp_result = [[f"{mean * 100:.1f}" for mean, sem in zip(mean_list, sem_list)][-4], [f"{mean * 100:.1f}" for mean, sem in zip(mean_list, sem_list)][-1]]
+                temp_result = [[mean * 100 for mean, sem in zip(mean_list, sem_list)][-4], [mean * 100 for mean, sem in zip(mean_list, sem_list)][-1]]
                 temp_result_list.append(temp_result)
             print(f"{temp_result_list=}")
-            result_list.append(np.mean(temp_result_list, axis=0))
+            try:
+                result_list.append(np.mean(temp_result_list, axis=0))
+            except:
+                result_list.append([np.nan] * len(temp_result_list[0]))
+            print(f"{result_list=}")
         result_df = pd.DataFrame(result_list, columns=["F1", "F1"], index=METHOD_LIST)
-        print(f"{model=} {dataset=} {method=}")
+        print(f"{model=}")
         print(f"{result_df=}\n")
 
 
 
 def parse_harsh_condition():
     LOG_DIR = "log"
-    LOG_PREFIX = "common_corruption"
+    LOG_PREFIX = "harsh_condition"
 
     SEEDS = [0, 1, 2]
     MODEL_LIST = ["MLP"]

@@ -221,9 +221,9 @@ class Dataset():
                 category_counts = np.bincount(train_cat_encoded, minlength=len(np.unique(train_cat_encoded))) + 1
                 category_probs = category_counts / np.sum(category_counts)
 
-                print(f"{train_cat_encoded=}")
-                print(f"{category_counts=}")
-                print(f"{category_probs=}")
+                # print(f"{train_cat_encoded=}")
+                # print(f"{category_counts=}")
+                # print(f"{category_probs=}")
 
                 likelihoods = []
                 for category in test_cat_encoded:
@@ -707,10 +707,10 @@ class UniformSampler(Sampler):
 
 class ImbalancedSampler(Sampler):
     def __init__(self, train_y, imb_ratio):
-        self.train_y = train_y
+        self.train_y = train_y.astype(int)
         self.imb_ratio = imb_ratio
         
-        class_counts = np.bincount(self.train_y)
+        class_counts = np.bincount(self.train_y.astype(int))
         class_ranks = np.argsort(np.argsort(class_counts))
         
         max_rank = class_ranks.max()

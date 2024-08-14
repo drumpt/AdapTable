@@ -29,10 +29,10 @@ class Calibrator():
 
         self.gnn = GraphNet(
             args=args,
+            cat_cls_len=self.train_graph_dataset.cat_len_per_node,
+            cont_len=len(self.train_graph_dataset.cont_indices),
             num_features=self.args.test_batch_size,
             num_classes=dataset.train_y.shape[1],
-            cat_cls_len=self.train_graph_dataset.cat_len_per_node,
-            cont_len=len(self.train_graph_dataset.cont_indices)
         ).to(args.device).float()
         print("2-1-5")
 
