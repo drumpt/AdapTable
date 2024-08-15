@@ -118,7 +118,8 @@ common_corruption() {
 various_architectures() {
     SEEDS="0 1 2"
 
-    MODEL_LIST="ResNet AutoInt TabNet FTTransformer"
+    # MODEL_LIST="ResNet AutoInt TabNet FTTransformer"
+    MODEL_LIST="AutoInt"
     benchmark="tableshift"
     DATASETS="anes heloc nhanes_lead diabetes_readmission"
     shift_type=null
@@ -136,23 +137,23 @@ various_architectures() {
         done
     done
 
-    MODEL_LIST="ResNet"
-    benchmark="tableshift"
-    DATASETS="anes heloc nhanes_lead diabetes_readmission"
-    shift_type=null
-    shift_severity=0
-    METHOD_LIST="sar"
-    for seed in ${SEEDS}; do
-        for model in ${MODEL_LIST}; do
-            for dataset in ${DATASETS}; do
-                for method in ${METHOD_LIST}; do
-                    run_baselines
-                    wait_n
-                    gpu_idx=$(((gpu_idx + 1) % ${NUM_GPUS}))
-                done
-            done
-        done
-    done
+    # MODEL_LIST="ResNet"
+    # benchmark="tableshift"
+    # DATASETS="anes heloc nhanes_lead diabetes_readmission"
+    # shift_type=null
+    # shift_severity=0
+    # METHOD_LIST="sar"
+    # for seed in ${SEEDS}; do
+    #     for model in ${MODEL_LIST}; do
+    #         for dataset in ${DATASETS}; do
+    #             for method in ${METHOD_LIST}; do
+    #                 run_baselines
+    #                 wait_n
+    #                 gpu_idx=$(((gpu_idx + 1) % ${NUM_GPUS}))
+    #             done
+    #         done
+    #     done
+    # done
 }
 
 harsh_condition() {
@@ -169,21 +170,21 @@ harsh_condition() {
     # DATASETS="anes"
     # SHIFT_LIST=(temp_corr)
     # SEVERITY_LIST=(0.1 0.1)
-    # METHOD_LIST="[calibrator,label_distribution_handler]"
-    # for seed in ${SEEDS}; do
-    #     for dataset in ${DATASETS}; do
-    #         for shift_idx in "${!SHIFT_LIST[@]}"; do
-    #             shift_type=${SHIFT_LIST[shift_idx]}
-    #             shift_severity=${SEVERITY_LIST[shift_idx]}
+    METHOD_LIST="[calibrator,label_distribution_handler] pl tent eata sar lame"
+    for seed in ${SEEDS}; do
+        for dataset in ${DATASETS}; do
+            for shift_idx in "${!SHIFT_LIST[@]}"; do
+                shift_type=${SHIFT_LIST[shift_idx]}
+                shift_severity=${SEVERITY_LIST[shift_idx]}
 
-    #             for method in ${METHOD_LIST}; do
-    #                 run_baselines
-    #                 wait_n
-    #                 gpu_idx=$(((gpu_idx + 1) % ${NUM_GPUS}))
-    #             done
-    #         done
-    #     done
-    # done
+                for method in ${METHOD_LIST}; do
+                    run_baselines
+                    wait_n
+                    gpu_idx=$(((gpu_idx + 1) % ${NUM_GPUS}))
+                done
+            done
+        done
+    done
 
     # DATASETS="anes"
     # SHIFT_LIST=(imbalanced)
@@ -204,32 +205,32 @@ harsh_condition() {
     #     done
     # done
 
-    DATASETS="nhanes_lead"
-    SHIFT_LIST=(temp_corr imbalanced)
-    SEVERITY_LIST=(0.1 0.1)
-    # METHOD_LIST="[calibrator,label_distribution_handler] pl tent eata sar lame"
-    METHOD_LIST="lame"
-    for seed in ${SEEDS}; do
-        for dataset in ${DATASETS}; do
-            for shift_idx in "${!SHIFT_LIST[@]}"; do
-                shift_type=${SHIFT_LIST[shift_idx]}
-                shift_severity=${SEVERITY_LIST[shift_idx]}
+    # DATASETS="nhanes_lead"
+    # SHIFT_LIST=(temp_corr imbalanced)
+    # SEVERITY_LIST=(0.1 0.1)
+    # # METHOD_LIST="[calibrator,label_distribution_handler] pl tent eata sar lame"
+    # METHOD_LIST="lame"
+    # for seed in ${SEEDS}; do
+    #     for dataset in ${DATASETS}; do
+    #         for shift_idx in "${!SHIFT_LIST[@]}"; do
+    #             shift_type=${SHIFT_LIST[shift_idx]}
+    #             shift_severity=${SEVERITY_LIST[shift_idx]}
 
-                for method in ${METHOD_LIST}; do
-                    run_baselines
-                    wait_n
-                    gpu_idx=$(((gpu_idx + 1) % ${NUM_GPUS}))
-                done
-            done
-        done
-    done
+    #             for method in ${METHOD_LIST}; do
+    #                 run_baselines
+    #                 wait_n
+    #                 gpu_idx=$(((gpu_idx + 1) % ${NUM_GPUS}))
+    #             done
+    #         done
+    #     done
+    # done
 }
 
 ############# run in single GPU ##############
 GPUS=(0 1 2 3)
 NUM_GPUS=${#GPUS[@]}
 gpu_idx=0
-num_max_jobs=3
+num_max_jobs=5
 
 wait_n() {
     #limit the max number of jobs as NUM_MAX_JOB and wait
@@ -252,6 +253,6 @@ LOG_PREFIX=various_architectures
 various_architectures
 python utils/send_email.py --message "finish adapt on various architectures"
 
-LOG_PREFIX=harsh_condition
-harsh_condition
-python utils/send_email.py --message "finish adapt on harsh condition"
+# LOG_PREFIX=harsh_condition
+# harsh_condition
+# python utils/send_email.py --message "finish adapt on harsh condition"

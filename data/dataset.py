@@ -170,9 +170,21 @@ class Dataset():
     def get_sampler(self, args, train_x, train_y, valid_x, valid_y, test_x, test_y, cat_indices):
         train_x, train_y, valid_x, valid_y, test_x, test_y = np.array(train_x), np.array(train_y).squeeze(), np.array(valid_x), np.array(valid_y).squeeze(), np.array(test_x), np.array(test_y).squeeze()
         if args.shift_type == "temp_corr":
+            output_le = LabelEncoder()
+            output_le.fit(np.concatenate([train_y, valid_y, test_y]))
+            train_y = output_le.transform(train_y)
+            valid_y = output_le.transform(valid_y)
+            test_y = output_le.transform(test_y)
+
             sampler = TemporallyCorrelatedSampler(test_y, args.temp_corr_alpha, args.temp_corr_window_size)
         elif args.shift_type == "imbalanced":
-            sampler = ImbalancedSampler(train_y, args.imb_ratio)
+            output_le = LabelEncoder()
+            output_le.fit(np.concatenate([train_y, valid_y, test_y]))
+            train_y = output_le.transform(train_y)
+            valid_y = output_le.transform(valid_y)
+            test_y = output_le.transform(test_y)
+
+            sampler = ImbalancedSampler(train_y, test_y, args.imb_ratio)
         elif args.shift_type == "numerical" or args.shift_type == "categorical":
             from xgboost import XGBClassifier
 
@@ -706,28 +718,32 @@ class UniformSampler(Sampler):
 
 
 class ImbalancedSampler(Sampler):
-    def __init__(self, train_y, imb_ratio):
-        self.train_y = train_y.astype(int)
+    def __init__(self, train_y, test_y, imb_ratio):
+        self.train_y = train_y
+        self.test_y = test_y
         self.imb_ratio = imb_ratio
         
-        class_counts = np.bincount(self.train_y.astype(int))
+        class_counts = np.bincount(self.train_y)
         class_ranks = np.argsort(np.argsort(class_counts))
         
+        print(f"{class_counts=}")
+        print(f"{class_ranks=}")
+        
         max_rank = class_ranks.max()
-        sampling_probs = np.zeros_like(self.train_y, dtype=float)
+        sampling_probs = np.zeros_like(self.test_y, dtype=float)
         
         for class_index in range(len(class_counts)):
             rank = class_ranks[class_index]
             prob = (1 - (rank / max_rank)) * (imb_ratio - 1) + 1
-            sampling_probs[self.train_y == class_index] = prob
+            sampling_probs[self.test_y == class_index] = prob
         
         self.probabilities = sampling_probs / sampling_probs.sum()
 
     def __iter__(self):
-        return iter(torch.multinomial(torch.tensor(self.probabilities), len(self.train_y), replacement=True).tolist())
+        return iter(torch.multinomial(torch.tensor(self.probabilities), len(self.test_y), replacement=True).tolist())
 
     def __len__(self):
-        return len(self.train_y)
+        return len(self.test_y)
 
 
 
