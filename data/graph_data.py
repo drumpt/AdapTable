@@ -36,20 +36,27 @@ def torch_corrcoef(x):
 
     return corr_matrix
 
+
 class GraphDataset(torch.utils.data.Dataset):
     def __init__(self, args, dataset):
         self.cont_indices = [i for i in range(dataset.cont_dim)]
-        self.feat = torch.FloatTensor(dataset.train_x).type(torch.float32).to(args.device)
+        self.feat = (
+            torch.FloatTensor(dataset.train_x).type(torch.float32).to(args.device)
+        )
         self.cls = torch.tensor(dataset.train_y).to(args.device)
         self.dataset = dataset
 
-        if hasattr(dataset, 'input_one_hot_encoder'):
-            self.cat_len_per_node = [len(category) for category in dataset.input_one_hot_encoder.categories_]
+        if hasattr(dataset, "input_one_hot_encoder"):
+            self.cat_len_per_node = [
+                len(category) for category in dataset.input_one_hot_encoder.categories_
+            ]
             self.cat_idx_per_node = []
 
             offset = len(self.cont_indices)
             for cat_len in self.cat_len_per_node:
-                self.cat_idx_per_node.append([i for i in range(offset, offset + cat_len)])
+                self.cat_idx_per_node.append(
+                    [i for i in range(offset, offset + cat_len)]
+                )
                 offset += cat_len
 
             self.max_cat_len = max(self.cat_len_per_node)
@@ -67,11 +74,11 @@ class GraphDataset(torch.utils.data.Dataset):
         self.construct_correlated_batches()
         self.construct_graph_batches()
 
-
-
     def construct_correlated_batches(self):
         for train_x, train_y in self.dataset.posttrain_loader:
-            train_x, train_y = train_x.to(self.args.device), train_y.to(self.args.device)
+            train_x, train_y = train_x.to(self.args.device), train_y.to(
+                self.args.device
+            )
             self.created_batches.append(train_x)
             self.created_batches_cls.append(train_y)
         # random permutation
@@ -84,27 +91,46 @@ class GraphDataset(torch.utils.data.Dataset):
         self.created_graph_batches = []
 
         for batch_idx, batch in enumerate(self.created_batches):
-            mi_matrix, numerical_node_feat, categorical_node_feat = GraphDataset.get_features(
-                args=self.args, batch=batch, mi_idx=self.mi_idx, dataset=self.dataset,
+            # print(f"{batch.shape=}")
+            mi_matrix, numerical_node_feat, categorical_node_feat = (
+                GraphDataset.get_features(
+                    args=self.args,
+                    batch=batch,
+                    mi_idx=self.mi_idx,
+                    dataset=self.dataset,
+                )
             )
+            # print(f"{mi_matrix.shape=}")
+            # print(f"{numerical_node_feat.shape=}")
+            # print(f"{categorical_node_feat.shape=}")
             num_nodes = mi_matrix.shape[0]
-            edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
-            adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
-
-            graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t,
-                              edge_weights=edge_weights)
+            edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(
+                mi_matrix
+            )
+            adj_t = SparseTensor.from_edge_index(
+                edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes)
+            )
+            graph_data = Data(
+                num_x=numerical_node_feat,
+                cat_x=categorical_node_feat,
+                edge_index=adj_t,
+                edge_weights=edge_weights,
+            )
+            # print(f"{adj_t=}")
+            # print(f"{edge_weights=}")
             self.created_graph_batches.append(graph_data)
 
     def __len__(self):
         return len(self.dataset)
 
-
     @staticmethod
     def create_test_graph(args, dataset, batch, mi_matrix=None):
         # set variables
         cont_indices = [i for i in range(dataset.cont_dim)]
-        if hasattr(dataset, 'input_one_hot_encoder'):
-            cat_len_per_node = [len(category) for category in dataset.input_one_hot_encoder.categories_]
+        if hasattr(dataset, "input_one_hot_encoder"):
+            cat_len_per_node = [
+                len(category) for category in dataset.input_one_hot_encoder.categories_
+            ]
             cat_idx_per_node = []
 
             offset = len(cont_indices)
@@ -119,27 +145,47 @@ class GraphDataset(torch.utils.data.Dataset):
 
         mi_idx = cont_indices + cat_idx_per_node
 
-        mi_matrix, numerical_node_feat, categorical_node_feat = GraphDataset.get_features(
-            args=args, batch=batch, mi_idx=mi_idx, dataset=dataset, mi_matrix=mi_matrix
+        mi_matrix, numerical_node_feat, categorical_node_feat = (
+            GraphDataset.get_features(
+                args=args,
+                batch=batch,
+                mi_idx=mi_idx,
+                dataset=dataset,
+                mi_matrix=mi_matrix,
+            )
         )
 
         num_nodes = mi_matrix.shape[0]
-        edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(mi_matrix)
-        adj_t = SparseTensor.from_edge_index(edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes))
-        graph_data = Data(num_x=numerical_node_feat, cat_x=categorical_node_feat, edge_index=adj_t, edge_weights=edge_weights)
+        edge_index, edge_weights = torch_geometric.utils.sparse.dense_to_sparse(
+            mi_matrix
+        )
+        adj_t = SparseTensor.from_edge_index(
+            edge_index, edge_weights, sparse_sizes=(num_nodes, num_nodes)
+        )
+        graph_data = Data(
+            num_x=numerical_node_feat,
+            cat_x=categorical_node_feat,
+            edge_index=adj_t,
+            edge_weights=edge_weights,
+        )
 
         return graph_data
 
     @staticmethod
     def get_correlation_matrix(args, batch, idx_lists):
-        new_batch = torch.zeros((batch.shape[0], len(idx_lists))).float().to(args.device)
+        new_batch = (
+            torch.zeros((batch.shape[0], len(idx_lists))).float().to(args.device)
+        )
+        # print(f"{idx_lists=}")
         for idx, i in enumerate(idx_lists):
             if isinstance(i, list):
                 new_batch[:, idx] = torch.argmax(batch[:, i], dim=1)
             else:
                 new_batch[:, idx] = batch[:, i]
+        # print(f"{new_batch=}")
 
         matrix = torch_corrcoef(new_batch.T) - torch.eye(len(idx_lists)).to(args.device)
+        # print(f"{matrix=}")
 
         if torch.isnan(matrix).any():
             matrix = torch.nan_to_num(matrix, nan=0.0, posinf=1.0, neginf=0.0)
@@ -164,10 +210,15 @@ class GraphDataset(torch.utils.data.Dataset):
                 num_mean = torch.mean(torch_train_dataset[:, i], dim=0)
                 torch_train_dataset_mean_dict[i] = num_mean
 
+        # print(f"in get_stacked_renormalized_features")
+        # print(f"{mi_idx=}")
+
         max_cat_len = 0
         for idx, i in enumerate(mi_idx):
             if isinstance(i, list):
                 max_cat_len = max(max_cat_len, len(i))
+
+        # print(f"{max_cat_len=}")
 
         for idx, i in enumerate(mi_idx):
             if isinstance(i, list):
@@ -175,19 +226,35 @@ class GraphDataset(torch.utils.data.Dataset):
                 # train_cat_batch = torch_train_dataset[:, i].float()
                 cat_features = cat_batch - torch_train_dataset_mean_dict[repr(i)].to(cat_batch.device)
                 # fill in zeros to match max_cat_len
-                cat_features = torch.cat([cat_features, torch.zeros(len(cat_features), max_cat_len - len(i)).to(args.device)], dim=1)
+                cat_features = torch.cat(
+                    [
+                        cat_features,
+                        torch.zeros(len(cat_features), max_cat_len - len(i)).to(
+                            args.device
+                        ),
+                    ],
+                    dim=1,
+                )
                 categorical_node_feat.append(cat_features)
+
+                # print(f"{cat_batch=}")
+                # print(f"{cat_features=}")
+                # print(f"{cat_features.shape=}")
             else:
                 num_batch = batch[:, i]
                 # train_num_batch = torch_train_dataset[:, i]
                 num_features = num_batch - torch_train_dataset_mean_dict[i].to(num_batch.device)
                 numerical_node_feat.append(num_features)
 
+                # print(f"{num_batch=}")
+                # print(f"{num_features=}")
+                # print(f"{num_features.shape=}")
         if numerical_node_feat:
             numerical_node_feat = torch.stack(numerical_node_feat).to(args.device)
+            # print(f"{numerical_node_feat.shape=}")
         if categorical_node_feat:
             categorical_node_feat = torch.stack(categorical_node_feat).to(args.device)
-
+            # print(f"{categorical_node_feat.shape=}")
         return numerical_node_feat, categorical_node_feat
 
     @staticmethod
@@ -196,10 +263,5 @@ class GraphDataset(torch.utils.data.Dataset):
         numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_renormalized_features(
             args=args, batch=batch, mi_idx=mi_idx, dataset=dataset
         )
-        mi_matrix = torch.ones(len(mi_idx), len(mi_idx))
-
+        mi_matrix = torch.ones(len(mi_idx), len(mi_idx)).to(batch.device)
         return mi_matrix, numerical_node_feat, categorical_node_feat
-
-
-
-

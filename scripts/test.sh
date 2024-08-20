@@ -359,7 +359,7 @@ visualize() {
     SHIFT_LIST=(None)
     SEVERITY_LIST=(0)
     # METHOD_LIST="[calibrator,label_distribution_handler]"
-    METHOD_LIST="[label_distribution_handler]"
+    METHOD_LIST="[calibrator,label_distribution_handler]"
 
     # DATASETS="nhanes_lead"
     # MODEL_LIST="FTTransformer"
@@ -399,7 +399,8 @@ visualize() {
     #     done
     # done
 
-    DATASETS="brfss_diabetes"
+    # DATASETS="brfss_diabetes"
+    DATASETS="heloc"
     MODEL_LIST="MLP"
     for seed in ${SEEDS}; do
         for model in ${MODEL_LIST}; do
@@ -549,8 +550,8 @@ LOG_DIR=log
 # hparam_sens
 # python utils/send_email.py --message "finish hparam sens"
 
-# visualize2
-# python utils/send_email.py --message "finish visualize2"
+visualize2
+python utils/send_email.py --message "finish visualize2"
 
-visualize
-python utils/send_email.py --message "finish visualize"
+# visualize
+# python utils/send_email.py --message "finish visualize"
