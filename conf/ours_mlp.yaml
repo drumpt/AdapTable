@@ -57,7 +57,7 @@ test_lr: 0
 
 ##################################################################
 ### methods & other hyperparameters
-method: [calibrator, label_distribution_handler]
+method: [ours]
 # search space - episodic, test_lr : 1e-3~1e-5, num_steps : 1, 5, 10
 # em(tent), sam, sar, pl, ttt++, eata, memo
 # em - true, 1e-4, 1

@@ -11,7 +11,7 @@ from scipy.stats import norm, multinomial, dirichlet
 import sklearn.preprocessing
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler, MinMaxScaler
 from sklearn.model_selection import train_test_split
-# from sklearn.impute import SimpleImputer
+
 import torch
 import torch.nn.functional as F
 from torch.utils.data import Sampler
@@ -49,20 +49,12 @@ class Dataset():
         valid_x, valid_y = pd.DataFrame(valid_x), pd.DataFrame(valid_y)
         test_x, test_y = pd.DataFrame(test_x), pd.DataFrame(test_y)
 
-        # TODO: remove (only for statistics)
-        # cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
-        # print(f"{cont_indices=}")
-        # print(f"{cat_indices=}")
-        # print(f"{len(cont_indices)=}")
-        # print(f"{len(cat_indices)=}")
-        # raise NotImplementedError
-
-        ##### preprocessing #####
+        ####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
         train_x.iloc[:, cont_indices] = train_x.iloc[:, cont_indices].fillna(0).astype(float)
         valid_x.iloc[:, cont_indices] = valid_x.iloc[:, cont_indices].fillna(0).astype(float)
         test_x.iloc[:, cont_indices] = test_x.iloc[:, cont_indices].fillna(0).astype(float)
-        # train_y, valid_y, test_y = train_y.astype(float), valid_y.astype(float), test_y.astype(float)
+        
         test_sampler = self.get_sampler(args, train_x, train_y, valid_x, valid_y, test_x, test_y, cat_indices)
 
         self.emb_dim = []
@@ -71,8 +63,8 @@ class Dataset():
             self.input_scaler.fit(np.concatenate([train_x.iloc[:, cont_indices], valid_x.iloc[:, cont_indices]], axis=0))
             train_cont_x = self.input_scaler.transform(train_x.iloc[:, cont_indices])
             valid_cont_x = self.input_scaler.transform(valid_x.iloc[:, cont_indices])
-            # if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
-            #     args.shift_type = None
+            
+            
             test_cont_x, test_cont_mask_x = Dataset.get_corrupted_data_by_modality(
                 np.array(test_x.iloc[:, cont_indices]),
                 np.array(train_x.iloc[:, cont_indices]),
@@ -89,8 +81,8 @@ class Dataset():
             self.input_one_hot_encoder.fit(np.concatenate([train_x.iloc[:, cat_indices], valid_x.iloc[:, cat_indices]], axis=0))
             train_cat_x = self.input_one_hot_encoder.transform(train_x.iloc[:, cat_indices])
             valid_cat_x = self.input_one_hot_encoder.transform(valid_x.iloc[:, cat_indices])
-            # if not args.benchmark in ["openml-cc18", "openml-regression", "scikit-learn"]: # important: add new synthetic corruption benchmarks
-            #     args.shift_type = None
+            
+            
             test_cat_x, test_cat_mask_x = Dataset.get_corrupted_data_by_modality(
                 np.array(test_x.iloc[:, cat_indices]),
                 np.array(train_x.iloc[:, cat_indices]),
@@ -161,7 +153,7 @@ class Dataset():
             self.emb_dim_list, self.cat_end_indices, self.cat_start_indices, self.cat_indices_groups = [], np.array([]), np.array([]), []
         self.shift_at = -1
 
-        # print dataset info
+        
         self.train_counts = np.unique(np.argmax(self.train_y, axis=1), return_counts=True)
         self.valid_counts = np.unique(np.argmax(self.valid_y, axis=1), return_counts=True)
         self.test_counts = np.unique(np.argmax(self.test_y, axis=1), return_counts=True)
@@ -241,9 +233,9 @@ class Dataset():
                 category_counts = np.bincount(train_cat_encoded, minlength=len(np.unique(train_cat_encoded))) + 1
                 category_probs = category_counts / np.sum(category_counts)
 
-                # print(f"{train_cat_encoded=}")
-                # print(f"{category_counts=}")
-                # print(f"{category_probs=}")
+                
+                
+                
 
                 likelihoods = []
                 for category in test_cat_encoded:
@@ -270,13 +262,13 @@ class Dataset():
             def binary_to_string(array):
                 array = list(array)
                 if array == ['1', '0', '0']:
-                    return 0 # "A"
+                    return 0 
                 elif array == ['0', '1', '0']:
-                    return 1 # "T"
+                    return 1 
                 elif array == ['0', '0', '1']:
-                    return 2 # "G"
+                    return 2 
                 else:
-                    return 3 # "C"
+                    return 3 
             x = x.to_numpy()
             x_string = []
             for col_idx in range(0, x.shape[-1], 3):
@@ -303,28 +295,11 @@ class Dataset():
         regression = False
 
         print(f"cat_indices: {cat_indices}")
-
-        # if args.shift_type in ["numerical", "categorical"]:
-        #     if (len(cat_indices) == x.shape[-1] and args.shift_type == "numerical") or (len(cat_indices) == 0 and args.shift_type == "categorical"):
-        #         raise Exception(f'No {args.shift_type} columns in {args.dataset} dataset!')
-
-        #     train_indices, test_indices = self.split_dataset_by_natural_shift(x, y, cat_indices, args.shift_type, args.shift_severity, regression=False)
-        #     train_x, train_y = x.iloc[train_indices, :], y.iloc[train_indices, :]
-        #     test_x, test_y = x.iloc[test_indices, :], y.iloc[test_indices, :]
-        #     train_x, valid_x, train_y, valid_y = train_test_split(train_x, train_y, test_size=0.25, random_state=42)
-        # else:
-        #     train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
-        #     valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
         train_x, valid_x, train_y, valid_y = train_test_split(x, y, test_size=0.4, random_state=42)
         valid_x, test_x, valid_y, test_y = train_test_split(valid_x, valid_y, test_size=0.5, random_state=42)
-        # print(f"train_x original: {train_x}")
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
     def get_tableshift_dataset(self, args):
-        # if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
-        #     dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}_id_test.pkl")
-        # else:
-        #     dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}.pkl")
         dataset_dir = os.path.join(args.dataset_save_dir, args.benchmark, f"{args.dataset}.pkl")
 
         if os.path.exists(dataset_dir):
@@ -337,7 +312,7 @@ class Dataset():
             test_y = dataset_dict["test_y"]
             cat_indices = dataset_dict["cat_indices"]
         else:
-            # customize preprocessor
+            
             from tableshift.core.features import get_categorical_columns
             from tableshift.configs.benchmark_configs import BENCHMARK_CONFIGS
             from tableshift.configs.non_benchmark_configs import NON_BENCHMARK_CONFIGS
@@ -350,13 +325,7 @@ class Dataset():
             dataset = get_dataset(args.dataset, cache_dir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tableshift/tableshift/tmp"), preprocessor_config=preprocessor_config)
             train_x, train_y, _, _ = dataset.get_pandas("train")
             valid_x, valid_y, _, _ = dataset.get_pandas("validation")
-
-            # id여야 하는 경우: Gaussian, uniform, random_drop, column_drop
-            # ood여야 하는 경우: null, numerical, categorical, temp corr, imbalanced
-            # if args.shift_type in ["Gaussian", "uniform", "random_drop", "column_drop"]:
-            #     test_x, test_y, _, _ = dataset.get_pandas("id_test")
-            # else:
-            #     test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("id_test")
+            
             test_x, test_y, _, _ = dataset.get_pandas("ood_test") if dataset.is_domain_split else dataset.get_pandas("id_test")
 
             cat_indices = np.array(sorted([train_x.columns.get_loc(c) for c in get_categorical_columns(train_x)]))
@@ -437,13 +406,13 @@ class Dataset():
             train_x, train_y, test_x, test_y = pd.DataFrame(train_x), pd.DataFrame(train_y), pd.DataFrame(test_x), pd.DataFrame(test_y)
         elif args.dataset in ['time', 'state_time', 'time_state']:
             train_x_list, train_y_list, test_x_list, test_y_list = [], [], [], []
-            for year in [2014, 2015, 2016]: # train
+            for year in [2014, 2015, 2016]: 
                 data_source = ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
                 acs_data = data_source.get_data(states=["CA"], download=True)
                 features, labels, _ = ACSPublicCoverage.df_to_numpy(acs_data)
                 train_x_list.append(features)
                 train_y_list.append(labels)
-            for year in [2017, 2018]: # test
+            for year in [2017, 2018]: 
                 data_source = ACSDataSource(survey_year=year, horizon='1-Year', survey='person')
                 acs_data = data_source.get_data(states=["CA" if args.dataset == "time" else "MI"], download=True)
                 features, labels, _ = ACSPublicCoverage.df_to_numpy(acs_data)
@@ -466,7 +435,7 @@ class Dataset():
             df = pd.DataFrame(data[0])
 
             if args.dataset not in ['sarcos', 'news']:
-                str_df = df.select_dtypes([object]) # load as dataframe and convert datatypes to float
+                str_df = df.select_dtypes([object]) 
                 str_df = str_df.stack().str.decode('utf-8').unstack()
                 str_df.replace(to_replace='?', value=np.nan, inplace=True)
                 df[str_df.columns] = str_df.astype(np.float32)
@@ -506,13 +475,13 @@ class Dataset():
         from sklearn import datasets
         regression = False
         if args.dataset == 'make_classification':
-            n_features = 30 # number of independent features
-            n_informative = 5 # number of informative features
-            class_sep = 1 # default 1, where larger value makes classification easier
-            n_redundant = n_features - n_informative # number of informative features
+            n_features = 30 
+            n_informative = 5 
+            class_sep = 1 
+            n_redundant = n_features - n_informative 
             x, y = sklearn.datasets.make_classification(n_samples=5000, class_sep=class_sep, n_classes=10, n_features=n_features, n_informative=n_informative, n_redundant=n_redundant, random_state=args.seed, shuffle=True)
         elif args.dataset == 'two_moons':
-            x, y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True) # noise = amount of noise added to moons dataset
+            x, y = sklearn.datasets.make_moons(n_samples=5000, random_state=args.seed, noise=0.3, shuffle=True) 
         else:
             raise NotImplementedError
         x, y = pd.DataFrame(x), pd.DataFrame(y)
@@ -531,7 +500,7 @@ class Dataset():
         return (train_x, valid_x, test_x), (train_y, valid_y, test_y), cat_indices, regression
 
 
-    def concat_csvs(self, path_list, args): # for shifts benchmark
+    def concat_csvs(self, path_list, args): 
         import pandas as pd
         pd_list = []
         for path in path_list:
@@ -629,7 +598,7 @@ class Dataset():
                     train_col = set([str(train_col_elem) for train_col_elem in train_col])
                     imputed_data.append(np.array([max(train_col) + "." for _ in range(len(test_data))]))
                 imputed_data = np.stack(imputed_data, axis=-1)
-            elif imputation_method == "mean":  # mode (most frequent value) for categorical variable
+            elif imputation_method == "mean":  
                 imputed_data = []
                 for train_col in train_data.T:
                     unique, counts = list(Counter(train_col).keys()), list(Counter(train_col).values())
@@ -648,14 +617,14 @@ class Dataset():
         from xgboost import XGBClassifier, XGBRegressor
         from sklearn.preprocessing import LabelEncoder
 
-        # preprocess input and output
+        
         for cat_index in cat_indices:
             x.iloc[:, cat_index] = x.iloc[:, cat_index].astype('category').cat.codes
         x_train = x.to_numpy()
         le = LabelEncoder()
         y_train = le.fit_transform(y.to_numpy())
 
-        # fit on xgboost
+        
         xgb = XGBClassifier() if not regression else XGBRegressor()
         xgb.fit(x_train, y_train)
 
@@ -699,7 +668,7 @@ class Dataset():
         else:
             raise ValueError
 
-        # cont_data = self.input_scaler.transform(data[:, :self.cont_dim])
+        
         cont_data = data[:, :self.cont_dim]
         if hasattr(self, 'input_one_hot_encoder'):
             cat_data = self.input_one_hot_encoder.transform(data[:, self.cont_dim:])
@@ -759,39 +728,39 @@ class TemporallyCorrelatedSampler(Sampler):
     def __init__(self, test_y, alpha=1.0, window_size=5, epsilon=1e-6):
         self.test_y = test_y
         self.num_classes = len(np.unique(self.test_y))
-        self.alpha = alpha  # Dirichlet distribution parameter
-        self.window_size = window_size  # Window size for temporal correlation
-        self.epsilon = epsilon  # Smoothing parameter for Dirichlet distribution
+        self.alpha = alpha  
+        self.window_size = window_size  
+        self.epsilon = epsilon  
 
-        # Start with a uniform distribution over labels
+        
         self.current_probs = np.ones(self.num_classes) / self.num_classes
 
     def __iter__(self):
         sampled_indices = []
         for i in range(len(self.test_y)):
-            # Sample a new probability distribution over labels using a Dirichlet distribution
+            
             dirichlet_dist = dist.Dirichlet(torch.tensor(self.current_probs * self.alpha, dtype=torch.float32))
             sampled_probs = dirichlet_dist.sample().numpy()
             
-            # Avoid zero probabilities
+            
             sampled_probs = np.clip(sampled_probs, a_min=self.epsilon, a_max=None)
             sampled_probs = sampled_probs / sampled_probs.sum()
             
-            # Sample a label based on the sampled_probs
+            
             sampled_label = np.random.choice(np.arange(self.num_classes), p=sampled_probs)
             
-            # Find an index of that label in the original dataset
+            
             possible_indices = np.where(self.test_y == sampled_label)[0]
             sampled_index = np.random.choice(possible_indices)
             sampled_indices.append(sampled_index)
             
-            # Update the probabilities based on the recent history (temporal correlation)
+            
             if len(sampled_indices) >= self.window_size:
                 recent_labels = self.test_y[sampled_indices[-self.window_size:]]
                 label_counts = np.bincount(recent_labels, minlength=self.num_classes)
                 self.current_probs = label_counts / label_counts.sum()
                 
-                # Avoid zero probabilities in updated current_probs
+                
                 self.current_probs = np.clip(self.current_probs, a_min=self.epsilon, a_max=None)
                 self.current_probs = self.current_probs / self.current_probs.sum()
 

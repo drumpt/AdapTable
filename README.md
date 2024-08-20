@@ -9,7 +9,12 @@ pip install -r requirements.txt
 
 ## Run
 - edit conf/config.yaml properly.
-- run using following command:
+- To run adaptable, run the following:
 ```
-python main.py
+python main.py \
+    benchmark=tableshift \
+    dataset=heloc \
+    shift_type=None \
+    shift_severity=1 \
+    --config-name ours_mlp.yaml
 ```
