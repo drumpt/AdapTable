@@ -1,9 +1,9 @@
-# MATATA
+# AdapTable
 
 ## Environmental Setup
 ```
-conda create -n matata python=3.8.16 -y
-conda activate matata
+conda create -n adaptable python=3.8.16 -y
+conda activate adaptable
 pip install -r requirements.txt
 ```
 
