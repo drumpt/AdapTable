@@ -1241,8 +1241,11 @@ class RTDLAutoInt(nn.Module):
         assert (kv_compression is None) ^ (kv_compression_sharing is not None)
 
         super().__init__()
-        self.tokenizer = Tokenizer(d_numerical, categories, 0, d_token)
+        self.tokenizer = Tokenizer(d_numerical, categories if categories else None, 0, d_token)
         n_tokens = self.tokenizer.n_tokens
+
+        print(f"{d_numerical=} {categories=}")
+        print(f"{n_tokens=}")
 
         def make_kv_compression():
             assert kv_compression
@@ -1320,27 +1323,17 @@ class RTDLAutoInt(nn.Module):
         return x
 
     def forward(self, x_num: ty.Optional[Tensor], x_cat: ty.Optional[Tensor]) -> Tensor:
-        x = self.tokenizer(x_num, x_cat)
-
-        for layer in self.layers:
-            layer = ty.cast(ty.Dict[str, nn.Module], layer)
-
-            x_residual = self._start_residual(x, layer, 0)
-            x_residual = layer["attention"](
-                x_residual,
-                x_residual,
-                *self._get_kv_compressions(layer),
-            )
-            x = layer["linear"](x)
-            x = self._end_residual(x, x_residual, layer, 0)
-            x = self.activation(x)
-
-        x = x.flatten(1, 2)
+        x = self.get_feature(x_num, x_cat)
         x = self.head(x)
         x = x.squeeze(-1)
         return x
 
     def get_feature(self, x_num: ty.Optional[Tensor], x_cat: ty.Optional[Tensor]) -> Tensor:
+        if x_num is None or (torch.is_tensor(x_num) and x_num.shape[-1] == 0):
+            x_num = None
+        if x_cat is None or (torch.is_tensor(x_cat) and x_cat.shape[-1] == 0):
+            x_cat = None
+
         x = self.tokenizer(x_num, x_cat)
 
         for layer in self.layers:
@@ -1390,10 +1383,10 @@ class AutoInt(nn.Module):
             kv_compression_sharing=None,
         )
 
-    def forward(self, inputs, graph_embedding=None):
+    def forward(self, inputs):
         if len(self.cat_start_indices):
-            inputs_cont = inputs[:, : self.cat_start_index]
-            inputs_cat = inputs[:, self.cat_start_index :]
+            inputs_cont = inputs[:, :self.cat_start_index]
+            inputs_cat = inputs[:, self.cat_start_index:]
             inputs_cat_emb = []  # translate one-hot encoding to label encoding
             for i in range(len(self.cat_end_indices)):
                 inputs_cat_emb.append(
@@ -1413,8 +1406,8 @@ class AutoInt(nn.Module):
 
     def get_feature(self, inputs):
         if len(self.cat_start_indices):
-            inputs_cont = inputs[:, : self.cat_start_index]
-            inputs_cat = inputs[:, self.cat_start_index :]
+            inputs_cont = inputs[:, :self.cat_start_index]
+            inputs_cat = inputs[:, self.cat_start_index:]
             inputs_cat_emb = []  # translate one-hot encoding to label encoding
             for i in range(len(self.cat_end_indices)):
                 inputs_cat_emb.append(

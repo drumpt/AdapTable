@@ -37,7 +37,7 @@ pretrain_lr: 1e-4
 pretrain_mask_ratio: 0.75
 
 ### hyperparameters for training
-retrain: true
+retrain: false
 epochs: 50
 train_batch_size: 64
 train_optimizer: AdamW

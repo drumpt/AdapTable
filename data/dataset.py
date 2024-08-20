@@ -49,6 +49,14 @@ class Dataset():
         valid_x, valid_y = pd.DataFrame(valid_x), pd.DataFrame(valid_y)
         test_x, test_y = pd.DataFrame(test_x), pd.DataFrame(test_y)
 
+        # TODO: remove (only for statistics)
+        # cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
+        # print(f"{cont_indices=}")
+        # print(f"{cat_indices=}")
+        # print(f"{len(cont_indices)=}")
+        # print(f"{len(cat_indices)=}")
+        # raise NotImplementedError
+
         ##### preprocessing #####
         cont_indices = np.array(sorted(set(np.arange(train_x.shape[-1])).difference(set(cat_indices))))
         train_x.iloc[:, cont_indices] = train_x.iloc[:, cont_indices].fillna(0).astype(float)

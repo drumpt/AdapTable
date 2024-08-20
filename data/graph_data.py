@@ -153,7 +153,16 @@ class GraphDataset(torch.utils.data.Dataset):
         numerical_node_feat = []
         categorical_node_feat = []
 
-        torch_train_datset = torch.tensor(dataset.train_x).to(args.device)
+        # torch_train_dataset = torch.tensor(dataset.train_x).to(args.device)
+        torch_train_dataset = torch.tensor(dataset.train_x)
+        torch_train_dataset_mean_dict = dict()        
+        for idx, i in enumerate(mi_idx):
+            if isinstance(i, list):
+                cat_mean = torch.mean(torch_train_dataset[:, i].float(), dim=0)
+                torch_train_dataset_mean_dict[repr(i)] = cat_mean
+            else:
+                num_mean = torch.mean(torch_train_dataset[:, i], dim=0)
+                torch_train_dataset_mean_dict[i] = num_mean
 
         max_cat_len = 0
         for idx, i in enumerate(mi_idx):
@@ -163,15 +172,15 @@ class GraphDataset(torch.utils.data.Dataset):
         for idx, i in enumerate(mi_idx):
             if isinstance(i, list):
                 cat_batch = batch[:, i].float()
-                train_cat_batch = torch_train_datset[:, i].float()
-                cat_features = cat_batch - torch.mean(train_cat_batch, dim=0)
+                # train_cat_batch = torch_train_dataset[:, i].float()
+                cat_features = cat_batch - torch_train_dataset_mean_dict[repr(i)].to(cat_batch.device)
                 # fill in zeros to match max_cat_len
                 cat_features = torch.cat([cat_features, torch.zeros(len(cat_features), max_cat_len - len(i)).to(args.device)], dim=1)
                 categorical_node_feat.append(cat_features)
             else:
                 num_batch = batch[:, i]
-                train_num_batch = torch_train_datset[:, i]
-                num_features = num_batch - torch.mean(train_num_batch, dim=0)
+                # train_num_batch = torch_train_dataset[:, i]
+                num_features = num_batch - torch_train_dataset_mean_dict[i].to(num_batch.device)
                 numerical_node_feat.append(num_features)
 
         if numerical_node_feat:
@@ -183,11 +192,11 @@ class GraphDataset(torch.utils.data.Dataset):
 
     @staticmethod
     def get_features(args, mi_idx, batch, dataset=None, mi_matrix=None):
-        mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
+        # mi_matrix = GraphDataset.get_correlation_matrix(args=args, batch=batch, idx_lists=mi_idx)
         numerical_node_feat, categorical_node_feat = GraphDataset.get_stacked_renormalized_features(
             args=args, batch=batch, mi_idx=mi_idx, dataset=dataset
         )
-        mi_matrix = torch.ones_like(mi_matrix)
+        mi_matrix = torch.ones(len(mi_idx), len(mi_idx))
 
         return mi_matrix, numerical_node_feat, categorical_node_feat
 
