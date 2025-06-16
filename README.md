@@ -1,7 +1,6 @@
 # AdapTable: Test-Time Adaptation for Tabular Data via Shift-Aware Uncertainty Calibrator and Label Distribution Handler (NeurIPSW-TRL 2024)
 [![arXiv](https://img.shields.io/badge/arXiv-2212.02802-b31b1b.svg)](https://arxiv.org/abs/2407.10784)
-
-
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15671200.svg)](https://doi.org/10.5281/zenodo.15671200)
 
 ## Introduction
 [**AdapTable: Test-Time Adaptation for Tabular Data via Shift-Aware Uncertainty Calibrator and Label Distribution Handler**](https://openreview.net/forum?id=yhD2icebZ0)<br>
